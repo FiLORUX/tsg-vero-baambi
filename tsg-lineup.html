@@ -150,6 +150,30 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     height: 25vh;
     background: rgba(255,255,255,0.97);
 }
+.sync-center-row {
+    display: inline-flex;
+    align-items: baseline;
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.ms-val {
+    font-size: 2vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: normal;
+    text-align: right;
+    min-width: 4ch; /* eller 5ch om du vill ha marginal */
+    margin-right: 0.22em;
+    line-height: 1.07;
+}
+.ms-help {
+    font-size: 1.05vw;
+    font-family: 'Share Tech Mono', monospace;
+    opacity: 0.85;
+    text-align: left;
+    align-self: baseline;
+    line-height: 1.1;
+}    
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
@@ -629,7 +653,11 @@ function updateSync() {
     } else if (syncState === STATE_STEREOIDENT) {
         syncHtml = `<span class="sync-main">STEREO IDENT</span>`;
     } else if (showLipSync) {
-        syncHtml = `<span class="sync-main">LIP SYNC</span>`;
+        syncHtml = `
+    <span class="sync-center-row">
+        <span class="ms-val">LIP SYNC</span>
+    </span>
+`;
         lipSyncCount++;
     } else if (showSyncData) {
         let cs = getCentralSeconds();
@@ -639,14 +667,13 @@ function updateSync() {
         let absMs = Math.abs(msOffset);
         let showSync = absMs < 25;
         let syncVal = showSync ? "SYNC" : `${absMs}`;
-        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "early" : "late");
-        syncHtml = `
-            <span class="sync-ms-row">
-                <span class="sync-ms-val">${syncVal}</span>
-                <span class="sync-ms-label">${showSync ? "" : "ms audio"}</span>
-                <span class="sync-audio-block">${audioText}</span>
-            </span>
-        `;
+let audioText = showSync ? "" : `ms audio ${msOffset < 0 ? "early" : "late"}`;
+syncHtml = `
+    <span class="sync-center-row">
+        <span class="ms-val">${syncVal}</span>
+        <span class="ms-help">${audioText}</span>
+    </span>
+`;
     }
     syncInfo.innerHTML = syncHtml;
 }
