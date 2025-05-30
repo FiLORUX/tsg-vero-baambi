@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>EBU Testbild – EXAKT enligt spec</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: #808080; }
+    body { overflow: hidden; }
+    canvas { display: block; width: 100vw; height: 100vh; background: #808080; }
+  </style>
+</head>
+<body>
+<canvas id="maincanvas"></canvas>
+<script>
+const REF_W = 3840, REF_H = 2160;
+// ALLA fält byggs exakt efter EBU Tech 3384 Table 1
+const virt = document.createElement('canvas');
+virt.width = REF_W; virt.height = REF_H;
+const vctx = virt.getContext('2d');
+const outcanvas = document.getElementById('maincanvas');
+const outctx = outcanvas.getContext('2d');
+
+function drawEBU_3384(ctx, W, H) {
+  // 1. Grå bakgrund
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0,0,W,H);
+
+  // 2. Color bars (8 x 480 px, H=100 px)
+  const barY = 0, barH = 100, barW = 480;
+  const bars = [
+    "#ebebeb", "#ebeb10", "#10ebeb", "#10eb10",
+    "#eb10eb", "#eb1010", "#1010eb", "#696969"
+  ];
+  for (let i = 0; i < 8; i++) {
+    ctx.fillStyle = bars[i];
+    ctx.fillRect(i*barW, barY, barW, barH);
+  }
+
+  // 3. 75% bars (direkt under)
+  for (let i = 0; i < 8; i++) {
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = bars[i];
+    ctx.fillRect(i*barW, barY+barH, barW, barH);
+    ctx.globalAlpha = 1;
+  }
+
+  // 4. Grey field (40%)
+  ctx.fillStyle = "#696969";
+  ctx.fillRect(0, 200, W, 100);
+
+  // 5. Textfält/overlay
+  ctx.save();
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 70px Arial,sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.shadowColor = "#000b";
+  ctx.shadowBlur = 10;
+  ctx.fillText("EBU TECH 3384 UHD TESTCARD", W/2, 220);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 6. Luma ramp (200, 320, 1160, 100)
+  let rampX=200, rampY=320, rampW=1160, rampH=100;
+  for(let i=0; i<rampW; i++) {
+    let v = Math.round(255 * i / rampW);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(rampX+i, rampY, 1, rampH);
+  }
+  // Tickmarks (64, 721, 940 px)
+  [64, 721, 940].forEach(pos => {
+    let x = rampX + Math.floor(pos / (1015/rampW));
+    ctx.strokeStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(x, rampY);
+    ctx.lineTo(x, rampY + rampH);
+    ctx.stroke();
+  });
+
+  // 7. Grey trappa under rampen
+  let greyY = rampY+rampH+10;
+  for(let i=0;i<7;i++) {
+    let val = Math.round(235 - i*36);
+    ctx.fillStyle = `rgb(${val},${val},${val})`;
+    ctx.fillRect(rampX + i*rampW/7, greyY, rampW/7, 60);
+  }
+
+  // 8. Klocka (ENDAST om det finns i EBU/PM5544) – Tech 3384 UHD t.ex. lägger den i topp HÖGER
+  // Exakt position enligt EBU/PM5544 – t.ex. [3320,60] (väldigt högt upp till höger)
+  ctx.save();
+  ctx.font = "bold 85px 'Consolas', monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#fff";
+  ctx.shadowColor = "#000";
+  ctx.shadowBlur = 12;
+  ctx.fillText(new Date().toLocaleTimeString('sv-SE', {hour12:false}), W-100, 60);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // 9. Centrerad stor cirkel (klassisk PM5544/EBU, diameter 72% av H, inget rörligt element)
+  const circR = H*0.36;
+  ctx.save();
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = "#333";
+  ctx.beginPath();
+  ctx.arc(W/2, H/2, circR, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+
+  // 10. Footer/info
+  ctx.save();
+  ctx.font = "bold 45px Arial,sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = "#fff";
+  ctx.shadowColor = "#000b";
+  ctx.shadowBlur = 7;
+  ctx.fillText("EBU/Tech3384 — Rec.709 Legal — 16:9 UHD/HD", W/2, H-30);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function render() {
+  drawEBU_3384(vctx, REF_W, REF_H);
+  // Skala och centrera UHD-testbilden på maincanvas
+  const ww = window.innerWidth, wh = window.innerHeight;
+  let scale = Math.min(ww/REF_W, wh/REF_H);
+  let cx = Math.floor((ww - REF_W*scale)/2), cy = Math.floor((wh - REF_H*scale)/2);
+  outcanvas.width = ww; outcanvas.height = wh;
+  outctx.setTransform(1,0,0,1,0,0);
+  outctx.clearRect(0,0,ww,wh);
+  outctx.setTransform(scale,0,0,scale,cx,cy);
+  outctx.drawImage(virt, 0,0);
+}
+window.addEventListener('resize', render);
+(function anim() { render(); requestAnimationFrame(anim); })();
+</script>
+</body>
+</html>

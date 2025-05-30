@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TGLF - Thåst Global Lineup Framework</title>
+<style>
+html, body { margin: 0; overflow: hidden; background: black; }
+canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0;}
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+#overlay {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    color: white;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 2.2vw;
+    min-width: 12vw;
+    max-width: 56vw;
+    text-align: center;
+    background: rgba(0,0,0,0.58);
+    padding: 0.36em 0.6em;
+    border-radius: 10px;
+    z-index: 2;
+    pointer-events: none;
+    box-sizing: border-box;
+    word-break: break-word;
+    top: 4.5vh;
+    line-height: 1;
+}
+.tc-sync-bg {
+    position: absolute;
+    background: rgba(0,0,0,0.54);
+    border-radius: 14px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+#timecode, #syncInfo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 2vw;
+    color: white;
+    background: none;
+    position: absolute;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: center;
+    text-align: center;
+    padding: 0;
+    white-space: nowrap;
+    line-height: 1.07;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.sync-main {
+    font-size: 2vw;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+}
+.sync-ms-row {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+}
+.sync-ms-val {
+    font-size: 2.3vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: normal;
+    text-align: right;
+    min-width: 5ch;
+    width: 5ch;
+    margin-right: 0.03em;
+    letter-spacing: 0.01em;
+    line-height: 1.14;
+    vertical-align: baseline;
+}
+.sync-ms-label {
+    font-size: 1.05vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: normal;
+    opacity: 0.85;
+    align-self: flex-end;
+    margin-right: 0.07em;
+    line-height: 1.1;
+    vertical-align: baseline;
+}
+.sync-audio-block {
+    display: inline-block;
+    min-width: 4.4ch;
+    max-width: 6ch;
+    font-size: 1.11vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    align-self: flex-end;
+    color: #fff;
+    line-height: 1.13;
+    padding-left: 0.21em;
+    vertical-align: baseline;
+}
+#waveformBoxL, #waveformBoxR {
+    position: absolute;
+    z-index: 4;
+    background: rgba(0,0,0,0.45);
+    border-radius: 14px;
+    box-shadow: 0 1px 5px #0006;
+    opacity: 0;
+    transition: opacity 0.28s cubic-bezier(.4,0,.2,1);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#waveformBoxL.visible, #waveformBoxR.visible {
+    opacity: 1;
+}
+.waveform-canvas {
+    width: 100%; height: 100%;
+    border-radius: 14px;
+    display: block;
+    background: transparent;
+}
+#audioStarter {
+    position: fixed;
+    z-index: 10000;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    cursor: pointer;
+    background: rgba(0,0,0,0);
+}
+#flash {
+    position: fixed;
+    z-index: 9999;
+    left: 0; width: 100vw;
+    pointer-events: none;
+    display: none;
+}
+#flash.red {
+    top: 75vh;
+    height: 25vh;
+    background: rgba(255,255,255,0.97);
+}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+<canvas id="lineupCanvas"></canvas>
+<div id="overlay"></div>
+<div id="tcBg" class="tc-sync-bg"></div>
+<div id="syncBg" class="tc-sync-bg"></div>
+<div id="timecode"></div>
+<div id="syncInfo"></div>
+<div id="waveformBoxL"><canvas id="waveL" class="waveform-canvas"></canvas></div>
+<div id="waveformBoxR"><canvas id="waveR" class="waveform-canvas"></canvas></div>
+<div id="audioStarter" title="Click anywhere to enable audio"></div>
+<div id="flash" class="red"></div>
+<script>
+// --- Core params ---
+const ebuColors709 = [
+    '#EBEBEB', '#EBEB20', '#20EBEB', '#20EB20', '#EB20EB', '#EB2020', '#2020EB'
+];
+const redRec709 = '#EB2020';
+const params = new URLSearchParams(window.location.search);
+let slateId = params.get('slate') || 'Thåst Global Lineup Framework';
+const framerate = parseFloat(params.get('fps')) || 25;
+const countdownParam = params.get('countdown');
+
+// DOM
+const canvas = document.getElementById('lineupCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const syncInfo = document.getElementById('syncInfo');
+const timecode = document.getElementById('timecode');
+const tcBg = document.getElementById('tcBg');
+const syncBg = document.getElementById('syncBg');
+const flashDiv = document.getElementById('flash');
+const audioStarter = document.getElementById('audioStarter');
+const waveBoxL = document.getElementById('waveformBoxL');
+const waveBoxR = document.getElementById('waveformBoxR');
+const waveL = document.getElementById('waveL');
+const waveR = document.getElementById('waveR');
+const waveCtxL = waveL.getContext('2d');
+const waveCtxR = waveR.getContext('2d');
+
+// --- Overlay/Slate-id ---
+if (!params.has('slate')) slateId = 'Thåst Global Lineup Framework';
+overlay.innerHTML = slateId.replace(/\\n/g, '<br>');
+function adjustOverlayWidth() {
+    let w = window.innerWidth;
+    overlay.style.maxWidth = `${Math.round(w * 0.56)}px`;
+    overlay.style.minWidth = "12vw";
+    overlay.style.width = "";
+}
+adjustOverlayWidth();
+
+const STATE_MOS = 0, STATE_STEREOIDENT = 1, STATE_SYNC = 2;
+let syncState = STATE_MOS;
+let lipSyncCount = 0;
+let lipSyncFrames = 4 * framerate;
+
+// AUDIO STATE
+let audioCtx;
+let identOscL, identOscR, identGainL, identGainR, identPannerL, identPannerR;
+let normalOsc, pipGain, lastPipSecond = -1000;
+let pipPeakL = 0, pipPeakR = 0;
+
+// Box color
+let invertCycle = false;
+let lastGlobalFlash = -1000;
+
+// --- SMOOTH CLOCK ---
+let baseWallClock = performance.now();
+let baseSystemTime = Date.now() / 1000;
+let smoothOffset = 0;
+function getCentralSeconds() {
+    let wallNow = performance.now();
+    let localSecs = baseSystemTime + (wallNow - baseWallClock) / 1000;
+    let systemSecs = Date.now() / 1000;
+    let targetOffset = systemSecs - localSecs;
+    smoothOffset += (targetOffset - smoothOffset) * 0.016;
+    return localSecs + smoothOffset;
+}
+function parseCountdown(str) {
+    if (!str) return null;
+    let m = str.match(/^(\d{2}):(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    let hh = parseInt(m[1], 10), mm = parseInt(m[2], 10), ss = parseInt(m[3], 10), ff = parseInt(m[4], 10);
+    return (hh * 3600 + mm * 60 + ss) + ff / framerate;
+}
+let countdownVal = parseCountdown(countdownParam);
+let countdownStartTime = null;
+
+// --- UI BOX SIZING ---
+function getBoxSize() {
+    let h = canvas.height;
+    return Math.round(h * 0.07);
+}
+function getTcSyncBgSize() {
+    let w = canvas.width, h = canvas.height;
+    return { width: Math.round(w * 0.16), height: Math.round(h * 0.09)};
+}
+function getWaveformBoxSize() {
+    // Snyggare mindre box
+    let s = getTcSyncBgSize();
+    return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
+}
+function positionOverlays() {
+    let w = window.innerWidth, h = window.innerHeight;
+    let rFieldTop = h * 0.75, rFieldH = h * 0.25;
+    let tcY = rFieldTop + rFieldH * (0.125 + 0.25 + 0.125 + 0.00);
+    let tcSyncBg = getTcSyncBgSize();
+    tcBg.style.left = '4vw'; tcBg.style.top = `${tcY}px`;
+    tcBg.style.width = tcSyncBg.width + "px"; tcBg.style.height = tcSyncBg.height + "px";
+    timecode.style.left = '4vw'; timecode.style.top = `${tcY}px`;
+    timecode.style.width = tcSyncBg.width + "px"; timecode.style.height = tcSyncBg.height + "px";
+    syncBg.style.right = '4vw'; syncBg.style.top = `${tcY}px`;
+    syncBg.style.width = tcSyncBg.width + "px"; syncBg.style.height = tcSyncBg.height + "px";
+    syncInfo.style.right = '4vw'; syncInfo.style.top = `${tcY}px`;
+    syncInfo.style.width = tcSyncBg.width + "px"; syncInfo.style.height = tcSyncBg.height + "px";
+    // Waveform – centrerat
+    let wave = getWaveformBoxSize();
+    let gap = Math.round(wave.width * 0.28);
+    let leftX = w/2 - gap/2 - wave.width;
+    let rightX = w/2 + gap/2;
+    waveBoxL.style.left = leftX + "px";
+    waveBoxL.style.top = `${tcY}px`;
+    waveBoxL.style.width = wave.width + "px";
+    waveBoxL.style.height = wave.height + "px";
+    waveL.width = wave.width; waveL.height = wave.height;
+    waveBoxR.style.left = rightX + "px";
+    waveBoxR.style.top = `${tcY}px`;
+    waveBoxR.style.width = wave.width + "px";
+    waveBoxR.style.height = wave.height + "px";
+    waveR.width = wave.width; waveR.height = wave.height;
+}
+window.addEventListener('resize', positionOverlays);
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    positionOverlays();
+}
+
+// --------- STEREO IDENT AUDIO ---------
+function stopAllAudio() {
+    try {
+        if (identOscL) identOscL.stop(); identOscL = null;
+        if (identOscR) identOscR.stop(); identOscR = null;
+        if (normalOsc) normalOsc.stop(); normalOsc = null;
+    } catch (e) {}
+}
+function startStereoIdent() {
+    stopAllAudio();
+    if (!audioCtx) return;
+    identOscL = audioCtx.createOscillator();
+    identGainL = audioCtx.createGain();
+    identPannerL = audioCtx.createStereoPanner();
+    identOscL.frequency.value = 1000;
+    identGainL.gain.value = 0.13;
+    identPannerL.pan.value = -1;
+    identOscL.connect(identGainL).connect(identPannerL).connect(audioCtx.destination);
+    identOscL.start();
+    identOscR = audioCtx.createOscillator();
+    identGainR = audioCtx.createGain();
+    identPannerR = audioCtx.createStereoPanner();
+    identOscR.frequency.value = 1000;
+    identGainR.gain.value = 0.13;
+    identPannerR.pan.value = 1;
+    identOscR.connect(identGainR).connect(identPannerR).connect(audioCtx.destination);
+    identOscR.start();
+}
+function updateStereoIdent() {
+    let cs = getCentralSeconds();
+    let tInThree = cs % 3.0;
+    let leftOn = tInThree < 2.75;
+    if (identGainL) identGainL.gain.value = leftOn ? 0.13 : 0;
+    if (identGainR) identGainR.gain.value = 0.13;
+}
+function stopStereoIdent() {
+    try {
+        if (identOscL) identOscL.stop(); identOscL = null;
+        if (identOscR) identOscR.stop(); identOscR = null;
+    } catch (e) {}
+}
+
+// --------- SYNC PIPAR (ALLA TAKTER) även i LIP SYNC efter LIP SYNC-text -----
+function playPipIfNeeded() {
+    let cs = getCentralSeconds();
+    let sec = Math.floor(cs);
+    let ms = Math.floor((cs - sec) * 1000);
+    if (((syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames) || (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames)) && (lastPipSecond !== sec) && (ms < 200)) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        normalOsc = audioCtx.createOscillator();
+        pipGain = audioCtx.createGain();
+        normalOsc.type = 'sine';
+        if (sec % 4 === 0) {
+            normalOsc.frequency.value = 1200;
+            pipGain.gain.value = 0.48;
+        } else {
+            normalOsc.frequency.value = 1000;
+            pipGain.gain.value = 0.18;
+        }
+        normalOsc.connect(pipGain).connect(audioCtx.destination);
+        normalOsc.start();
+        normalOsc.stop(audioCtx.currentTime + 0.04);
+        lastPipSecond = sec;
+    }
+}
+
+// --- Fake peak-meter/Waveform for demo: ---
+function fakeAudioPeaks(state) {
+    let cs = getCentralSeconds();
+    if (state === STATE_STEREOIDENT) {
+        let t = cs % 3;
+        pipPeakL = (t < 2.75) ? (Math.abs(Math.sin(2 * Math.PI * t * 1.2)) * 0.72 + 0.13) : 0.07;
+        pipPeakR = 0.68;
+    } else if (state === STATE_SYNC) {
+        let sec = Math.floor(cs);
+        let ms = cs - sec;
+        pipPeakL = ((ms < 0.19) ? 0.92 : 0.09);
+        pipPeakR = ((ms < 0.19) ? 0.92 : 0.09);
+    } else {
+        pipPeakL = 0;
+        pipPeakR = 0;
+    }
+}
+
+// --- WAVEFORM VISUAL ---
+function drawWaveform(waveCtx, peak, color="#32ffcb") {
+    let w = waveCtx.canvas.width, h = waveCtx.canvas.height;
+    waveCtx.clearRect(0, 0, w, h);
+    // Simulerad (ser broadcast ut!): “True Peak”-bar och en “bump”/oscilloscope
+    let margin = Math.round(h * 0.18);
+    let amp = peak;
+    // Main vertical bar
+    waveCtx.save();
+    waveCtx.strokeStyle = color;
+    waveCtx.lineWidth = Math.max(2, Math.round(h * 0.11));
+    waveCtx.beginPath();
+    let cx = w/2;
+    let cy = h/2;
+    let a = Math.max(margin, cy - (amp * (cy - margin)));
+    let b = Math.min(h-margin, cy + (amp * (cy - margin)));
+    waveCtx.moveTo(cx, a);
+    waveCtx.lineTo(cx, b);
+    waveCtx.stroke();
+    // Oscilloscope “bump”
+    waveCtx.strokeStyle = "#fff";
+    waveCtx.lineWidth = 2;
+    waveCtx.beginPath();
+    for (let i = 0; i < w; i++) {
+        let t = i/w * Math.PI*2;
+        let y = cy + Math.sin(t*3.5 + Date.now()/160) * amp * cy * 0.33;
+        if (i === 0) waveCtx.moveTo(i, y);
+        else waveCtx.lineTo(i, y);
+    }
+    waveCtx.stroke();
+    waveCtx.restore();
+}
+
+// --- Overlay visibility
+function updateWaveformBoxes() {
+    let show = (syncState === STATE_STEREOIDENT || syncState === STATE_SYNC);
+    if (show) {
+        waveBoxL.classList.add("visible");
+        waveBoxR.classList.add("visible");
+    } else {
+        waveBoxL.classList.remove("visible");
+        waveBoxR.classList.remove("visible");
+    }
+    drawWaveform(waveCtxL, pipPeakL, "#32ffcb");
+    drawWaveform(waveCtxR, pipPeakR, "#ffc932");
+}
+
+// --- FLASH och central sync ---
+let globalInvertCycle = false;
+let lastFlashAll = -1000;
+let lastLipSyncBeat = -1;
+let boxFlashUntil = 0;
+
+function updateBoxColor(cs) {
+    let flashPeriod = 4.0;
+    let sec = Math.floor(cs);
+    if ((sec % 4 === 0) && (cs - sec) < 0.02 && lastFlashAll !== sec) {
+        globalInvertCycle = !globalInvertCycle;
+        lastFlashAll = sec;
+    }
+    if (syncState !== STATE_SYNC) return;
+    let beat = Math.floor(cs);
+    if (beat !== lastLipSyncBeat) {
+        boxFlashUntil = cs + 0.04;
+        lastLipSyncBeat = beat;
+    }
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function drawFrame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const h = canvas.height, w = canvas.width;
+    const barH = h * 0.75, redY = h * 0.75, redH = h * 0.25;
+    const gradH = h * 0.05, gradY = h * 0.75 - gradH;
+
+    // Färgbalk
+    const barWidth = w / ebuColors709.length;
+    ebuColors709.forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(i * barWidth, 0, barWidth, barH - gradH);
+    });
+    // Gråskale-gradient
+    const gradient = ctx.createLinearGradient(0, gradY, w, gradY + gradH);
+    gradient.addColorStop(0, '#000'); gradient.addColorStop(1, '#FFF');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, gradY, w, gradH);
+    // Rött fält
+    ctx.fillStyle = redRec709;
+    ctx.fillRect(0, redY, w, redH);
+
+    // Centre cross + cirkel
+    const cx = w / 2, cy = h / 2;
+    const gradR = Math.min(w, h) * 0.011;
+    const monoGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR * 3.2);
+    monoGradient.addColorStop(0, "#000"); monoGradient.addColorStop(1, "#fff");
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, gradR * 3.2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = monoGradient; ctx.globalAlpha = 0.98;
+    ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 16, cy); ctx.lineTo(cx + 16, cy);
+    ctx.moveTo(cx, cy - 16); ctx.lineTo(cx, cy + 16);
+    ctx.stroke(); ctx.restore();
+
+    // --- FLYGANDE KVADRATISKA RUTOR: möts i mitten på flashen ---
+    const boxSize = getBoxSize();
+    const margin = w * 0.04;
+    const boxZoneY = h * 0.75 + h * 0.25 * 0.125 + boxSize / 2;
+    let cs = getCentralSeconds();
+    let flashPeriod = 4.0;
+    let phase = (cs % flashPeriod) / flashPeriod;
+    let movement = Math.abs(Math.sin(Math.PI * phase));
+    let leftStart = margin, rightStart = w - margin - boxSize;
+    let travel = (rightStart - leftStart) / 2;
+    let x1 = leftStart + travel * (1 - movement);
+    let x2 = rightStart - travel * (1 - movement);
+
+    updateBoxColor(cs);
+
+    // Flash overlay (bara på flash-frames i SYNC på NOLLAN)
+    let flashNow = false;
+    let sec = Math.floor(cs);
+    if (syncState === STATE_SYNC && (sec % 4 === 0) && (cs - sec) < 0.04) flashNow = true;
+    flashDiv.style.display = flashNow ? "block" : "none";
+
+    // Flygande boxar flashar varje takt/slag, med flashDuration och cykel-inverterar på flashen
+    ctx.save();
+    let useInvert = globalInvertCycle;
+    if (syncState === STATE_SYNC && cs < boxFlashUntil) useInvert = !useInvert;
+
+    // Left box
+    ctx.globalAlpha = 0.92;
+    let leftWhite = useInvert ? false : true;
+    ctx.fillStyle = leftWhite ? 'white' : 'black';
+    drawRoundRect(ctx, x1, boxZoneY - boxSize / 2, boxSize, boxSize, 14);
+    ctx.fill();
+
+    // Right box
+    ctx.globalAlpha = 0.85;
+    let rightWhite = !leftWhite;
+    ctx.fillStyle = rightWhite ? 'white' : 'black';
+    drawRoundRect(ctx, x2, boxZoneY - boxSize / 2, boxSize, boxSize, 14);
+    ctx.fill();
+    ctx.restore();
+
+    requestAnimationFrame(drawFrame);
+}
+
+// TC/Countdown logik + blink vid nollan
+let countdownBlink = false;
+let lastCountdownBlink = 0;
+function updateTimecode() {
+    let showCountdown = !!countdownVal;
+    let timeText = '';
+    let isZero = false;
+    if (showCountdown) {
+        if (!countdownStartTime) countdownStartTime = getCentralSeconds();
+        let elapsed = getCentralSeconds() - countdownStartTime;
+        let rem = Math.max(0, countdownVal - elapsed);
+        if (rem === 0) isZero = true;
+        let hrs = Math.floor(rem / 3600);
+        let min = Math.floor((rem % 3600) / 60);
+        let sec = Math.floor(rem % 60);
+        let frame = Math.floor(((rem % 1) * framerate));
+        // Blink vid nollan
+        if (rem <= 0.15) {
+            let t = Math.floor(getCentralSeconds() * 2) % 2;
+            countdownBlink = t === 0;
+        } else {
+            countdownBlink = false;
+        }
+        let pad = n => n.toString().padStart(2, '0');
+        timeText = `${pad(hrs)}:${pad(min)}:${pad(sec)}:${pad(frame)}`;
+    } else {
+        const now = new Date();
+        const hrs = now.getHours().toString().padStart(2, '0');
+        const min = now.getMinutes().toString().padStart(2, '0');
+        const sec = now.getSeconds().toString().padStart(2, '0');
+        const frame = Math.floor((now.getMilliseconds() / 1000) * framerate).toString().padStart(2, '0');
+        timeText = `${hrs}:${min}:${sec}:${frame}`;
+    }
+    timecode.textContent = timeText;
+    timecode.style.opacity = (countdownBlink ? 0.25 : 1);
+}
+
+function updateSync() {
+    let syncHtml = '';
+    let showLipSync = (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames);
+    let showSyncData = (syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames);
+    if (syncState === STATE_MOS) {
+        syncHtml = `<span class="sync-main">MOS</span>`;
+    } else if (syncState === STATE_STEREOIDENT) {
+        syncHtml = `<span class="sync-main">STEREO IDENT</span>`;
+    } else if (showLipSync) {
+        syncHtml = `<span class="sync-main">LIP SYNC</span>`;
+        lipSyncCount++;
+    } else if (showSyncData) {
+        let cs = getCentralSeconds();
+        let flashPeriod = 4.0;
+        let nearestFlash = Math.round(cs / flashPeriod) * flashPeriod;
+        let msOffset = Math.round((cs - nearestFlash) * 1000);
+        let absMs = Math.abs(msOffset);
+        let showSync = absMs < 25;
+        let syncVal = showSync ? "SYNC" : `${absMs}`;
+        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "early" : "late");
+        syncHtml = `
+            <span class="sync-ms-row">
+                <span class="sync-ms-val">${syncVal}</span>
+                <span class="sync-ms-label">${showSync ? "" : "ms audio"}</span>
+                <span class="sync-audio-block">${audioText}</span>
+            </span>
+        `;
+    }
+    syncInfo.innerHTML = syncHtml;
+}
+
+// === AUDIO LAUNCH & CLICKABLE STATES ===
+let audioStarted = false;
+function startAudioOnceAndRemoveCover() {
+    if (!audioStarted) {
+        audioStarted = true;
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioStarter.style.display = "none";
+    }
+}
+audioStarter.onclick = startAudioOnceAndRemoveCover;
+window.onclick = function(e) {
+    if (!audioStarted) {
+        startAudioOnceAndRemoveCover();
+        return;
+    }
+    stopAllAudio();
+
+    let nextState = (syncState + 1) % 3;
+    if (nextState === STATE_SYNC) {
+        lipSyncCount = 0;
+        stopStereoIdent();
+    }
+    syncState = nextState;
+    if (syncState === STATE_STEREOIDENT) {
+        startStereoIdent();
+    } else {
+        stopStereoIdent();
+    }
+};
+
+setInterval(()=>{if(syncState===STATE_STEREOIDENT)updateStereoIdent();},45);
+setInterval(()=>{if(syncState===STATE_SYNC)playPipIfNeeded();},17);
+setInterval(updateSync, 23);
+setInterval(updateTimecode, 1000 / framerate);
+setInterval(()=>{
+    fakeAudioPeaks(syncState);
+    updateWaveformBoxes();
+}, 27);
+
+function init() {
+    resizeCanvas();
+    drawFrame();
+}
+init();
+</script>
+</body>
+</html>

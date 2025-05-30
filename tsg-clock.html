@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>THÅST – Nordisk Lofi Minimalism</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <!-- Outfit Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;400;700&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      /* Dov, smooth gradient – nordisk kväll, ej svart men soft mörkblå/grå */
+      background: linear-gradient(135deg, #20232a 0%, #353849 100%);
+      min-height: 100vh;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Outfit', Arial, sans-serif;
+      overflow: hidden;
+    }
+    .thast {
+      font-size: clamp(3.5rem, 13vw, 12rem);
+      letter-spacing: 0.26em;
+      font-weight: 200;
+      color: #f7bada;
+      text-transform: uppercase;
+      text-shadow:
+        0 2px 32px #f7bada22,
+        0 1px 1px #ffffff33,
+        0 6px 24px #1b112577;
+      margin-bottom: 3vh;
+      margin-top: 0;
+      transition: color 0.3s;
+      cursor: default;
+      user-select: none;
+    }
+    .clock-wrap {
+      background: rgba(180,210,255,0.07);
+      border-radius: 2.2rem;
+      box-shadow: 0 6px 42px 0 #b6dbff18, 0 0px 9px 0 #f7bada0c;
+      padding: 1.5rem 3.2rem;
+      min-width: 280px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1.5vh;
+    }
+    .clock {
+      font-family: 'Outfit', Arial, sans-serif;
+      font-size: clamp(2.2rem, 7vw, 4.5rem);
+      font-weight: 400;
+      letter-spacing: 0.18em;
+      color: #b6dbff;
+      text-shadow: 0 2px 16px #b6dbff33, 0 0px 2px #fff6;
+      transition: color 0.3s;
+      line-height: 1;
+      cursor: default;
+      user-select: none;
+    }
+    /* Babyrosa och babyblå blinkande ":" */
+    .colon {
+      color: #f7bada;
+      animation: blink 1s steps(1, end) infinite;
+      font-weight: 700;
+      margin: 0 0.1em;
+      font-size: 1.15em;
+    }
+    @keyframes blink {
+      0%, 49% { opacity: 1; }
+      50%, 100% { opacity: 0.32; }
+    }
+    /* Responsivitet */
+    @media (max-width: 600px) {
+      .thast { font-size: clamp(2rem, 13vw, 4.5rem); }
+      .clock { font-size: clamp(1.1rem, 8vw, 2.3rem); }
+      .clock-wrap { min-width: 130px; padding: 0.8rem 1.2rem;}
+    }
+  </style>
+</head>
+<body>
+  <div class="thast">THÅST</div>
+  <div class="clock-wrap">
+    <span class="clock" id="clock"></span>
+  </div>
+  <script>
+    function updateClock() {
+      const now = new Date();
+      let h = now.getHours().toString().padStart(2, '0');
+      let m = now.getMinutes().toString().padStart(2, '0');
+      let s = now.getSeconds().toString().padStart(2, '0');
+      // Babyrosa blinkande kolon mellan tim/minut, babyblå mellan min/sek
+      document.getElementById('clock').innerHTML =
+        h + '<span class="colon">:</span>' + m + '<span class="colon" style="color:#b6dbff;">:</span>' + s;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>
