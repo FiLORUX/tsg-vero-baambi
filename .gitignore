@@ -1,0 +1,16 @@
+# VSCode & MacOS junk
+.vscode/
+.DS_Store
+
+# Live Server temp
+*.tmp
+
+# OS
+Thumbs.db
+ehthumbs.db
+
+# Loggar och backups
+*.log
+*.bak
+*.swp
+*.swo
