@@ -292,29 +292,44 @@ function resizeCanvas() {
 // Centraliserad storlekshantering
 const Layout = {
     // Procentuella faktorer
-    textBoxHeightFactor: 0.09, // Text-boxarnas höjd (9% av canvasens höjd)
+    rowHeightFactor: 0.09, // Gemensam höjdstandard (9% av canvasens höjd)
     textBoxWidthFactor: 0.16,  // Text-boxarnas bredd (16% av canvasens bredd)
-    flyingBoxHeightFactor: 0.07, // Flygande boxarnas höjd (7% av canvasens höjd)
     redFieldHeightFactor: 0.25, // Höjd för det röda fältet (25% av canvasens höjd)
 
     // Dynamiska beräkningar
+    get rowHeight() {
+        let h = canvas.height;
+        return Math.round(h * this.rowHeightFactor);
+    },
+
     get textBoxSize() {
-        let h = canvas.height, w = canvas.width;
+        let h = this.rowHeight; // Använd gemensam höjdstandard
+        let w = canvas.width;
         return {
             width: Math.round(w * this.textBoxWidthFactor),
-            height: Math.round(h * this.textBoxHeightFactor)
+            height: h
         };
     },
 
     get flyingBoxSize() {
-        let h = canvas.height;
-        let size = Math.round(h * this.flyingBoxHeightFactor);
-        return { width: size, height: size }; // Kvadratiska
+        let h = this.rowHeight; // Använd gemensam höjdstandard
+        return { width: h, height: h }; // Kvadratiska
     },
 
     get redFieldSize() {
         let h = canvas.height;
         return { height: Math.round(h * this.redFieldHeightFactor) };
+    },
+
+    get rowPositions() {
+        let redTop = canvas.height * (1 - this.redFieldHeightFactor);
+        let redHeight = this.redFieldSize.height;
+        let rowHeight = redHeight / 3; // Varje rad tar upp 1/3 av det röda fältet
+        return {
+            textRow: redTop + rowHeight * 0.5, // Centrerad i första tredjedelen
+            waveformRow: redTop + rowHeight * 1.5, // Centrerad i andra tredjedelen
+            flyingBoxRow: redTop + rowHeight * 2.5 // Centrerad i tredje tredjedelen
+        };
     }
 };
 
