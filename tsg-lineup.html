@@ -253,33 +253,29 @@ function getWaveformBoxSize() {
     return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
 }
 function positionOverlays() {
-    let w = window.innerWidth, h = window.innerHeight;
-    let rFieldTop = h * 0.75, rFieldH = h * 0.25;
-    let tcY = rFieldTop + rFieldH * (0.125 + 0.25 + 0.125 + 0.00);
-    let tcSyncBg = getTcSyncBgSize();
-    tcBg.style.left = '4vw'; tcBg.style.top = `${tcY}px`;
+    let rowPositions = Layout.rowPositions;
+
+    // Text-boxarnas placering
+    let tcSyncBg = Layout.textBoxSize;
+    tcBg.style.left = '4vw'; tcBg.style.top = `${rowPositions.textRow}px`;
     tcBg.style.width = tcSyncBg.width + "px"; tcBg.style.height = tcSyncBg.height + "px";
-    timecode.style.left = '4vw'; timecode.style.top = `${tcY}px`;
+    timecode.style.left = '4vw'; timecode.style.top = `${rowPositions.textRow}px`;
     timecode.style.width = tcSyncBg.width + "px"; timecode.style.height = tcSyncBg.height + "px";
-    syncBg.style.right = '4vw'; syncBg.style.top = `${tcY}px`;
+    syncBg.style.right = '4vw'; syncBg.style.top = `${rowPositions.textRow}px`;
     syncBg.style.width = tcSyncBg.width + "px"; syncBg.style.height = tcSyncBg.height + "px";
-    syncInfo.style.right = '4vw'; syncInfo.style.top = `${tcY}px`;
+    syncInfo.style.right = '4vw'; syncInfo.style.top = `${rowPositions.textRow}px`;
     syncInfo.style.width = tcSyncBg.width + "px"; syncInfo.style.height = tcSyncBg.height + "px";
-    // Waveform – centrerat
-    let wave = getWaveformBoxSize();
-    let gap = Math.round(wave.width * 0.28);
-    let leftX = w/2 - gap/2 - wave.width;
-    let rightX = w/2 + gap/2;
-    waveBoxL.style.left = leftX + "px";
-    waveBoxL.style.top = `${tcY}px`;
-    waveBoxL.style.width = wave.width + "px";
-    waveBoxL.style.height = wave.height + "px";
-    waveL.width = wave.width; waveL.height = wave.height;
-    waveBoxR.style.left = rightX + "px";
-    waveBoxR.style.top = `${tcY}px`;
-    waveBoxR.style.width = wave.width + "px";
-    waveBoxR.style.height = wave.height + "px";
-    waveR.width = wave.width; waveR.height = wave.height;
+
+    // Waveform-boxarnas placering
+    let waveSize = getWaveformBoxSize();
+    waveBoxL.style.left = '4vw';
+    waveBoxL.style.top = `${rowPositions.waveformRow}px`;
+    waveBoxL.style.width = waveSize.width + "px";
+    waveBoxL.style.height = waveSize.height + "px";
+    waveBoxR.style.right = '4vw';
+    waveBoxR.style.top = `${rowPositions.waveformRow}px`;
+    waveBoxR.style.width = waveSize.width + "px";
+    waveBoxR.style.height = waveSize.height + "px";
 }
 window.addEventListener('resize', positionOverlays);
 
@@ -325,10 +321,15 @@ const Layout = {
         let redTop = canvas.height * (1 - this.redFieldHeightFactor);
         let redHeight = this.redFieldSize.height;
         let rowHeight = redHeight / 3; // Varje rad tar upp 1/3 av det röda fältet
+
+        // Justera för att centrera elementen inom sina rader
+        let textBoxHeight = this.textBoxSize.height;
+        let waveformBoxHeight = getWaveformBoxSize().height;
+
         return {
-            textRow: redTop + rowHeight * 0.5, // Centrerad i första tredjedelen
-            waveformRow: redTop + rowHeight * 1.5, // Centrerad i andra tredjedelen
-            flyingBoxRow: redTop + rowHeight * 2.5 // Centrerad i tredje tredjedelen
+            textRow: redTop + rowHeight * 0.5 - textBoxHeight / 2, // Centrerad i första tredjedelen
+            waveformRow: redTop + rowHeight * 1.5 - waveformBoxHeight / 2, // Centrerad i andra tredjedelen
+            flyingBoxRow: redTop + rowHeight * 2.5 - this.flyingBoxSize.height / 2 // Centrerad i tredje tredjedelen
         };
     }
 };
