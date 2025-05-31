@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TSG Lineup - Thåst Signal Generator Lineup Toolkit</title>
+<title>TGLF - Thåst Global Lineup Framework</title>
 <style>
 html, body { margin: 0; overflow: hidden; background: black; }
 canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0;}
@@ -150,68 +150,6 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     height: 25vh;
     background: rgba(255,255,255,0.97);
 }
-.sync-center-row {
-    display: inline-flex;
-    align-items: baseline;
-    position: relative;
-    left: 50%;
-    transform: translateX(-50%);
-}
-.ms-val {
-    font-size: 2vw;
-    font-family: 'Share Tech Mono', monospace;
-    font-weight: normal;
-    text-align: right;
-    min-width: 4ch; /* eller 5ch om du vill ha marginal */
-    margin-right: 0.22em;
-    line-height: 1.07;
-}
-.ms-help {
-    font-size: 1.05vw;
-    font-family: 'Share Tech Mono', monospace;
-    opacity: 0.85;
-    text-align: left;
-    align-self: baseline;
-    line-height: 1.1;
-}    
-.sync-center-outer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  width: 100%;
-}
-.sync-center-inner {
-  display: flex;
-  align-items: flex-end;
-}
-.ms-val {
-  font-size: 2vw;
-  font-family: 'Share Tech Mono', monospace;
-  font-weight: normal;
-  text-align: right;
-  min-width: 4ch;
-  margin-right: 0.25em;
-  line-height: 1.07;
-  display: flex;
-  align-items: center;
-  height: 2.5vw;
-}
-.ms-help {
-  font-size: 1.05vw;
-  font-family: 'Share Tech Mono', monospace;
-  opacity: 0.85;
-  text-align: left;
-  align-self: flex-end;
-  line-height: 1.1;
-  display: flex;
-  align-items: flex-end;
-}
-.audio-block {
-  font-weight: 700; /* Fetstil för "audio early/late/sync" */
-  letter-spacing: 0.01em;
-  margin-left: 0.2em;
-}    
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 </head>
@@ -304,88 +242,44 @@ let countdownStartTime = null;
 
 // --- UI BOX SIZING ---
 function getBoxSize() {
-    let h = canvas.height;
-    return Math.round(h * 0.07);
+    return Layout.flyingBoxSize.height; // Returnerar höjden (som också är bredden)
 }
 function getTcSyncBgSize() {
-    let w = canvas.width, h = canvas.height;
-    return { width: Math.round(w * 0.16), height: Math.round(h * 0.09)};
+    return Layout.textBoxSize;
 }
 function getWaveformBoxSize() {
     // Snyggare mindre box
     let s = getTcSyncBgSize();
     return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
 }
-// --- Overlay and box positioning logic ---
-// This function ensures all overlay elements are positioned
-// with consistent margins and scaling across HD, Full HD and UHD displays.
-// Minimum tested width: 1280px (720p). Standard: 1920px. UHD: 3840px.
-// All values are derived from viewport dimensions for maximum flexibility.
-
 function positionOverlays() {
-    // Compute viewport width and height
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-
-    // Always maintain at least 24px, or 2vw, margins to screen edges
-    const minSideMargin = Math.max(24, Math.round(w * 0.02));
-
-    // Overlay (slate) – always centred at the top with adaptive width
-    overlay.style.left = "50%";
-    overlay.style.transform = "translate(-50%, 0)";
-    overlay.style.top = Math.max(18, h * 0.045) + "px";
-    overlay.style.maxWidth = Math.min(Math.round(w * 0.5), 950) + "px";
-    overlay.style.minWidth = "160px";
-    overlay.style.width = ""; // Allow responsive width
-
-    // Calculate section height for lower third positioning
-    const sectionHeight = h * 0.25;
-    const rFieldTop = h - sectionHeight;
-    const tcY = rFieldTop + sectionHeight * 0.32;
-
-    // Get timecode/sync background box size
-    const tcSyncBg = getTcSyncBgSize();
-
-    // Left side: timecode and its background, always at least minSideMargin from the edge
-    tcBg.style.left = minSideMargin + "px";
-    tcBg.style.top = `${tcY}px`;
-    tcBg.style.width = tcSyncBg.width + "px";
-    tcBg.style.height = tcSyncBg.height + "px";
-    timecode.style.left = minSideMargin + "px";
-    timecode.style.top = `${tcY}px`;
-    timecode.style.width = tcSyncBg.width + "px";
-    timecode.style.height = tcSyncBg.height + "px";
-
-    // Right side: syncInfo and its background, always at least minSideMargin from the edge
-    syncBg.style.right = minSideMargin + "px";
-    syncBg.style.top = `${tcY}px`;
-    syncBg.style.width = tcSyncBg.width + "px";
-    syncBg.style.height = tcSyncBg.height + "px";
-    syncInfo.style.right = minSideMargin + "px";
-    syncInfo.style.top = `${tcY}px`;
-    syncInfo.style.width = tcSyncBg.width + "px";
-    syncInfo.style.height = tcSyncBg.height + "px";
-
-    // Waveform boxes: always centred horizontally with a fixed gap
-    const wave = getWaveformBoxSize();
-    const waveGap = Math.max(64, Math.round(wave.width * 0.32));
-    const centerX = w / 2;
-    const leftX = centerX - waveGap / 2 - wave.width;
-    const rightX = centerX + waveGap / 2;
-
-    waveBoxL.style.left = `${leftX}px`;
+    let w = window.innerWidth, h = window.innerHeight;
+    let rFieldTop = h * 0.75, rFieldH = h * 0.25;
+    let tcY = rFieldTop + rFieldH * (0.125 + 0.25 + 0.125 + 0.00);
+    let tcSyncBg = getTcSyncBgSize();
+    tcBg.style.left = '4vw'; tcBg.style.top = `${tcY}px`;
+    tcBg.style.width = tcSyncBg.width + "px"; tcBg.style.height = tcSyncBg.height + "px";
+    timecode.style.left = '4vw'; timecode.style.top = `${tcY}px`;
+    timecode.style.width = tcSyncBg.width + "px"; timecode.style.height = tcSyncBg.height + "px";
+    syncBg.style.right = '4vw'; syncBg.style.top = `${tcY}px`;
+    syncBg.style.width = tcSyncBg.width + "px"; syncBg.style.height = tcSyncBg.height + "px";
+    syncInfo.style.right = '4vw'; syncInfo.style.top = `${tcY}px`;
+    syncInfo.style.width = tcSyncBg.width + "px"; syncInfo.style.height = tcSyncBg.height + "px";
+    // Waveform – centrerat
+    let wave = getWaveformBoxSize();
+    let gap = Math.round(wave.width * 0.28);
+    let leftX = w/2 - gap/2 - wave.width;
+    let rightX = w/2 + gap/2;
+    waveBoxL.style.left = leftX + "px";
     waveBoxL.style.top = `${tcY}px`;
     waveBoxL.style.width = wave.width + "px";
     waveBoxL.style.height = wave.height + "px";
-    waveL.width = wave.width;
-    waveL.height = wave.height;
-
-    waveBoxR.style.left = `${rightX}px`;
+    waveL.width = wave.width; waveL.height = wave.height;
+    waveBoxR.style.left = rightX + "px";
     waveBoxR.style.top = `${tcY}px`;
     waveBoxR.style.width = wave.width + "px";
     waveBoxR.style.height = wave.height + "px";
-    waveR.width = wave.width;
-    waveR.height = wave.height;
+    waveR.width = wave.width; waveR.height = wave.height;
 }
 window.addEventListener('resize', positionOverlays);
 
@@ -394,6 +288,35 @@ function resizeCanvas() {
     canvas.height = window.innerHeight;
     positionOverlays();
 }
+
+// Centraliserad storlekshantering
+const Layout = {
+    // Procentuella faktorer
+    textBoxHeightFactor: 0.09, // Text-boxarnas höjd (9% av canvasens höjd)
+    textBoxWidthFactor: 0.16,  // Text-boxarnas bredd (16% av canvasens bredd)
+    flyingBoxHeightFactor: 0.07, // Flygande boxarnas höjd (7% av canvasens höjd)
+    redFieldHeightFactor: 0.25, // Höjd för det röda fältet (25% av canvasens höjd)
+
+    // Dynamiska beräkningar
+    get textBoxSize() {
+        let h = canvas.height, w = canvas.width;
+        return {
+            width: Math.round(w * this.textBoxWidthFactor),
+            height: Math.round(h * this.textBoxHeightFactor)
+        };
+    },
+
+    get flyingBoxSize() {
+        let h = canvas.height;
+        let size = Math.round(h * this.flyingBoxHeightFactor);
+        return { width: size, height: size }; // Kvadratiska
+    },
+
+    get redFieldSize() {
+        let h = canvas.height;
+        return { height: Math.round(h * this.redFieldHeightFactor) };
+    }
+};
 
 // --------- STEREO IDENT AUDIO ---------
 function stopAllAudio() {
@@ -691,11 +614,7 @@ function updateSync() {
     } else if (syncState === STATE_STEREOIDENT) {
         syncHtml = `<span class="sync-main">STEREO IDENT</span>`;
     } else if (showLipSync) {
-        syncHtml = `
-    <span class="sync-center-row">
-        <span class="ms-val">LIP SYNC</span>
-    </span>
-`;
+        syncHtml = `<span class="sync-main">LIP SYNC</span>`;
         lipSyncCount++;
     } else if (showSyncData) {
         let cs = getCentralSeconds();
@@ -705,18 +624,14 @@ function updateSync() {
         let absMs = Math.abs(msOffset);
         let showSync = absMs < 25;
         let syncVal = showSync ? "SYNC" : `${absMs}`;
-let audioText = showSync ? "" : `ms audio ${msOffset < 0 ? "early" : "late"}`;
-syncHtml = `
-  <div class="sync-center-outer">
-    <div class="sync-center-inner">
-      <span class="ms-val">${syncVal}</span>
-      <span class="ms-help">
-        ms
-        <span class="audio-block">${msOffset < 0 ? "audio early" : msOffset > 0 ? "audio late" : "audio sync"}</span>
-      </span>
-    </div>
-  </div>
-  `;
+        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "early" : "late");
+        syncHtml = `
+            <span class="sync-ms-row">
+                <span class="sync-ms-val">${syncVal}</span>
+                <span class="sync-ms-label">${showSync ? "" : "ms audio"}</span>
+                <span class="sync-audio-block">${audioText}</span>
+            </span>
+        `;
     }
     syncInfo.innerHTML = syncHtml;
 }
