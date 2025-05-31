@@ -255,7 +255,7 @@ function getWaveformBoxSize() {
 function positionOverlays() {
     let rowPositions = Layout.rowPositions;
 
-    // Text-boxarnas placering
+    // Text-boxarnas placering (INFO 1)
     let tcSyncBg = Layout.textBoxSize;
     tcBg.style.left = '4vw'; tcBg.style.top = `${rowPositions.textRow}px`;
     tcBg.style.width = tcSyncBg.width + "px"; tcBg.style.height = tcSyncBg.height + "px";
@@ -269,11 +269,11 @@ function positionOverlays() {
     // Waveform-boxarnas placering (på samma rad som text-boxarna)
     let waveSize = getWaveformBoxSize();
     waveBoxL.style.left = '4vw';
-    waveBoxL.style.top = `${rowPositions.textRow}px`; // Använd textRow
+    waveBoxL.style.top = `${rowPositions.textRow}px`; // Samma rad som text-boxarna
     waveBoxL.style.width = waveSize.width + "px";
     waveBoxL.style.height = waveSize.height + "px";
     waveBoxR.style.right = '4vw';
-    waveBoxR.style.top = `${rowPositions.textRow}px`; // Använd textRow
+    waveBoxR.style.top = `${rowPositions.textRow}px`; // Samma rad som text-boxarna
     waveBoxR.style.width = waveSize.width + "px";
     waveBoxR.style.height = waveSize.height + "px";
 }
@@ -318,17 +318,23 @@ const Layout = {
     },
 
     get rowPositions() {
-        let redTop = canvas.height * (1 - this.redFieldHeightFactor);
-        let redHeight = this.redFieldSize.height;
-        let rowHeight = redHeight / 2; // Dela upp det röda fältet i två rader istället för tre
+        let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Starten av det röda fältet
+        let redHeight = this.redFieldSize.height; // Höjden på det röda fältet
 
-        // Justera för att centrera elementen inom sina rader
+        // Procentuella fördelningar
+        let luftTopp = redHeight * 0.138; // 13.8%
+        let info1 = redHeight * 0.22;    // 22%
+        let luftMellan = redHeight * 0.084; // 8.4%
+        let info2 = redHeight * 0.22;    // 22%
+        let luftBotten = redHeight * 0.338; // 33.8%
+
+        // Elementens höjder
         let textBoxHeight = this.textBoxSize.height;
-        let combinedRowHeight = Math.max(getWaveformBoxSize().height, this.flyingBoxSize.height);
+        let flyingBoxHeight = this.flyingBoxSize.height;
 
         return {
-            textRow: redTop + rowHeight * 0.5 - textBoxHeight / 2, // Centrerad i första raden
-            combinedRow: redTop + rowHeight * 1.5 - combinedRowHeight / 2 // Centrerad i andra raden
+            textRow: redTop + luftTopp + info1 / 2 - textBoxHeight / 2, // Centrerad i INFO 1
+            flyingBoxRow: redTop + luftTopp + info1 + luftMellan + info2 / 2 - flyingBoxHeight / 2 // Centrerad i INFO 2
         };
     }
 };
@@ -685,7 +691,7 @@ setInterval(()=>{if(syncState===STATE_STEREOIDENT)updateStereoIdent();},45);
 setInterval(()=>{if(syncState===STATE_SYNC)playPipIfNeeded();},17);
 setInterval(updateSync, 23);
 setInterval(updateTimecode, 1000 / framerate);
-setInterval(()=>{
+setInterval(() => {
     fakeAudioPeaks(syncState);
     updateWaveformBoxes();
 }, 27);
