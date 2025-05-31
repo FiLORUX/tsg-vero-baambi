@@ -324,17 +324,21 @@ const Layout = {
         // Procentuella fördelningar
         let luftTopp = redHeight * 0.138; // 13.8%
         let info1 = redHeight * 0.22;    // 22%
-        let luftMellan = redHeight * 0.084; // 8.4%
+        let luftMellan = redHeight * 0.1; // 10%
         let info2 = redHeight * 0.22;    // 22%
-        let luftBotten = redHeight * 0.338; // 33.8%
+        let luftBotten = redHeight * 0.322; // 32.2%
 
         // Elementens höjder
         let textBoxHeight = this.textBoxSize.height;
         let flyingBoxHeight = this.flyingBoxSize.height;
 
+        // Använd `calculateRowPosition` för att centrera raderna
+        let textRow = calculateRowPosition(redTop + luftTopp, info1, textBoxHeight);
+        let flyingBoxRow = calculateRowPosition(redTop + luftTopp + info1 + luftMellan, info2, flyingBoxHeight);
+
         return {
-            textRow: redTop + luftTopp + info1 / 2 - textBoxHeight / 2, // Centrerad i INFO 1
-            flyingBoxRow: redTop + luftTopp + info1 + luftMellan + info2 / 2 - flyingBoxHeight / 2 // Centrerad i INFO 2
+            textRow,
+            flyingBoxRow
         };
     }
 };
@@ -701,6 +705,10 @@ function init() {
     drawFrame();
 }
 init();
+
+function calculateRowPosition(sectionStart, sectionHeight, elementHeight) {
+    return sectionStart + sectionHeight / 2 - elementHeight / 2;
+}
 </script>
 </body>
 </html>
