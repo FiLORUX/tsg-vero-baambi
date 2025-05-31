@@ -266,14 +266,14 @@ function positionOverlays() {
     syncInfo.style.right = '4vw'; syncInfo.style.top = `${rowPositions.textRow}px`;
     syncInfo.style.width = tcSyncBg.width + "px"; syncInfo.style.height = tcSyncBg.height + "px";
 
-    // Waveform-boxarnas placering
+    // Waveform-boxarnas placering (på samma rad som text-boxarna)
     let waveSize = getWaveformBoxSize();
     waveBoxL.style.left = '4vw';
-    waveBoxL.style.top = `${rowPositions.waveformRow}px`;
+    waveBoxL.style.top = `${rowPositions.textRow}px`; // Använd textRow
     waveBoxL.style.width = waveSize.width + "px";
     waveBoxL.style.height = waveSize.height + "px";
     waveBoxR.style.right = '4vw';
-    waveBoxR.style.top = `${rowPositions.waveformRow}px`;
+    waveBoxR.style.top = `${rowPositions.textRow}px`; // Använd textRow
     waveBoxR.style.width = waveSize.width + "px";
     waveBoxR.style.height = waveSize.height + "px";
 }
@@ -320,16 +320,15 @@ const Layout = {
     get rowPositions() {
         let redTop = canvas.height * (1 - this.redFieldHeightFactor);
         let redHeight = this.redFieldSize.height;
-        let rowHeight = redHeight / 3; // Varje rad tar upp 1/3 av det röda fältet
+        let rowHeight = redHeight / 2; // Dela upp det röda fältet i två rader istället för tre
 
         // Justera för att centrera elementen inom sina rader
         let textBoxHeight = this.textBoxSize.height;
-        let waveformBoxHeight = getWaveformBoxSize().height;
+        let combinedRowHeight = Math.max(getWaveformBoxSize().height, this.flyingBoxSize.height);
 
         return {
-            textRow: redTop + rowHeight * 0.5 - textBoxHeight / 2, // Centrerad i första tredjedelen
-            waveformRow: redTop + rowHeight * 1.5 - waveformBoxHeight / 2, // Centrerad i andra tredjedelen
-            flyingBoxRow: redTop + rowHeight * 2.5 - this.flyingBoxSize.height / 2 // Centrerad i tredje tredjedelen
+            textRow: redTop + rowHeight * 0.5 - textBoxHeight / 2, // Centrerad i första raden
+            combinedRow: redTop + rowHeight * 1.5 - combinedRowHeight / 2 // Centrerad i andra raden
         };
     }
 };
