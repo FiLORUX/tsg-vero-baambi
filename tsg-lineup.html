@@ -76,33 +76,39 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
 .sync-ms-val {
     font-size: 2.3vw;
     font-family: 'Share Tech Mono', monospace;
-    font-weight: normal;
+    font-weight: normal; /* Behåll normal vikt för "ms" */
     text-align: right;
     min-width: 5ch;
     width: 5ch;
-    margin-right: 0.2em; /* Ge lite mellanrum till texten */
+    margin-right: 0.2em;
     letter-spacing: 0.01em;
     line-height: 1; /* Undvik extra mellanrum */
     vertical-align: baseline; /* Justera till baslinjen */
+    -webkit-font-smoothing: antialiased; /* Förbättra textens skärpa */
+    -moz-osx-font-smoothing: grayscale; /* Förbättra textens skärpa */
 }
 .sync-ms-label {
     font-size: 1.05vw;
     font-family: 'Share Tech Mono', monospace;
-    font-weight: bold; /* Gör texten fetstil */
+    font-weight: normal; /* "ms" ska inte vara fetstil */
     opacity: 0.85;
-    margin-right: 0.2em; /* Ge lite mellanrum till nästa text */
+    margin-right: 0.2em;
     line-height: 1;
-    vertical-align: baseline; /* Justera till baslinjen */
+    vertical-align: baseline;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 .sync-audio-block {
     display: inline-block;
     font-size: 1.05vw;
     font-family: 'Share Tech Mono', monospace;
-    font-weight: bold; /* Gör texten fetstil */
+    font-weight: bold; /* "audio early/late" ska vara fetstil */
     letter-spacing: 0.01em;
     color: #fff;
     line-height: 1;
-    vertical-align: baseline; /* Justera till baslinjen */
+    vertical-align: baseline;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 #waveformBoxL, #waveformBoxR {
     position: absolute;
@@ -528,11 +534,31 @@ function drawFrame() {
         ctx.fillStyle = color;
         ctx.fillRect(i * barWidth, 0, barWidth, barH - gradH);
     });
+
+    // Gråskala-remsa (grayscale ramp)
+    const grayRampH = gradH; // Samma höjd som den nuvarande grå gradienten
+    const grayRampY = gradY - grayRampH; // Placera precis ovanför den nuvarande grå gradienten
+    const grayRampColors = [
+        "#080808", // Superblack
+        "#121212", // Black
+        "#333333", // Dark gray
+        "#666666", // Medium gray
+        "#999999", // Light gray
+        "#CCCCCC", // Near-white
+        "#FFFFFF"  // Superwhite
+    ];
+    const grayRampWidth = w / grayRampColors.length;
+    grayRampColors.forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(i * grayRampWidth, grayRampY, grayRampWidth, grayRampH);
+    });
+
     // Gråskale-gradient
     const gradient = ctx.createLinearGradient(0, gradY, w, gradY + gradH);
     gradient.addColorStop(0, '#000'); gradient.addColorStop(1, '#FFF');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, gradY, w, gradH);
+
     // Rött fält
     ctx.fillStyle = redRec709;
     ctx.fillRect(0, redY, w, redH);
@@ -727,6 +753,24 @@ function positionFlyingBoxes() {
 }
 window.addEventListener('load', () => {
     resizeCanvas(); // Säkerställ att canvas och marginaler är korrekt initialiserade
+});
+
+// Gråskala-remsa (grayscale ramp)
+const grayRampH = gradH; // Samma höjd som den nuvarande grå gradienten
+const grayRampY = gradY - grayRampH; // Placera precis ovanför den nuvarande grå gradienten
+const grayRampColors = [
+    "#080808", // Superblack
+    "#121212", // Black
+    "#333333", // Dark gray
+    "#666666", // Medium gray
+    "#999999", // Light gray
+    "#CCCCCC", // Near-white
+    "#FFFFFF"  // Superwhite
+];
+const grayRampWidth = w / grayRampColors.length;
+grayRampColors.forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(i * grayRampWidth, grayRampY, grayRampWidth, grayRampH);
 });
 </script>
 <!-- 
