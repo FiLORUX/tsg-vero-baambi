@@ -253,28 +253,42 @@ function getWaveformBoxSize() {
     return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
 }
 function positionOverlays() {
-    const rowPositions = calculateRowPositions();
+    let rowPositions = Layout.rowPositions;
 
-    // Text-boxarnas placering
-    const tcSyncBg = Layout.textBoxSize;
-    positionElement(tcBg, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height);
-    positionElement(timecode, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height);
-    positionElement(syncBg, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height, true);
-    positionElement(syncInfo, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height, true);
+// Text-boxarnas placering (TC/SYNC-boxar) – centrerade vertikalt
+let tcSyncSize = getTcSyncBgSize();
+tcBg.style.left = '4vw';
+tcBg.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+tcBg.style.width = tcSyncSize.width + "px";
+tcBg.style.height = tcSyncSize.height + "px";
 
-    // Flygande boxarnas placering
-    const waveSize = getWaveformBoxSize();
-    positionElement(waveBoxL, '4vw', rowPositions.flyingBoxRow, waveSize.width, waveSize.height);
-    positionElement(waveBoxR, '4vw', rowPositions.flyingBoxRow, waveSize.width, waveSize.height, true);
-}
+timecode.style.left = '4vw';
+timecode.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+timecode.style.width = tcSyncSize.width + "px";
+timecode.style.height = tcSyncSize.height + "px";
 
-// Hjälpfunktion för att placera ett element
-function positionElement(element, left, top, width, height, alignRight = false) {
-    element.style.left = alignRight ? '' : left;
-    element.style.right = alignRight ? left : '';
-    element.style.top = `${top}px`;
-    element.style.width = `${width}px`;
-    element.style.height = `${height}px`;
+syncBg.style.right = '4vw';
+syncBg.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+syncBg.style.width = tcSyncSize.width + "px";
+syncBg.style.height = tcSyncSize.height + "px";
+
+syncInfo.style.right = '4vw';
+syncInfo.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+syncInfo.style.width = tcSyncSize.width + "px";
+syncInfo.style.height = tcSyncSize.height + "px";
+
+// Waveform-boxarnas placering (också centrerade vertikalt på undre raden)
+let waveSize = getWaveformBoxSize();
+waveBoxL.style.left = '4vw';
+waveBoxL.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
+waveBoxL.style.width = waveSize.width + "px";
+waveBoxL.style.height = waveSize.height + "px";
+
+waveBoxR.style.right = '4vw';
+waveBoxR.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
+waveBoxR.style.width = waveSize.width + "px";
+waveBoxR.style.height = waveSize.height + "px";
+
 }
 window.addEventListener('resize', positionOverlays);
 
@@ -316,19 +330,19 @@ const Layout = {
         return { height: Math.round(h * this.redFieldHeightFactor) };
     },
 
-    get rowPositions() {
-        let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Starten av det röda fältet
-        let redHeight = this.redFieldSize.height; // Höjden på det röda fältet
+get rowPositions() {
+    let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Röda fältets start
+    let redHeight = this.redFieldSize.height; // Röda fältets höjd
 
-        // Fasta positioner för raderna
-        let textRow = redTop + redHeight * 0.25; // Placera text-boxarna 25% ner i det röda fältet
-        let flyingBoxRow = redTop + redHeight * 0.75; // Placera flygande boxarna 75% ner i det röda fältet
+    let flyingBoxRow = redTop + redHeight / 3; // Flygande boxar exakt vid 1/3 ner i röda fältet
+    let textRow = redTop + (redHeight * 2 / 3); // TC/SYNC-boxar exakt vid 2/3 ner i röda fältet
 
-        return {
-            textRow,
-            flyingBoxRow
-        };
-    }
+    return {
+        textRow,
+        flyingBoxRow
+    };
+}
+
 };
 
 // --------- STEREO IDENT AUDIO ---------
@@ -696,25 +710,6 @@ init();
 
 function calculateRowPosition(sectionStart, sectionHeight, elementHeight) {
     return sectionStart + sectionHeight / 2 - elementHeight / 2;
-}
-
-function calculateRowPositions() {
-    const redTop = canvas.height * (1 - Layout.redFieldHeightFactor); // Starten av det röda fältet
-    const redHeight = Layout.redFieldSize.height; // Höjden på det röda fältet
-
-    // Elementens höjd
-    const sharedRowHeight = Layout.textBoxSize.height; // Höjd för timecode, sync-text och waveform-boxar
-    const flyingBoxHeight = Layout.flyingBoxSize.height;
-
-    // Procentuella fördelningar inom det röda fältet
-    const sharedRowOffset = 0.25; // 25% ner i det röda fältet
-    const flyingBoxRowOffset = 0.75; // 75% ner i det röda fältet
-
-    // Beräkna radernas positioner med centrering
-    const sharedRow = calculateRowPosition(redTop + redHeight * sharedRowOffset, redHeight * 0.22, sharedRowHeight);
-    const flyingBoxRow = calculateRowPosition(redTop + redHeight * flyingBoxRowOffset, redHeight * 0.22, flyingBoxHeight);
-
-    return { sharedRow, flyingBoxRow };
 }
 </script>
 </body>
