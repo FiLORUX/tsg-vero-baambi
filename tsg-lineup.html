@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>TSG Suite</title>
+<meta name="description" content="Thåst Signal Generator - A browser-based toolkit for broadcast line-up, tone, PLUGE, testcards, and visual sync references. Built entirely in HTML, CSS, and vanilla JavaScript.">
 <style>
 html, body { margin: 0; overflow: hidden; background: black; }
 canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0;}
@@ -13,7 +14,7 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     transform: translate(-50%, 0);
     color: white;
     font-family: 'Share Tech Mono', monospace;
-    font-size: 2.2vw;
+    font-size: 2.5vw; /* Öka textstorleken från 2.2vw till 2.5vw */
     min-width: 12vw;
     max-width: 56vw;
     text-align: center;
@@ -25,7 +26,7 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     box-sizing: border-box;
     word-break: break-word;
     top: 4.5vh;
-    line-height: 1;
+    line-height: 1.4; /* Lägg till mer mellanrum mellan raderna */
 }
 .tc-sync-bg {
     position: absolute;
@@ -193,7 +194,7 @@ const waveCtxL = waveL.getContext('2d');
 const waveCtxR = waveR.getContext('2d');
 
 // --- Overlay/Slate-id ---
-if (!params.has('slate')) slateId = 'Thåst Global Lineup Framework';
+if (!params.has('slate')) slateId = 'TSG SUITE<br>Thåst Signal Generator<br>Lineup Framework';
 overlay.innerHTML = slateId.replace(/\\n/g, '<br>');
 function adjustOverlayWidth() {
     let w = window.innerWidth;
