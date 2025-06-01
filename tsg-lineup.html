@@ -256,15 +256,15 @@ function getWaveformBoxSize() {
 function positionOverlays() {
     let rowPositions = Layout.rowPositions;
 
-    // Placering av waveform-boxar (flygande boxar)
+    // Placering av visualiseringsboxar (waveform-boxar)
     let waveSize = getWaveformBoxSize();
     waveBoxL.style.left = '4vw';
-    waveBoxL.style.top = `${rowPositions.flyingBoxRow - waveSize.height / 2}px`; // Använd flyingBoxRow
+    waveBoxL.style.top = `${rowPositions.textRow - waveSize.height / 2}px`; // Använd textRow
     waveBoxL.style.width = waveSize.width + "px";
     waveBoxL.style.height = waveSize.height + "px";
 
     waveBoxR.style.right = '4vw';
-    waveBoxR.style.top = `${rowPositions.flyingBoxRow - waveSize.height / 2}px`; // Använd flyingBoxRow
+    waveBoxR.style.top = `${rowPositions.textRow - waveSize.height / 2}px`; // Använd textRow
     waveBoxR.style.width = waveSize.width + "px";
     waveBoxR.style.height = waveSize.height + "px";
 
@@ -334,8 +334,8 @@ get rowPositions() {
     let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Röda fältets start
     let redHeight = this.redFieldSize.height; // Röda fältets höjd
 
-    let flyingBoxRow = redTop + redHeight * 0.75; // Flygande boxar vid 25% ner i röda fältet
     let textRow = redTop + redHeight * 0.75; // TC/SYNC-boxar vid 75% ner i röda fältet
+    let flyingBoxRow = redTop + redHeight * 0.25; // Flygande boxar vid 20% ner i röda fältet
 
     return {
         textRow,
@@ -554,7 +554,7 @@ function drawFrame() {
     // --- FLYGANDE KVADRATISKA RUTOR: möts i mitten på flashen ---
     const boxSize = getBoxSize();
     const margin = w * 0.04;
-    const boxZoneY = h * 0.75 + h * 0.25 * 0.125 + boxSize / 2;
+    const boxZoneY = Layout.rowPositions.flyingBoxRow;
     let cs = getCentralSeconds();
     let flashPeriod = 4.0;
     let phase = (cs % flashPeriod) / flashPeriod;
@@ -710,6 +710,15 @@ init();
 
 function calculateRowPosition(sectionStart, sectionHeight, elementHeight) {
     return sectionStart + sectionHeight / 2 - elementHeight / 2;
+}
+
+function positionFlyingBoxes() {
+    let rowPositions = Layout.rowPositions;
+    let boxSize = getBoxSize();
+
+    // Placering av flygande boxar
+    leftBox.style.top = `${rowPositions.flyingBoxRow - boxSize / 2}px`;
+    rightBox.style.top = `${rowPositions.flyingBoxRow - boxSize / 2}px`;
 }
 </script>
 <!-- 
