@@ -107,6 +107,7 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     color: #fff;
     line-height: 1;
     vertical-align: baseline;
+    margin-left: 0.5em; /* Dynamiskt mellanrum baserat på textstorlek */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -682,11 +683,13 @@ function updateSync() {
         let absMs = Math.abs(msOffset);
         let showSync = absMs < 25;
         let syncVal = showSync ? "SYNC" : `${absMs}`;
-        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "early" : "late");
+        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "audio early" : "audio late");
+
+        // Uppdaterad struktur
         syncHtml = `
             <span class="sync-ms-row">
                 <span class="sync-ms-val">${syncVal}</span>
-                <span class="sync-ms-label">${showSync ? "" : "ms audio"}</span>
+                <span class="sync-ms-label">${showSync ? "" : "ms"}</span>
                 <span class="sync-audio-block">${audioText}</span>
             </span>
         `;
