@@ -321,25 +321,9 @@ const Layout = {
         let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Starten av det röda fältet
         let redHeight = this.redFieldSize.height; // Höjden på det röda fältet
 
-        // Procentuella fördelningar
-        let luftTopp = redHeight * 0.138; // 13.8%
-        let info1 = redHeight * 0.22;    // 22%
-        let luftMellan = redHeight * 0.12; // Öka från 10% till 12%
-        let info2 = redHeight * 0.22;    // 22%
-        let luftBotten = redHeight * 0.322; // 32.2%
-
-        // Elementens höjder
-        let textBoxHeight = this.textBoxSize.height;
-        let flyingBoxHeight = this.flyingBoxSize.height;
-
-        // Använd `calculateRowPosition` för att centrera raderna
-        let textRow = calculateRowPosition(redTop + luftTopp, info1, textBoxHeight);
-        let flyingBoxRow = calculateRowPosition(redTop + luftTopp + info1 + luftMellan, info2, flyingBoxHeight);
-
-        let totalHeight = luftTopp + info1 + luftMellan + info2 + luftBotten;
-        if (Math.abs(totalHeight - redHeight) > 0.01) {
-            console.error("Sektionerna summerar inte korrekt till 100% av redHeight");
-        }
+        // Fasta positioner för raderna
+        let textRow = redTop + redHeight * 0.25; // Placera text-boxarna 25% ner i det röda fältet
+        let flyingBoxRow = redTop + redHeight * 0.75; // Placera flygande boxarna 75% ner i det röda fältet
 
         return {
             textRow,
