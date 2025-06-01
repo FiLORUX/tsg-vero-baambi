@@ -253,29 +253,28 @@ function getWaveformBoxSize() {
     return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
 }
 function positionOverlays() {
-    let rowPositions = Layout.rowPositions;
+    const rowPositions = calculateRowPositions();
 
-    // Text-boxarnas placering (INFO 1)
-    let tcSyncBg = Layout.textBoxSize;
-    tcBg.style.left = '4vw'; tcBg.style.top = `${rowPositions.textRow}px`;
-    tcBg.style.width = tcSyncBg.width + "px"; tcBg.style.height = tcSyncBg.height + "px";
-    timecode.style.left = '4vw'; timecode.style.top = `${rowPositions.textRow}px`;
-    timecode.style.width = tcSyncBg.width + "px"; timecode.style.height = tcSyncBg.height + "px";
-    syncBg.style.right = '4vw'; syncBg.style.top = `${rowPositions.textRow}px`;
-    syncBg.style.width = tcSyncBg.width + "px"; syncBg.style.height = tcSyncBg.height + "px";
-    syncInfo.style.right = '4vw'; syncInfo.style.top = `${rowPositions.textRow}px`;
-    syncInfo.style.width = tcSyncBg.width + "px"; syncInfo.style.height = tcSyncBg.height + "px";
+    // Text-boxarnas placering
+    const tcSyncBg = Layout.textBoxSize;
+    positionElement(tcBg, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height);
+    positionElement(timecode, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height);
+    positionElement(syncBg, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height, true);
+    positionElement(syncInfo, '4vw', rowPositions.textRow, tcSyncBg.width, tcSyncBg.height, true);
 
-    // Waveform-boxarnas placering (på samma rad som text-boxarna)
-    let waveSize = getWaveformBoxSize();
-    waveBoxL.style.left = '4vw';
-    waveBoxL.style.top = `${rowPositions.textRow}px`; // Samma rad som text-boxarna
-    waveBoxL.style.width = waveSize.width + "px";
-    waveBoxL.style.height = waveSize.height + "px";
-    waveBoxR.style.right = '4vw';
-    waveBoxR.style.top = `${rowPositions.textRow}px`; // Samma rad som text-boxarna
-    waveBoxR.style.width = waveSize.width + "px";
-    waveBoxR.style.height = waveSize.height + "px";
+    // Flygande boxarnas placering
+    const waveSize = getWaveformBoxSize();
+    positionElement(waveBoxL, '4vw', rowPositions.flyingBoxRow, waveSize.width, waveSize.height);
+    positionElement(waveBoxR, '4vw', rowPositions.flyingBoxRow, waveSize.width, waveSize.height, true);
+}
+
+// Hjälpfunktion för att placera ett element
+function positionElement(element, left, top, width, height, alignRight = false) {
+    element.style.left = alignRight ? '' : left;
+    element.style.right = alignRight ? left : '';
+    element.style.top = `${top}px`;
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
 }
 window.addEventListener('resize', positionOverlays);
 
@@ -697,6 +696,25 @@ init();
 
 function calculateRowPosition(sectionStart, sectionHeight, elementHeight) {
     return sectionStart + sectionHeight / 2 - elementHeight / 2;
+}
+
+function calculateRowPositions() {
+    const redTop = canvas.height * (1 - Layout.redFieldHeightFactor); // Starten av det röda fältet
+    const redHeight = Layout.redFieldSize.height; // Höjden på det röda fältet
+
+    // Elementens höjd
+    const sharedRowHeight = Layout.textBoxSize.height; // Höjd för timecode, sync-text och waveform-boxar
+    const flyingBoxHeight = Layout.flyingBoxSize.height;
+
+    // Procentuella fördelningar inom det röda fältet
+    const sharedRowOffset = 0.25; // 25% ner i det röda fältet
+    const flyingBoxRowOffset = 0.75; // 75% ner i det röda fältet
+
+    // Beräkna radernas positioner med centrering
+    const sharedRow = calculateRowPosition(redTop + redHeight * sharedRowOffset, redHeight * 0.22, sharedRowHeight);
+    const flyingBoxRow = calculateRowPosition(redTop + redHeight * flyingBoxRowOffset, redHeight * 0.22, flyingBoxHeight);
+
+    return { sharedRow, flyingBoxRow };
 }
 </script>
 </body>
