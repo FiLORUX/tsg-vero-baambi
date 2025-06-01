@@ -70,8 +70,8 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     width: 100%;
     display: flex;
     flex-direction: row;
-    justify-content: center;
-    align-items: flex-end;
+    justify-content: flex-start; /* Vänsterställ texten */
+    align-items: baseline; /* Justera alla element till samma baslinje */
 }
 .sync-ms-val {
     font-size: 2.3vw;
@@ -80,34 +80,29 @@ canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0
     text-align: right;
     min-width: 5ch;
     width: 5ch;
-    margin-right: 0.03em;
+    margin-right: 0.2em; /* Ge lite mellanrum till texten */
     letter-spacing: 0.01em;
-    line-height: 1.14;
-    vertical-align: baseline;
+    line-height: 1; /* Undvik extra mellanrum */
+    vertical-align: baseline; /* Justera till baslinjen */
 }
 .sync-ms-label {
     font-size: 1.05vw;
     font-family: 'Share Tech Mono', monospace;
-    font-weight: normal;
+    font-weight: bold; /* Gör texten fetstil */
     opacity: 0.85;
-    align-self: flex-end;
-    margin-right: 0.07em;
-    line-height: 1.1;
-    vertical-align: baseline;
+    margin-right: 0.2em; /* Ge lite mellanrum till nästa text */
+    line-height: 1;
+    vertical-align: baseline; /* Justera till baslinjen */
 }
 .sync-audio-block {
     display: inline-block;
-    min-width: 4.4ch;
-    max-width: 6ch;
-    font-size: 1.11vw;
+    font-size: 1.05vw;
     font-family: 'Share Tech Mono', monospace;
-    font-weight: 700;
+    font-weight: bold; /* Gör texten fetstil */
     letter-spacing: 0.01em;
-    align-self: flex-end;
     color: #fff;
-    line-height: 1.13;
-    padding-left: 0.21em;
-    vertical-align: baseline;
+    line-height: 1;
+    vertical-align: baseline; /* Justera till baslinjen */
 }
 #waveformBoxL, #waveformBoxR {
     position: absolute;
@@ -730,6 +725,9 @@ function positionFlyingBoxes() {
     leftBox.style.top = `${rowPositions.flyingBoxRow - boxSize / 2}px`;
     rightBox.style.top = `${rowPositions.flyingBoxRow - boxSize / 2}px`;
 }
+window.addEventListener('load', () => {
+    resizeCanvas(); // Säkerställ att canvas och marginaler är korrekt initialiserade
+});
 </script>
 <!-- 
     TSG Suite - Thåst Signal Generator
