@@ -251,22 +251,30 @@ function getTcSyncBgSize() {
     return { width: boxWidth, height: boxHeight };
 }
 function getWaveformBoxSize() {
-    // Snyggare mindre box
-    let s = getTcSyncBgSize();
-    return { width: Math.round(s.width*0.82), height: Math.round(s.height*0.89) };
+    let tcSyncSize = getTcSyncBgSize(); // Hämta storleken från TC/SYNC-boxarna
+    return {
+        width: Math.round(tcSyncSize.width / 2), // Hälften av bredden
+        height: tcSyncSize.height // Samma höjd
+    };
 }
 function positionOverlays() {
     let rowPositions = Layout.rowPositions;
 
     // Placering av visualiseringsboxar (waveform-boxar)
     let waveSize = getWaveformBoxSize();
-    waveBoxL.style.left = '4vw';
-    waveBoxL.style.top = `${rowPositions.textRow - waveSize.height / 2}px`; // Använd textRow
+    let margin = parseFloat(getComputedStyle(tcBg).left); // Hämta marginalen från TC-boxen
+    let centerX = canvas.width / 2; // Mitten av skärmen
+
+    // Justera mellanrummet till hälften av marginalen
+    let spacing = margin / 2; // Hälften av marginalen
+
+    waveBoxL.style.left = `${centerX - waveSize.width - spacing / 2}px`; // Placera vänster box
+    waveBoxL.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
     waveBoxL.style.width = waveSize.width + "px";
     waveBoxL.style.height = waveSize.height + "px";
 
-    waveBoxR.style.right = '4vw';
-    waveBoxR.style.top = `${rowPositions.textRow - waveSize.height / 2}px`; // Använd textRow
+    waveBoxR.style.left = `${centerX + spacing / 2}px`; // Placera höger box
+    waveBoxR.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
     waveBoxR.style.width = waveSize.width + "px";
     waveBoxR.style.height = waveSize.height + "px";
 
