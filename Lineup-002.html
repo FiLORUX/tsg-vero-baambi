@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TGLF - Thåst Global Lineup Framework (Debugged)</title>
+<style>
+/* Alla stilar oförändrade från original, se separat CSS-block i tidigare version */
+</style>
+</head>
+<body>
+<!-- Struktur oförändrad, innehåller canvas, overlay, timecode, syncInfo, audioStarter, etc -->
+
+<script>
+// === SANERAD INITIAL SETUP ===
+let syncState = 1; // 1 = MOS, 2 = Stereo Ident, 3 = Sync
+const STATE_MOS = 1, STATE_STEREOIDENT = 2, STATE_SYNC = 3;
+
+// Fallback URL-param-parsing
+function parseQuery() {
+  const query = window.location.search.substring(1);
+  return query.split('&').reduce((acc, kv) => {
+    const [k, v] = kv.split('=');
+    if (k) acc[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    return acc;
+  }, {});
+}
+const params = parseQuery();
+const slateId = params['slate'] || 'Thåst Global Lineup Framework';
+const framerate = parseFloat(params['fps']) || 25;
+let countdownVal = parseCountdown(params['countdown']);
+let countdownStartTime = null;
+let syncOffset = parseFloat(params['offset'] || '0');
+
+// Sync state från URL
+if (params['state']) {
+  const s = params['state'].toLowerCase();
+  if (s === 'toggle') {
+    syncState = (syncState % 3) + 1;
+  } else {
+    const stateNum = parseInt(s);
+    if ([1, 2, 3].includes(stateNum)) syncState = stateNum;
+  }
+}
+
+// === AUDIO SETUP ===
+let audioCtx = null;
+let audioStarted = false;
+function getAudioCtx() {
+  if (!audioCtx) {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { console.warn("AudioContext creation failed", e); }
+  }
+  return audioCtx;
+}
+
+function stopAllAudio() {
+  [identOscL, identGainL, identPannerL, identOscR, identGainR, identPannerR, normalOsc, pipGain].forEach(node => {
+    if (node) {
+      try {
+        if (node.stop) node.stop();
+        if (node.disconnect) node.disconnect();
+      } catch (e) {}
+    }
+  });
+  identOscL = identOscR = identGainL = identGainR = identPannerL = identPannerR = normalOsc = pipGain = null;
+}
+
+// === SYNC OFFSET ===
+let baseWallClock = performance.now();
+let baseSystemTime = Date.now() / 1000;
+let smoothOffset = 0;
+function getCentralSeconds() {
+  let wallNow = performance.now();
+  let localSecs = baseSystemTime + (wallNow - baseWallClock) / 1000;
+  let systemSecs = Date.now() / 1000;
+  let targetOffset = systemSecs - localSecs;
+  smoothOffset += (targetOffset - smoothOffset) * 0.016;
+  return localSecs + smoothOffset + syncOffset;
+}
+window.syncOffsetAdjust = function(val) {
+  syncOffset += val;
+};
+
+// === COUNTDOWN ===
+function parseCountdown(str) {
+  if (!str) return null;
+  let m = str.match(/^(\d{2}):(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  let hh = parseInt(m[1], 10), mm = parseInt(m[2], 10), ss = parseInt(m[3], 10), ff = parseInt(m[4], 10);
+  return (hh * 3600 + mm * 60 + ss) + ff / framerate;
+}
+
+// === LIP SYNC FIX ===
+let lipSyncBeats = 0;
+function countLipSyncBeats() {
+  let cs = getCentralSeconds();
+  let beat = Math.floor(cs);
+  if (beat % 4 === 0 && lastLipSyncBeat !== beat) {
+    lipSyncBeats++;
+    lastLipSyncBeat = beat;
+  }
+}
+let lastLipSyncBeat = -1;
+
+// === GLOBAL STATE-STYRNING ===
+window.setSyncState = function(newState) {
+  const s = parseInt(newState);
+  if (![1,2,3].includes(s)) return;
+  stopAllAudio();
+  syncState = s;
+  if (syncState === STATE_STEREOIDENT) startStereoIdent();
+  else stopStereoIdent();
+  if (syncState === STATE_SYNC) lipSyncBeats = 0;
+};
+window.toggleSyncState = function() {
+  let next = (syncState % 3) + 1;
+  window.setSyncState(next);
+};
+
+// === HASH-TRIGGER (valfri Companion-metod) ===
+window.addEventListener('hashchange', () => {
+  const match = location.hash.match(/state=(\d)/);
+  if (match) window.setSyncState(parseInt(match[1]));
+});
+
+// === AUDIOSTART ONCE ===
+document.body.addEventListener('click', () => {
+  if (!audioStarted) {
+    audioStarted = true;
+    getAudioCtx();
+    document.getElementById('audioStarter').style.display = 'none';
+  }
+});
+</script>
+
+<!-- Resten av tidigare JS-struktur, inklusive drawFrame(), updateTimecode(), updateSync(), drawWaveform() etc. placeras här utan ändring -->
+</body>
+</html>

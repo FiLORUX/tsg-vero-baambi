@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>EBU Colour Bars Annotated (16:9)</title>
+  <style>
+    body { background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    .container { box-shadow: 0 0 24px #000; }
+    text { font-family: 'Arial', monospace, sans-serif; font-size: 20px; fill: #FFF; paint-order: stroke fill; stroke: #111; stroke-width: 2; }
+    .small { font-size: 14px; fill: #EEE; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <svg width="1280" height="720" viewBox="0 0 1280 720">
+      <!-- Top bars: 7 vertical segments (100/0/75/0) -->
+      <rect x="0" y="0" width="182.8571" height="360" fill="#ffffff"/>
+      <rect x="182.8571" y="0" width="182.8571" height="360" fill="#ffff00"/>
+      <rect x="365.7142" y="0" width="182.8571" height="360" fill="#00ffff"/>
+      <rect x="548.5713" y="0" width="182.8571" height="360" fill="#00ff00"/>
+      <rect x="731.4284" y="0" width="182.8571" height="360" fill="#ff00ff"/>
+      <rect x="914.2855" y="0" width="182.8571" height="360" fill="#ff0000"/>
+      <rect x="1097.1426" y="0" width="182.8574" height="360" fill="#0000ff"/>
+      <!-- Top Bar Labels -->
+      <text x="91" y="40" text-anchor="middle">WHITE</text>
+      <text x="274" y="40" text-anchor="middle">YELLOW</text>
+      <text x="457" y="40" text-anchor="middle">CYAN</text>
+      <text x="640" y="40" text-anchor="middle">GREEN</text>
+      <text x="823" y="40" text-anchor="middle">MAGENTA</text>
+      <text x="1006" y="40" text-anchor="middle">RED</text>
+      <text x="1189" y="40" text-anchor="middle">BLUE</text>
+      <!-- %/IRE labels -->
+      <text x="91" y="75" text-anchor="middle" class="small">100%</text>
+      <text x="274" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+      <text x="457" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+      <text x="640" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+      <text x="823" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+      <text x="1006" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+      <text x="1189" y="75" text-anchor="middle" class="small">100%Y 100%C</text>
+
+      <!-- Middle bars: 4 horizontal segments -->
+      <rect x="0" y="360" width="320" height="120" fill="#00214c"/> <!-- Blue -4 IRE -->
+      <rect x="320" y="360" width="320" height="120" fill="#ffffff"/> <!-- White 75% -->
+      <rect x="640" y="360" width="320" height="120" fill="#32006a"/> <!-- Magenta -4 IRE -->
+      <rect x="960" y="360" width="320" height="120" fill="#131313"/> <!-- Black -->
+      <!-- Middle bar labels -->
+      <text x="160" y="410" text-anchor="middle" class="small">BLUE -4 IRE</text>
+      <text x="480" y="410" text-anchor="middle" class="small">WHITE 75%</text>
+      <text x="800" y="410" text-anchor="middle" class="small">MAGENTA -4 IRE</text>
+      <text x="1120" y="410" text-anchor="middle" class="small">BLACK</text>
+
+      <!-- Bottom bars: PLUGE + Black reference -->
+      <!-- Seven small verticals, each 182.8571 px -->
+      <rect x="0" y="480" width="182.8571" height="120" fill="#090909"/>
+      <rect x="182.8571" y="480" width="182.8571" height="120" fill="#1d1d1d"/>
+      <rect x="365.7142" y="480" width="182.8571" height="120" fill="#090909"/>
+      <rect x="548.5713" y="480" width="182.8571" height="120" fill="#1d1d1d"/>
+      <rect x="731.4284" y="480" width="182.8571" height="120" fill="#090909"/>
+      <rect x="914.2855" y="480" width="182.8571" height="120" fill="#1d1d1d"/>
+      <rect x="1097.1426" y="480" width="182.8574" height="120" fill="#090909"/>
+      <!-- PLUGE bar labels -->
+      <text x="91" y="530" text-anchor="middle" class="small">BLACK</text>
+      <text x="274" y="530" text-anchor="middle" class="small">PLUGE +2%</text>
+      <text x="457" y="530" text-anchor="middle" class="small">BLACK</text>
+      <text x="640" y="530" text-anchor="middle" class="small">PLUGE +2%</text>
+      <text x="823" y="530" text-anchor="middle" class="small">BLACK</text>
+      <text x="1006" y="530" text-anchor="middle" class="small">PLUGE +2%</text>
+      <text x="1189" y="530" text-anchor="middle" class="small">BLACK</text>
+
+      <!-- Outer box and title -->
+      <rect x="0" y="0" width="1280" height="720" fill="none" stroke="#AAA" stroke-width="6"/>
+      <text x="640" y="710" text-anchor="middle" font-size="32" fill="#FFF" stroke="#111" stroke-width="4" font-family="Arial, sans-serif">EBU COLOUR BARS (16:9) - TECH 3273/3303 - PAL/HD</text>
+
+      <!-- PLUGE info -->
+      <text x="1100" y="700" text-anchor="end" class="small">PLUGE: Picture Line-Up Generation Equipment</text>
+    </svg>
+  </div>
+</body>
+</html>

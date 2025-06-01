@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>EBU/BBC GLITS Test – Waveform Visualisering</title>
+  <style>
+    body { background: #181C1F; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin: 0; }
+    canvas { background: #23272A; border-radius: 10px; margin: 30px 0 0 0; }
+    button { margin-top: 20px; padding: 10px 18px; border: none; background: #3a3f43; color: #fff; border-radius: 5px; font-size: 1.1em; cursor: pointer; }
+    h1 { font-size: 1.3em; margin-top: 40px; }
+    .desc { font-size: 1em; margin-bottom: 8px; color: #b0bbc6; }
+  </style>
+</head>
+<body>
+  <h1>EBU/BBC GLITS (SYNC) Testsignal – 1 kHz Pip + Waveform</h1>
+  <div class="desc">Fyrtakt: tre korta pip (440 ms), ett långt (1,5 s).<br>Visualiserar ljudets waveform i realtid.</div>
+  <button id="startBtn">Starta testet</button>
+  <canvas id="oscilloscope" width="800" height="180"></canvas>
+  <script>
+    const btn = document.getElementById('startBtn');
+    const canvas = document.getElementById('oscilloscope');
+    const ctx = canvas.getContext('2d');
+    let audioCtx, analyser, bufferLength, dataArray, osc, gain, animationId;
+    let schedule = [440, 440, 440, 1500]; // ms per pip
+    let rest = [560, 560, 560, 1200]; // ms mellan pip (sista är tystnad innan loopen)
+    let now = 0;
+    let running = false;
+
+    function draw() {
+      if (!analyser) return;
+      analyser.getByteTimeDomainData(dataArray);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      for (let i = 0; i < bufferLength; i++) {
+        const x = (i / bufferLength) * canvas.width;
+        const y = ((dataArray[i] / 256) * canvas.height);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#69f5c7";
+      ctx.stroke();
+      animationId = requestAnimationFrame(draw);
+    }
+
+    function stopAudio() {
+      running = false;
+      if (osc) osc.stop();
+      if (audioCtx) audioCtx.close();
+      if (animationId) cancelAnimationFrame(animationId);
+      btn.disabled = false;
+      btn.textContent = 'Starta testet';
+    }
+
+    async function startGLITS() {
+      // Init
+      if (audioCtx && audioCtx.state !== "closed") audioCtx.close();
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      gain = audioCtx.createGain();
+      analyser.fftSize = 2048;
+      bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+
+      gain.gain.value = 0.9;
+      gain.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      running = true;
+      now = 0;
+
+      function playNext(index) {
+        if (!running) return stopAudio();
+        osc = audioCtx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = 1000;
+        osc.connect(gain);
+        osc.start();
+        gain.gain.setValueAtTime(0.9, audioCtx.currentTime);
+
+        setTimeout(() => {
+          osc.stop();
+          gain.gain.setValueAtTime(0, audioCtx.currentTime);
+          osc.disconnect();
+
+          setTimeout(() => {
+            playNext((index + 1) % 4);
+          }, rest[index]);
+        }, schedule[index]);
+      }
+
+      playNext(0);
+      draw();
+      btn.disabled = true;
+      btn.textContent = "Testet körs – klicka för att stoppa";
+    }
+
+    btn.addEventListener('click', function() {
+      if (running) {
+        stopAudio();
+      } else {
+        startGLITS();
+      }
+    });
+  </script>
+</body>
+</html>

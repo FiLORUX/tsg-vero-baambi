@@ -1,0 +1,188 @@
+<!-- Snake Clock HTML5 (optimerad, smidig, LUT endast för snake/glow) -->
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Clock Optimized</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: var(--bg, linear-gradient(to bottom, #2a2a2a, #1a1a1a));
+      font-family: 'Share Tech Mono', monospace;
+      color: var(--fg, #ccc);
+    }
+    #clock {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 13vw;
+      z-index: 2;
+      user-select: none;
+    }
+    #snake {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .flashPath {
+      stroke: white !important;
+      transition: stroke 0.2s;
+    }
+  </style>
+</head>
+<body>
+<svg id="snake">
+  <defs>
+    <filter id="blur">
+      <feGaussianBlur stdDeviation="1.5" />
+    </filter>
+    <linearGradient id="snakeGradient" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="0">
+      <stop id="gradStop0" offset="0%" stop-color="#ccc" stop-opacity="0" />
+      <stop id="gradStop1" offset="100%" stop-color="#ccc" stop-opacity="1" />
+    </linearGradient>
+  </defs>
+  <path id="fullPath" fill="none" stroke="#222" stroke-opacity="0.35" stroke-width="1.3vw" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="snakePath" fill="none" stroke="url(#snakeGradient)" stroke-width="1.3vw" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="glimmerPath" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="0.5vw" stroke-linecap="round" stroke-linejoin="round" filter="url(#blur)" />
+</svg>
+<div id="clock">00:00:00:00</div>
+<script>
+let currentPath = null;
+let pathPoints = [];
+let lastFlashSecond = -1;
+let animationStarted = false;
+
+function getBana(w, h) {
+  const marginW = w * 0.07;
+  const marginH = h * 0.07;
+  const segs = [
+    {x: w / 2, y: marginH},
+    {x: w - marginW, y: marginH},
+    {x: w - marginW, y: h - marginH},
+    {x: marginW, y: h - marginH},
+    {x: marginW, y: marginH},
+    {x: w / 2, y: marginH}
+  ];
+  let total = 0;
+  for (let i = 1; i < segs.length; i++) {
+    const dx = segs[i].x - segs[i - 1].x;
+    const dy = segs[i].y - segs[i - 1].y;
+    total += Math.sqrt(dx * dx + dy * dy);
+  }
+  return { segs, total };
+}
+
+function buildLookup(segs, total, points = 600) {
+  const lut = [];
+  for (let i = 0; i < points; i++) {
+    const pos = (i / points) * total;
+    lut.push(getPointOnPath(segs, pos));
+  }
+  return lut;
+}
+
+function buildPathFromPoints(points, fromIndex, toIndex) {
+  const path = [];
+  for (let i = fromIndex; i !== toIndex; i = (i + 1) % points.length) {
+    const p = points[i];
+    path.push(`${path.length === 0 ? 'M' : 'L'} ${p.x} ${p.y}`);
+    if ((i + 1) % points.length === toIndex) break;
+  }
+  return path.join(' ');
+}
+
+function getPointOnPath(segs, pos) {
+  let dist = 0;
+  for (let i = 1; i < segs.length; i++) {
+    const dx = segs[i].x - segs[i - 1].x;
+    const dy = segs[i].y - segs[i - 1].y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (dist + len >= pos) {
+      const ratio = (pos - dist) / len;
+      return {
+        x: segs[i - 1].x + ratio * dx,
+        y: segs[i - 1].y + ratio * dy
+      };
+    }
+    dist += len;
+  }
+  return segs[segs.length - 1];
+}
+
+function updateSnake() {
+  if (!currentPath || pathPoints.length < 600) return;
+  const now = new Date();
+  const ms = now.getSeconds() * 1000 + now.getMilliseconds();
+  const t = ms / 60000 * 600;
+  const headIndex = Math.floor(t);
+  const tailOffset = Math.floor(600 * 0.25);
+  const tailIndex = (headIndex - tailOffset + 600) % 600;
+
+  const snake = document.getElementById('snakePath');
+  const glow = document.getElementById('glimmerPath');
+  const grad = document.getElementById('snakeGradient');
+
+  const trailPath = buildPathFromPoints(pathPoints, tailIndex, headIndex);
+  snake.setAttribute('d', trailPath);
+
+  const head = pathPoints[headIndex];
+  const tail = pathPoints[tailIndex];
+  grad.setAttribute('x1', tail.x);
+  grad.setAttribute('y1', tail.y);
+  grad.setAttribute('x2', head.x);
+  grad.setAttribute('y2', head.y);
+
+  const s = now.getSeconds();
+  const g1 = pathPoints[(s * 10 + 599) % 600];
+  const g2 = pathPoints[(s * 10) % 600];
+  glow.setAttribute('d', `M ${g1.x} ${g1.y} L ${g2.x} ${g2.y}`);
+  glow.setAttribute('stroke-opacity', '0.8');
+
+  if (s === 0 && lastFlashSecond !== 0) {
+    snake.classList.add('flashPath');
+    setTimeout(() => snake.classList.remove('flashPath'), 200);
+    lastFlashSecond = 0;
+  } else if (s !== lastFlashSecond) {
+    lastFlashSecond = s;
+  }
+}
+
+function tick() {
+  const now = new Date();
+  const pad = (n) => n.toString().padStart(2, '0');
+  document.getElementById('clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}:${pad(Math.floor(now.getMilliseconds()/10))}`;
+  updateSnake();
+  requestAnimationFrame(tick);
+}
+
+function resize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  currentPath = getBana(w, h);
+  pathPoints = buildLookup(currentPath.segs, currentPath.total, 600);
+
+  const full = document.getElementById('fullPath');
+  full.setAttribute('d', buildPathFromPoints(pathPoints, 0, 600));
+
+  if (!animationStarted) {
+    animationStarted = true;
+    tick();
+  }
+}
+
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
