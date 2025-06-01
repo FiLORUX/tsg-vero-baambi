@@ -177,6 +177,44 @@ const params = new URLSearchParams(window.location.search);
 let slateId = params.get('slate') || 'TSG SUITE<br>Thåst Signal Generator';
 const framerate = parseFloat(params.get('fps')) || 25;
 const countdownParam = params.get('countdown');
+const timeParam = params.get('time');
+
+// Funktion för att tolka time=HH:MM[:SS[:FF]]
+function parseTimeOfDay(str) {
+    if (!str) return null;
+    let parts = str.split(':').map(Number);
+    if (parts.length < 2 || parts.some(isNaN)) return null;
+    let [hh, mm = 0, ss = 0, ff = 0] = parts;
+    return (hh * 3600 + mm * 60 + ss + ff / framerate);
+}
+
+// Funktion för countdown=HH:MM:SS:FF (behövs längre ner)
+function parseCountdown(str) {
+    if (!str) return null;
+    let m = str.match(/^(\d{2}):(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    let hh = parseInt(m[1], 10), mm = parseInt(m[2], 10), ss = parseInt(m[3], 10), ff = parseInt(m[4], 10);
+    return (hh * 3600 + mm * 60 + ss) + ff / framerate;
+}
+
+// --- Countdown-logik (sätter countdownVal och countdownStartTime)
+// countdownVal kommer att sättas senare – deklareras här bara om det inte redan är gjort
+// (ta bort om redan finns nedan)
+
+let countdownStartTime = null;
+let countdownVal = null;
+
+// Prioritera time-parametern om den finns
+let countdownTargetSecondsOfDay = parseTimeOfDay(timeParam);
+if (countdownTargetSecondsOfDay !== null) {
+    let now = new Date();
+    let nowSecondsOfDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+    countdownVal = countdownTargetSecondsOfDay - nowSecondsOfDay;
+    if (countdownVal < 0) countdownVal += 86400; // Nästa dygn om tiden redan har passerat
+} else {
+    countdownVal = parseCountdown(countdownParam);
+}
+
 
 // DOM
 const canvas = document.getElementById('lineupCanvas');
@@ -233,15 +271,7 @@ function getCentralSeconds() {
     smoothOffset += (targetOffset - smoothOffset) * 0.016;
     return localSecs + smoothOffset;
 }
-function parseCountdown(str) {
-    if (!str) return null;
-    let m = str.match(/^(\d{2}):(\d{2}):(\d{2}):(\d{2})$/);
-    if (!m) return null;
-    let hh = parseInt(m[1], 10), mm = parseInt(m[2], 10), ss = parseInt(m[3], 10), ff = parseInt(m[4], 10);
-    return (hh * 3600 + mm * 60 + ss) + ff / framerate;
-}
-let countdownVal = parseCountdown(countdownParam);
-let countdownStartTime = null;
+
 
 // --- UI BOX SIZING ---
 function getBoxSize() {
@@ -339,6 +369,8 @@ const Layout = {
 
     get redFieldSize() {
         let h = canvas.height;
+        gradH = h * 0.05;
+        gradY = h * 0.75 - gradH;
         return { height: Math.round(h * this.redFieldHeightFactor) };
     },
 
@@ -527,7 +559,7 @@ function drawFrame() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const h = canvas.height, w = canvas.width;
     const barH = h * 0.75, redY = h * 0.75, redH = h * 0.25;
-    const gradH = h * 0.05, gradY = h * 0.75 - gradH;
+    
 
     // Färgbalk
     const barWidth = w / ebuColors709.length;
@@ -770,6 +802,7 @@ const grayRampColors = [
     "#CCCCCC", // Near-white
     "#FFFFFF"  // Superwhite
 ];
+let w = canvas.width;
 const grayRampWidth = w / grayRampColors.length;
 grayRampColors.forEach((color, i) => {
     ctx.fillStyle = color;
