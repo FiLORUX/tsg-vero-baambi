@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TGLF - Thåst Global Lineup Framework</title>
+<title>TSG Suite</title>
 <style>
 html, body { margin: 0; overflow: hidden; background: black; }
 canvas { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0;}
@@ -171,7 +171,7 @@ const ebuColors709 = [
 ];
 const redRec709 = '#EB2020';
 const params = new URLSearchParams(window.location.search);
-let slateId = params.get('slate') || 'Thåst Global Lineup Framework';
+let slateId = params.get('slate') || 'TSG SUITE<br>Thåst Signal Generator';
 const framerate = parseFloat(params.get('fps')) || 25;
 const countdownParam = params.get('countdown');
 
@@ -712,5 +712,11 @@ function calculateRowPosition(sectionStart, sectionHeight, elementHeight) {
     return sectionStart + sectionHeight / 2 - elementHeight / 2;
 }
 </script>
+<!-- 
+    TSG Suite - Thåst Signal Generator
+    A browser-based toolkit for broadcast line-up, tone, PLUGE, testcards, and visual sync references.
+    Built entirely in HTML, CSS, and vanilla JavaScript.
+    All templates are standalone .html files. No build steps. No dependencies. Load locally or via any web server.
+-->
 </body>
 </html>
