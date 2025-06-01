@@ -246,7 +246,9 @@ function getBoxSize() {
     return Layout.flyingBoxSize.height; // Returnerar höjden (som också är bredden)
 }
 function getTcSyncBgSize() {
-    return Layout.textBoxSize;
+    let boxHeight = getBoxSize(); // Synkronisera höjden med de flygande boxarna
+    let boxWidth = Layout.textBoxSize.width; // Behåll den manuellt definierade bredden
+    return { width: boxWidth, height: boxHeight };
 }
 function getWaveformBoxSize() {
     // Snyggare mindre box
