@@ -1,16 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <circle cx="64" cy="64" r="64" fill="#ccc" />
-
-  <text x="128" y="108"
-        font-family="Arial"
-        font-weight="bold"
-        font-size="108"
-        fill="black">
-    <animate attributeName="x"
-             from="128"
-             to="-400"
-             dur="6s"
-             repeatCount="indefinite" />
+  <text x="128" y="108" font-family="Arial" font-weight="bold" font-size="108" fill="black">
+    <animate attributeName="x" from="128" to="-400" dur="6s" repeatCount="indefinite"/>
     THÅST
   </text>
 </svg>
