@@ -1,11 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" fill="#ccc"/>
-  <text x="50%" y="104"
-        font-family="Arial"
+  <!-- Ljusgrå glob -->
+  <circle cx="64" cy="64" r="64" fill="#ccc" />
+
+  <!-- Vänster strålar (uppflyttade, starkare) -->
+  <line x1="36" y1="36" x2="12" y2="26" stroke="black" stroke-width="1.2" opacity="0.6" />
+  <line x1="36" y1="48" x2="10" y2="48" stroke="black" stroke-width="1.2" opacity="0.45" />
+  <line x1="36" y1="60" x2="12" y2="70" stroke="black" stroke-width="1.2" opacity="0.3" />
+
+  <!-- Höger strålar (uppflyttade, starkare) -->
+  <line x1="92" y1="36" x2="116" y2="26" stroke="black" stroke-width="1.2" opacity="0.6" />
+  <line x1="92" y1="48" x2="118" y2="48" stroke="black" stroke-width="1.2" opacity="0.45" />
+  <line x1="92" y1="60" x2="116" y2="70" stroke="black" stroke-width="1.2" opacity="0.3" />
+
+  <!-- Å -->
+  <text x="50%" y="112"
+        font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
         font-weight="bold"
-        font-size="96"
+        font-size="120"
         fill="black"
         text-anchor="middle">
-    THÅST
+    Å
   </text>
 </svg>
