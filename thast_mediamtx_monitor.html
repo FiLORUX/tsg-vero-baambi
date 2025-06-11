@@ -116,17 +116,72 @@
       z-index: 0;
       pointer-events: none;
     }
+
+    .header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 2em 0;
+  gap: 1em;
+  position: relative;
+}
+
+.header-flex .center {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.header-main {
+  font-family: inherit;
+  font-weight: 200;        /* Tunt och luftigt */
+  letter-spacing: 0.15em;  /* Samma spacing som huvudrubriken */
+  color: #00ffc8;
+  font-size: 1em;          /* Samma storlek som nuvarande .box h2 */
+  text-align: center;
+}
+
+.header-flex .sub {
+  font-size: 0.8rem;
+  font-weight: normal;
+  color: #aaa;
+}
+
+.header-flex .left {
+  flex: 0 0 7em;   /* Justera om du vill ha mer/mindre yta */
+  text-align: left;
+}
+
+.header-flex .right {
+  flex: 0 0 8em;   /* Justera om du vill ha mer/mindre yta */
+  text-align: right;
+}
+
   </style>
 </head>
 <body>
   <h1>THÅST RELAY MONITORING</h1>
   <div class="layout">
     <div class="box">
-      <h2>RX FEEDS <span class="sub">INCOMING</span></h2>
+<h2 class="header-flex">
+  <span class="sub left">INCOMING</span>
+  <span class="header-main center">RX FEEDS</span>
+  <span id="clearInput" class="sub right" style="cursor:pointer;">CLEAR HISTORY</span>
+</h2>
+
+
+
       <div id="input"></div>
     </div>
     <div class="box">
-      <h2>TX FEEDS <span class="sub">OUTGOING</span></h2>
+<h2 class="header-flex">
+  <span class="sub left">OUTGOING</span>
+  <span class="header-main center">TX FEEDS</span>
+  <span id="clearOutput" class="sub right" style="cursor:pointer;">CLEAR HISTORY</span>
+</h2>
+
+
+
       <div id="output"></div>
     </div>
   </div>
@@ -222,35 +277,59 @@ function formatDuration(startISO, endISO) {
       });
     }
 
-    function createEntry(feed) {
-      const entry = document.createElement('div');
-      const isPulse = feed.lastActivated && (Date.now() - feed.lastActivated < 5000);
-      entry.className = 'entry ' + (feed.active ? 'active' + (isPulse ? ' pulse' : '') : 'inactive');
-      entry.dataset.name = feed.name || '';
-      if (feed.source) entry.dataset.source = feed.source;
+function createEntry(feed) {
+  const entry = document.createElement('div');
+  const isPulse = feed.lastActivated && (Date.now() - feed.lastActivated < 5000);
+  entry.className = 'entry ' + (feed.active ? 'active' + (isPulse ? ' pulse' : '') : 'inactive');
+  entry.dataset.name = feed.name || '';
+  if (feed.source) entry.dataset.source = feed.source;
 
-      const lines = [];
-      if (feed.name) lines.push(`<div><span class="label">Name:</span> <span class="value">${feed.name}</span></div>`);
-      if (feed.type) {
-        let label = feed.type.replace('Conn', '').toUpperCase();
-        if (feed.direction) label += ` (${feed.direction})`;
-        lines.push(`<div><span class="label">Protocol:</span> <span class="value">${label}</span></div>`);
-      }
-      if (feed.video) lines.push(`<div><span class="label">Video:</span> <span class="value">${feed.video}</span></div>`);
-      if (feed.audio) lines.push(`<div><span class="label">Audio:</span> <span class="value">${feed.audio}</span></div>`);
-      if (feed.bitrate) lines.push(`<div><span class="label">Bitrate:</span> <span class="value">${feed.bitrate}</span></div>`);
-      if (feed.totalData) lines.push(`<div><span class="label">Data:</span> <span class="value">${feed.totalData}</span></div>`);
-      if (feed.source && feed.source !== '-') lines.push(`<div><span class="label">Source:</span> <span class="value">${feed.source}</span></div>`);
-      if (feed.startISO) lines.push(`<div><span class=\"label\">Started:</span> <span class=\"value\" data-start=\"${feed.startISO}\">${feed.startISO}</span></div>`);
-      if (feed.endedISO) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.endedISO}</span></div>`);
+  const lines = [];
+  // Standardfälten
+  if (feed.name) lines.push(`<div><span class="label">Name:</span> <span class="value">${feed.name}</span></div>`);
+  if (feed.type) {
+    let label = feed.type.replace('Conn', '').toUpperCase();
+    if (feed.direction) label += ` (${feed.direction})`;
+    lines.push(`<div><span class="label">Protocol:</span> <span class="value">${label}</span></div>`);
+  }
+  if (feed.video) lines.push(`<div><span class="label">Video:</span> <span class="value">${feed.video}</span></div>`);
+  if (feed.audio) lines.push(`<div><span class="label">Audio:</span> <span class="value">${feed.audio}</span></div>`);
+  if (feed.bitrate) lines.push(`<div><span class="label">Bitrate:</span> <span class="value">${feed.bitrate}</span></div>`);
+  if (feed.totalData) lines.push(`<div><span class="label">Data:</span> <span class="value">${feed.totalData}</span></div>`);
+  if (feed.source && feed.source !== '-') lines.push(`<div><span class="label">Source:</span> <span class="value">${feed.source}</span></div>`);
+  if (feed.startISO) lines.push(`<div><span class="label">Started:</span> <span class="value" data-start="${feed.startISO}">${feed.startISO}</span></div>`);
+  if (feed.endedISO) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.endedISO}</span></div>`);
+  if (feed.startISO) {
+    const end = feed.endedISO || formatISODate(new Date());
+    lines.push(`<div><span class="label">Duration:</span> <span class="value" data-duration style="font-family: monospace; font-size: 1.35em">${formatDuration(feed.startISO, end)}</span></div>`);
+  }
 
-      if (feed.startISO) {
-  const end = feed.endedISO || formatISODate(new Date());
-  lines.push(`<div><span class=\"label\">Duration:</span> <span class=\"value\" data-duration style=\"font-family: monospace; font-size: 1.35em\">${formatDuration(feed.startISO, end)}</span></div>`);
-}
-entry.innerHTML = lines.join('');
-      return entry;
+  // --- NYA FÄLT (bara om finns i feed) ---
+  // Metadata
+  if (feed.id) lines.push(`<div><span class="label">ID:</span> <span class="value">${feed.id}</span></div>`);
+  if (feed.created) lines.push(`<div><span class="label">Created:</span> <span class="value">${feed.created}</span></div>`);
+  if (feed.remoteAddr) lines.push(`<div><span class="label">Remote:</span> <span class="value">${feed.remoteAddr}</span></div>`);
+  if (feed.state) lines.push(`<div><span class="label">State:</span> <span class="value">${feed.state}</span></div>`);
+  if (feed.path) lines.push(`<div><span class="label">Path:</span> <span class="value">${feed.path}</span></div>`);
+  if (feed.query) lines.push(`<div><span class="label">Query:</span> <span class="value">${feed.query}</span></div>`);
+
+  // Statistikfält – loopa för att visa endast de som finns och är >0
+  const statsFields = [
+    'packetsSent', 'packetsReceived', 'packetsSendLoss', 'packetsReceivedLoss',
+    'packetsRetrans', 'packetsReceivedRetrans', 'packetsSentACK', 'packetsSentNAK',
+    'packetsReceivedACK', 'packetsReceivedNAK', 'packetsSentKM', 'packetsReceivedKM',
+    'packetsSendDrop', 'packetsReceivedDrop', 'packetsReceivedUndecrypt', 'usSndDuration'
+  ];
+  statsFields.forEach(field => {
+    if (feed[field] !== undefined && feed[field] !== null) {
+      lines.push(`<div><span class="label">${field}:</span> <span class="value">${feed[field]}</span></div>`);
     }
+  });
+
+  entry.innerHTML = lines.join('');
+  return entry;
+}
+
 
     function updateFeeds(data) {
       const now = Date.now();
@@ -360,6 +439,33 @@ entry.innerHTML = lines.join('');
     }
   });
 }, 1000);
+
+document.getElementById('clearInput').onclick = () => {
+  // Spara bara aktiva feeds
+  let active = {};
+  for (let k in localHistory.inputs) {
+    if (localHistory.inputs[k].active) active[k] = localHistory.inputs[k];
+  }
+  localHistory.inputs = active;
+  localStorage.setItem('relayHistory', JSON.stringify(localHistory));
+  // Uppdatera vyn direkt
+  updateFeeds({inputs: Object.values(localHistory.inputs), outputs: Object.values(localHistory.outputs)});
+};
+
+document.getElementById('clearOutput').onclick = () => {
+  // Spara bara aktiva outputs
+  let active = {};
+  for (let k in localHistory.outputs) {
+    if (localHistory.outputs[k].active) active[k] = localHistory.outputs[k];
+  }
+  localHistory.outputs = active;
+  localStorage.setItem('relayHistory', JSON.stringify(localHistory));
+  // Uppdatera vyn direkt
+  updateFeeds({inputs: Object.values(localHistory.inputs), outputs: Object.values(localHistory.outputs)});
+};
+
+
+
 </script>
 </body>
 </html>
