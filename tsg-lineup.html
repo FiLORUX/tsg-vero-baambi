@@ -280,6 +280,29 @@ function getCentralSeconds() {
     return localSecs + smoothOffset;
 }
 
+function triggerFlashAndPip() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = 'sine';
+  osc.frequency.value = 1200;
+  gain.gain.value = 0.48;
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.2); // pip i 200ms
+
+  syncBg.style.background = 'white';
+  setTimeout(() => {
+    syncBg.style.background = 'red';
+  }, 200);
+}
+
+
 
 // --- UI BOX SIZING ---
 function getBoxSize() {
@@ -446,15 +469,16 @@ function playPipIfNeeded() {
     let ms = Math.floor((cs - sec) * 1000);
     if (((syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames) || (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames)) && (lastPipSecond !== sec) && (ms < 200)) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        normalOsc = audioCtx.createOscillator();
-        pipGain = audioCtx.createGain();
-        normalOsc.type = 'sine';
-        if (sec % 4 === 0) {
-            normalOsc.frequency.value = 1200;
-            pipGain.gain.value = 0.48;
-        } else {
-            normalOsc.frequency.value = 1000;
-            pipGain.gain.value = 0.18;
+// REMOVE BELOW: replaced by triggerFlashAndPip()        
+//         normalOsc = audioCtx.createOscillator();
+//        pipGain = audioCtx.createGain();
+//        normalOsc.type = 'sine';
+//        if (sec % 4 === 0) {
+//            normalOsc.frequency.value = 1200;
+//            pipGain.gain.value = 0.48;
+//        } else {
+//            normalOsc.frequency.value = 1000;
+//            pipGain.gain.value = 0.18;
         }
         normalOsc.connect(pipGain).connect(audioCtx.destination);
         normalOsc.start();

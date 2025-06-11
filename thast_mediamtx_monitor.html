@@ -4,12 +4,16 @@
   <meta charset="UTF-8">
   <title>THÅST RELAY MONITORING</title>
   <style>
+    html, body {
+      height: 100%;
+    }
+
     body {
       background-color: #1e1e1e;
       color: #e0e0e0;
       font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
       margin: 0;
-      padding: 2em;
+      padding: 2em 2em 4em 2em;
     }
 
     h1 {
@@ -18,7 +22,7 @@
       letter-spacing: 0.15em;
       font-weight: 200;
       color: #00ffc8;
-      margin-bottom: 3em;
+      margin-bottom: 1.5em;
     }
 
     .layout {
@@ -26,6 +30,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 4em;
       position: relative;
+      z-index: 0;
     }
 
     .box {
@@ -34,6 +39,7 @@
       padding: 2em;
       box-shadow: 0 0 12px rgba(0,255,200,0.25);
       position: relative;
+      z-index: 1;
     }
 
     .box h2 {
@@ -60,16 +66,10 @@
       position: relative;
       transition: opacity 0.5s ease-in-out, transform 0.5s ease;
       background-color: #333;
-      animation: fadeIn 0.5s ease;
     }
 
     .entry + .entry {
       margin-top: 2em;
-    }
-
-    @keyframes fadeIn {
-      from { transform: translateY(10px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
     }
 
     .active {
@@ -111,6 +111,8 @@
       position: absolute;
       top: 0;
       left: 0;
+      width: 100%;
+      height: 100%;
       z-index: 0;
       pointer-events: none;
     }
@@ -127,8 +129,8 @@
       <h2>TX FEEDS <span class="sub">OUTGOING</span></h2>
       <div id="output"></div>
     </div>
-    <canvas id="lines"></canvas>
   </div>
+  <canvas id="lines"></canvas>
   <script>
     const inputEl = document.getElementById('input');
     const outputEl = document.getElementById('output');
@@ -138,9 +140,22 @@
     let localHistory = JSON.parse(localStorage.getItem('relayHistory')) || { inputs: {}, outputs: {} };
 
     function drawLines(inputs, outputs) {
-      canvas.width = document.body.clientWidth;
-      canvas.height = document.body.clientHeight;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      requestAnimationFrame(() => drawLines(inputs, outputs));
+      const dpr = window.devicePixelRatio || 1;
+      const width = window.innerWidth;
+      const height = document.documentElement.scrollHeight;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = width + 'px';
+      canvas.style.height = height + 'px';
+
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+
+      ctx.clearRect(0, 0, width, height);
+
+      const time = Date.now() * 0.002;
 
       [...inputs.children].forEach(inNode => {
         const inName = inNode.dataset.name;
@@ -149,24 +164,53 @@
 
         outNodes.forEach(outNode => {
           const outRect = outNode.getBoundingClientRect();
-          const startX = inRect.right;
+
+          const spacing = 10;
+          const startX = inRect.right + window.scrollX + spacing;
           const startY = inRect.top + inRect.height / 2 + window.scrollY;
-          const endX = outRect.left;
+
+          const endX = outRect.left + window.scrollX - spacing;
           const endY = outRect.top + outRect.height / 2 + window.scrollY;
 
           ctx.beginPath();
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(endX, endY);
-          ctx.strokeStyle = '#00ffc8';
-          ctx.lineWidth = 2;
-          ctx.stroke();
+          const isInactive = outNode.classList.contains('inactive');
+
+          if (isInactive) {
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.strokeStyle = 'rgba(0,255,200,0.25)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          } else {
+            const segmentCount = 20;
+            ctx.strokeStyle = '#00ffc8';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < segmentCount; i++) {
+              const t1 = i / segmentCount;
+              const t2 = (i + 1) / segmentCount;
+              const phase = (time * 100 - i * 10) % 100 / 100;
+              const alpha = 1 - Math.abs(phase - t1);
+
+              const x1 = startX + (endX - startX) * t1;
+              const y1 = startY + (endY - startY) * t1;
+              const x2 = startX + (endX - startX) * t2;
+              const y2 = startY + (endY - startY) * t2;
+
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.lineTo(x2, y2);
+              ctx.strokeStyle = `rgba(0,255,200,${alpha})`;
+              ctx.stroke();
+            }
+          }
         });
       });
     }
 
     function createEntry(feed) {
       const entry = document.createElement('div');
-      entry.className = 'entry ' + (feed.active ? 'active pulse' : 'inactive');
+      const isPulse = feed.lastActivated && (Date.now() - feed.lastActivated < 5000);
+      entry.className = 'entry ' + (feed.active ? 'active' + (isPulse ? ' pulse' : '') : 'inactive');
       entry.dataset.name = feed.name || '';
       if (feed.source) entry.dataset.source = feed.source;
 
@@ -180,6 +224,7 @@
       if (feed.video) lines.push(`<div><span class="label">Video:</span> <span class="value">${feed.video}</span></div>`);
       if (feed.audio) lines.push(`<div><span class="label">Audio:</span> <span class="value">${feed.audio}</span></div>`);
       if (feed.bitrate) lines.push(`<div><span class="label">Bitrate:</span> <span class="value">${feed.bitrate}</span></div>`);
+      if (feed.totalData) lines.push(`<div><span class="label">Data:</span> <span class="value">${feed.totalData}</span></div>`);
       if (feed.source && feed.source !== '-') lines.push(`<div><span class="label">Source:</span> <span class="value">${feed.source}</span></div>`);
       if (feed.start) lines.push(`<div><span class="label">Start:</span> <span class="value">${feed.start}</span></div>`);
       if (feed.ended) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.ended}</span></div>`);
@@ -192,16 +237,34 @@
       const now = Date.now();
 
       data.inputs.forEach(feed => {
+        const prev = localHistory.inputs[feed.name];
         feed.active = true;
         feed.start = new Date().toLocaleTimeString();
+        if (!prev || !prev.active) feed.lastActivated = now;
+        else feed.lastActivated = prev.lastActivated;
         localHistory.inputs[feed.name] = { ...feed, lastSeen: now };
       });
 
       data.outputs.forEach(feed => {
+        const prev = localHistory.outputs[feed.name];
         feed.active = true;
         feed.start = new Date().toLocaleTimeString();
+        if (!prev || !prev.active) feed.lastActivated = now;
+        else feed.lastActivated = prev.lastActivated;
         localHistory.outputs[feed.name] = { ...feed, lastSeen: now };
       });
+
+      for (const name in localHistory.inputs) {
+        if (!data.inputs.find(f => f.name === name)) {
+          localHistory.inputs[name].active = false;
+        }
+      }
+
+      for (const name in localHistory.outputs) {
+        if (!data.outputs.find(f => f.name === name)) {
+          localHistory.outputs[name].active = false;
+        }
+      }
 
       const sortedInputs = Object.values(localHistory.inputs).sort((a,b)=>b.lastSeen-a.lastSeen);
       const sortedOutputs = Object.values(localHistory.outputs).sort((a,b)=>b.lastSeen-a.lastSeen);
@@ -222,7 +285,7 @@
       });
 
       localStorage.setItem('relayHistory', JSON.stringify(localHistory));
-      drawLines(inputEl, outputEl);
+      requestAnimationFrame(() => drawLines(inputEl, outputEl));
     }
 
     async function fetchData() {
@@ -239,7 +302,8 @@
             direction: p.source?.direction || '',
             video: p.tracks?.find(t => t.includes('H264')) || null,
             audio: p.tracks?.find(t => t.includes('Audio')) || null,
-            bitrate: p.bytesReceived ? `${(p.bytesReceived / 1024 / 1024).toFixed(2)} MB` : null
+            bitrate: p.bitrate ? `${(p.bitrate / 1000).toFixed(1)} kbps` : null,
+            totalData: p.bytesReceived ? `${(p.bytesReceived / 1024 / 1024).toFixed(2)} MB` : null
           };
 
           if (p.source) data.inputs.push(feed);
@@ -249,7 +313,8 @@
               name: r.id,
               source: p.name,
               type: r.type,
-              bitrate: r.bytesSent ? `${(r.bytesSent / 1024 / 1024).toFixed(2)} MB` : null
+              bitrate: r.bitrate ? `${(r.bitrate / 1000).toFixed(1)} kbps` : null,
+              totalData: r.bytesSent ? `${(r.bytesSent / 1024 / 1024).toFixed(2)} MB` : null
             });
           });
         });
@@ -262,6 +327,8 @@
 
     fetchData();
     setInterval(fetchData, 2000);
+    window.addEventListener('resize', () => drawLines(inputEl, outputEl));
+    window.addEventListener('scroll', () => drawLines(inputEl, outputEl));
   </script>
 </body>
 </html>
