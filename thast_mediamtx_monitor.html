@@ -139,6 +139,21 @@
 
     let localHistory = JSON.parse(localStorage.getItem('relayHistory')) || { inputs: {}, outputs: {} };
 
+    function formatISODate(date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function formatDuration(startISO, endISO) {
+  if (!startISO || !endISO) return '-';
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const diff = Math.floor((end - start) / 1000);
+  const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+  const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+  const s = String(diff % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
     function drawLines(inputs, outputs) {
       requestAnimationFrame(() => drawLines(inputs, outputs));
       const dpr = window.devicePixelRatio || 1;
@@ -226,10 +241,14 @@
       if (feed.bitrate) lines.push(`<div><span class="label">Bitrate:</span> <span class="value">${feed.bitrate}</span></div>`);
       if (feed.totalData) lines.push(`<div><span class="label">Data:</span> <span class="value">${feed.totalData}</span></div>`);
       if (feed.source && feed.source !== '-') lines.push(`<div><span class="label">Source:</span> <span class="value">${feed.source}</span></div>`);
-      if (feed.start) lines.push(`<div><span class="label">Start:</span> <span class="value">${feed.start}</span></div>`);
-      if (feed.ended) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.ended}</span></div>`);
+      if (feed.startISO) lines.push(`<div><span class=\"label\">Started:</span> <span class=\"value\" data-start=\"${feed.startISO}\">${feed.startISO}</span></div>`);
+      if (feed.endedISO) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.endedISO}</span></div>`);
 
-      entry.innerHTML = lines.join('');
+      if (feed.startISO) {
+  const end = feed.endedISO || formatISODate(new Date());
+  lines.push(`<div><span class=\"label\">Duration:</span> <span class=\"value\" data-duration style=\"font-family: monospace; font-size: 1.35em\">${formatDuration(feed.startISO, end)}</span></div>`);
+}
+entry.innerHTML = lines.join('');
       return entry;
     }
 
@@ -239,30 +258,32 @@
       data.inputs.forEach(feed => {
         const prev = localHistory.inputs[feed.name];
         feed.active = true;
-        feed.start = new Date().toLocaleTimeString();
         if (!prev || !prev.active) feed.lastActivated = now;
         else feed.lastActivated = prev.lastActivated;
+        feed.startISO = prev?.startISO || formatISODate(new Date());
         localHistory.inputs[feed.name] = { ...feed, lastSeen: now };
       });
 
       data.outputs.forEach(feed => {
         const prev = localHistory.outputs[feed.name];
         feed.active = true;
-        feed.start = new Date().toLocaleTimeString();
         if (!prev || !prev.active) feed.lastActivated = now;
         else feed.lastActivated = prev.lastActivated;
+        feed.startISO = prev?.startISO || formatISODate(new Date());
         localHistory.outputs[feed.name] = { ...feed, lastSeen: now };
       });
 
       for (const name in localHistory.inputs) {
         if (!data.inputs.find(f => f.name === name)) {
           localHistory.inputs[name].active = false;
+          localHistory.inputs[name].endedISO = localHistory.inputs[name].endedISO || formatISODate(new Date());
         }
       }
 
       for (const name in localHistory.outputs) {
         if (!data.outputs.find(f => f.name === name)) {
           localHistory.outputs[name].active = false;
+          localHistory.outputs[name].endedISO = localHistory.outputs[name].endedISO || formatISODate(new Date());
         }
       }
 
@@ -274,13 +295,11 @@
 
       sortedInputs.forEach(feed => {
         if (!feed.active && (now - feed.lastSeen) > 86400000) return;
-        if (!feed.active && !feed.ended) feed.ended = new Date().toLocaleTimeString();
         inputEl.appendChild(createEntry(feed));
       });
 
       sortedOutputs.forEach(feed => {
         if (!feed.active && (now - feed.lastSeen) > 86400000) return;
-        if (!feed.active && !feed.ended) feed.ended = new Date().toLocaleTimeString();
         outputEl.appendChild(createEntry(feed));
       });
 
@@ -329,6 +348,18 @@
     setInterval(fetchData, 2000);
     window.addEventListener('resize', () => drawLines(inputEl, outputEl));
     window.addEventListener('scroll', () => drawLines(inputEl, outputEl));
-  </script>
+  setInterval(() => {
+  document.querySelectorAll('.entry').forEach(entry => {
+    const start = entry.querySelector('.value[data-start]');
+    const dur = entry.querySelector('.value[data-duration]');
+    if (start && dur && !entry.classList.contains('inactive')) {
+      const startISO = start.getAttribute('data-start');
+      const endISO = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      const d = formatDuration(startISO, endISO);
+      dur.textContent = d;
+    }
+  });
+}, 1000);
+</script>
 </body>
 </html>
