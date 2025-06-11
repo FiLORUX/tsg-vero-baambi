@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>THÅST RELAY MONITORING</title>
+  <style>
+    body {
+      background-color: #1e1e1e;
+      color: #e0e0e0;
+      font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 2em;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 3rem;
+      letter-spacing: 0.15em;
+      font-weight: 200;
+      color: #00ffc8;
+      margin-bottom: 3em;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4em;
+      position: relative;
+    }
+
+    .box {
+      background-color: #2a2a2a;
+      border-radius: 12px;
+      padding: 2em;
+      box-shadow: 0 0 12px rgba(0,255,200,0.25);
+      position: relative;
+    }
+
+    .box h2 {
+      margin: 0;
+      font-size: 1rem;
+      color: #00ffc8;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 2em;
+    }
+
+    .box h2 span.sub {
+      font-weight: normal;
+      font-size: 0.8rem;
+      color: #aaa;
+      margin-left: 0.5em;
+    }
+
+    .entry {
+      margin-bottom: 2em;
+      padding: 1.2em 1.6em;
+      border-radius: 8px;
+      position: relative;
+      transition: opacity 0.5s ease-in-out, transform 0.5s ease;
+      background-color: #333;
+      animation: fadeIn 0.5s ease;
+    }
+
+    .entry + .entry {
+      margin-top: 2em;
+    }
+
+    @keyframes fadeIn {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .active {
+      opacity: 1;
+    }
+
+    .inactive {
+      background-color: #1a1a1a;
+      color: #888;
+      opacity: 0.5;
+    }
+
+    .label {
+      font-weight: bold;
+      color: #aaa;
+      display: inline-block;
+      min-width: 6em;
+    }
+
+    .value {
+      color: #fff;
+    }
+
+    .inactive .value {
+      color: #666;
+    }
+
+    .pulse {
+      animation: pulseGlow 1.5s ease-in-out 1;
+    }
+
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 0 rgba(0,255,200,0); }
+      50% { box-shadow: 0 0 25px rgba(0,255,200,0.8); }
+      100% { box-shadow: 0 0 0 rgba(0,255,200,0); }
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>THÅST RELAY MONITORING</h1>
+  <div class="layout">
+    <div class="box">
+      <h2>RX FEEDS <span class="sub">INCOMING</span></h2>
+      <div id="input"></div>
+    </div>
+    <div class="box">
+      <h2>TX FEEDS <span class="sub">OUTGOING</span></h2>
+      <div id="output"></div>
+    </div>
+    <canvas id="lines"></canvas>
+  </div>
+  <script>
+    const inputEl = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const canvas = document.getElementById('lines');
+    const ctx = canvas.getContext('2d');
+
+    let localHistory = JSON.parse(localStorage.getItem('relayHistory')) || { inputs: {}, outputs: {} };
+
+    function drawLines(inputs, outputs) {
+      canvas.width = document.body.clientWidth;
+      canvas.height = document.body.clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      [...inputs.children].forEach(inNode => {
+        const inName = inNode.dataset.name;
+        const outNodes = [...outputs.children].filter(o => o.dataset.source === inName);
+        const inRect = inNode.getBoundingClientRect();
+
+        outNodes.forEach(outNode => {
+          const outRect = outNode.getBoundingClientRect();
+          const startX = inRect.right;
+          const startY = inRect.top + inRect.height / 2 + window.scrollY;
+          const endX = outRect.left;
+          const endY = outRect.top + outRect.height / 2 + window.scrollY;
+
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.strokeStyle = '#00ffc8';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        });
+      });
+    }
+
+    function createEntry(feed) {
+      const entry = document.createElement('div');
+      entry.className = 'entry ' + (feed.active ? 'active pulse' : 'inactive');
+      entry.dataset.name = feed.name || '';
+      if (feed.source) entry.dataset.source = feed.source;
+
+      const lines = [];
+      if (feed.name) lines.push(`<div><span class="label">Name:</span> <span class="value">${feed.name}</span></div>`);
+      if (feed.type) {
+        let label = feed.type.replace('Conn', '').toUpperCase();
+        if (feed.direction) label += ` (${feed.direction})`;
+        lines.push(`<div><span class="label">Protocol:</span> <span class="value">${label}</span></div>`);
+      }
+      if (feed.video) lines.push(`<div><span class="label">Video:</span> <span class="value">${feed.video}</span></div>`);
+      if (feed.audio) lines.push(`<div><span class="label">Audio:</span> <span class="value">${feed.audio}</span></div>`);
+      if (feed.bitrate) lines.push(`<div><span class="label">Bitrate:</span> <span class="value">${feed.bitrate}</span></div>`);
+      if (feed.source && feed.source !== '-') lines.push(`<div><span class="label">Source:</span> <span class="value">${feed.source}</span></div>`);
+      if (feed.start) lines.push(`<div><span class="label">Start:</span> <span class="value">${feed.start}</span></div>`);
+      if (feed.ended) lines.push(`<div><span class="label">Ended:</span> <span class="value">${feed.ended}</span></div>`);
+
+      entry.innerHTML = lines.join('');
+      return entry;
+    }
+
+    function updateFeeds(data) {
+      const now = Date.now();
+
+      data.inputs.forEach(feed => {
+        feed.active = true;
+        feed.start = new Date().toLocaleTimeString();
+        localHistory.inputs[feed.name] = { ...feed, lastSeen: now };
+      });
+
+      data.outputs.forEach(feed => {
+        feed.active = true;
+        feed.start = new Date().toLocaleTimeString();
+        localHistory.outputs[feed.name] = { ...feed, lastSeen: now };
+      });
+
+      const sortedInputs = Object.values(localHistory.inputs).sort((a,b)=>b.lastSeen-a.lastSeen);
+      const sortedOutputs = Object.values(localHistory.outputs).sort((a,b)=>b.lastSeen-a.lastSeen);
+
+      inputEl.innerHTML = '';
+      outputEl.innerHTML = '';
+
+      sortedInputs.forEach(feed => {
+        if (!feed.active && (now - feed.lastSeen) > 86400000) return;
+        if (!feed.active && !feed.ended) feed.ended = new Date().toLocaleTimeString();
+        inputEl.appendChild(createEntry(feed));
+      });
+
+      sortedOutputs.forEach(feed => {
+        if (!feed.active && (now - feed.lastSeen) > 86400000) return;
+        if (!feed.active && !feed.ended) feed.ended = new Date().toLocaleTimeString();
+        outputEl.appendChild(createEntry(feed));
+      });
+
+      localStorage.setItem('relayHistory', JSON.stringify(localHistory));
+      drawLines(inputEl, outputEl);
+    }
+
+    async function fetchData() {
+      try {
+        const res = await fetch('http://localhost:9997/v3/paths/list');
+        const json = await res.json();
+        const data = { inputs: [], outputs: [] };
+
+        json.items.forEach(p => {
+          const feed = {
+            name: p.name,
+            source: p.source?.id || '-',
+            type: p.source?.type || 'unknown',
+            direction: p.source?.direction || '',
+            video: p.tracks?.find(t => t.includes('H264')) || null,
+            audio: p.tracks?.find(t => t.includes('Audio')) || null,
+            bitrate: p.bytesReceived ? `${(p.bytesReceived / 1024 / 1024).toFixed(2)} MB` : null
+          };
+
+          if (p.source) data.inputs.push(feed);
+
+          (p.readers || []).forEach(r => {
+            data.outputs.push({
+              name: r.id,
+              source: p.name,
+              type: r.type,
+              bitrate: r.bytesSent ? `${(r.bytesSent / 1024 / 1024).toFixed(2)} MB` : null
+            });
+          });
+        });
+
+        updateFeeds(data);
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    fetchData();
+    setInterval(fetchData, 2000);
+  </script>
+</body>
+</html>
