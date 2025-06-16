@@ -182,8 +182,73 @@ const ebuColors709 = [
 
 const redRec709 = '#B41010';  // Broadcast-safe röd
 const params = new URLSearchParams(window.location.search);
+const STATE_MOS = 0, STATE_STEREOIDENT = 1, STATE_SYNC = 2;
+let syncState = STATE_MOS;
+// === Framerate-parsing med stöd för felstavningar och konventioner ===
+function parseFramerate(val) {
+    if (!val) return 50; // Default till 50p
+
+    let raw = val.toString().toLowerCase()
+        .replace(',', '.')
+        .replace(/[^\d.pisdf]/g, '');
+
+    // Direktmatcha specialfall utan separator
+    if (raw === '5994') return 59.94;
+    if (raw === '2397' || raw === '23976') return 23.976;
+
+    // Identifiera scanning mode
+    const isInterlaced = /i/.test(raw);
+    const isPsf = /psf/.test(raw) || /24df/.test(val.toLowerCase());
+    const isProgressive = !isInterlaced && !isPsf;
+
+    // Extrahera siffra
+    let num = parseFloat(raw.replace(/[^0-9.]/g, ''));
+    if (isNaN(num)) return 50;
+
+    // Rundningsnormalisering
+    if (Math.abs(num - 23.976) < 0.02) return 23.976;
+    if (Math.abs(num - 24.0) < 0.02) return 24.0;
+    if (Math.abs(num - 25.0) < 0.02) return 25.0;
+    if (Math.abs(num - 29.97) < 0.02) return 29.97;
+    if (Math.abs(num - 30.0) < 0.02) return 30.0;
+    if (Math.abs(num - 50.0) < 0.02) return 50.0;
+    if (Math.abs(num - 59.94) < 0.02) return 59.94;
+    if (Math.abs(num - 60.0) < 0.02) return 60.0;
+
+    return num;
+}
+
+const framerateParam = params.get('fps') || params.get('fr');
+const framerate = parseFramerate(framerateParam || '50p');
+
+
+// === Identifiera DF och scanning mode ===
+let scanMode = 'p'; // default
+
+if (framerateParam?.toLowerCase().includes('i') || (framerate === 25 && framerateParam?.includes('i25'))) {
+    scanMode = 'i';
+} else if (framerateParam?.toLowerCase().includes('psf') || framerate === 23.976 || framerate === 24) {
+    scanMode = 'psf';
+}
+
+
+let isDropFrame = (framerate === 23.976 || framerate === 29.97);
+
+// === Slate-id och EBU-formatering ===
 let slateId = params.get('slate') || 'TSG SUITE<br>Thåst Signal Generator';
-const framerate = parseFloat(params.get('fps')) || 25;
+
+// Mappar EBU-format enligt Tech 3299
+function ebuFormat(scan, fps, df) {
+    let fpsText = fps % 1 === 0 ? fps.toFixed(0) : fps.toFixed(3);
+    if (df) fpsText += ' DF';
+    return `EBU Tech 3299: 1080${scan}/${fpsText}`;
+}
+
+// Lägg till EBU-rad under slate endast om slate ej satt
+if (!params.has('slate')) {
+    slateId += `<br>${ebuFormat(scanMode, framerate, isDropFrame)}`;
+}
+// --- Centraliserad tidkod och countdown-logik ---
 const countdownParam = params.get('countdown');
 const timeParam = params.get('time');
 
@@ -242,7 +307,7 @@ const waveCtxL = waveL.getContext('2d');
 const waveCtxR = waveR.getContext('2d');
 
 // --- Overlay/Slate-id ---
-if (!params.has('slate')) slateId = 'TSG SUITE<br>Thåst Signal Generator<br>Lineup Framework';
+
 overlay.innerHTML = slateId.replace(/\\n/g, '<br>');
 function adjustOverlayWidth() {
     let w = window.innerWidth;
@@ -252,8 +317,7 @@ function adjustOverlayWidth() {
 }
 adjustOverlayWidth();
 
-const STATE_MOS = 0, STATE_STEREOIDENT = 1, STATE_SYNC = 2;
-let syncState = STATE_MOS;
+
 let lipSyncCount = 0;
 let lipSyncFrames = 4 * framerate;
 
@@ -446,6 +510,22 @@ function playPipIfNeeded() {
     let ms = Math.floor((cs - sec) * 1000);
     if (((syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames) || (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames)) && (lastPipSecond !== sec) && (ms < 200)) {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // === STATE via URL – först EFTER att audioCtx är aktiv ===
+        const stateParam = (params.get('state') || "").toLowerCase();
+
+        if (stateParam === "mos") {
+            syncState = STATE_MOS;
+            stopStereoIdent();
+        } else if (stateParam === "stereo" || stateParam === "stereoident") {
+            syncState = STATE_STEREOIDENT;
+            startStereoIdent();
+        } else if (stateParam === "sync") {
+            syncState = STATE_SYNC;
+            lipSyncCount = 0;
+            stopStereoIdent();
+        }
+
+        // --- PIP-LOGIK ---        
         normalOsc = audioCtx.createOscillator();
         pipGain = audioCtx.createGain();
         normalOsc.type = 'sine';
@@ -744,8 +824,25 @@ function startAudioOnceAndRemoveCover() {
         audioStarted = true;
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         audioStarter.style.display = "none";
+
+        // === STATE via URL – sätts först när ljud är tillåtet ===
+        const stateParam = (params.get('state') || "").toLowerCase();
+
+        if (stateParam === "mos") {
+            syncState = STATE_MOS;
+            stopStereoIdent();
+        } else if (stateParam === "stereo" || stateParam === "stereoident") {
+            syncState = STATE_STEREOIDENT;
+            startStereoIdent();
+        } else if (stateParam === "sync") {
+            syncState = STATE_SYNC;
+            lipSyncCount = 0;
+            stopStereoIdent();
+        }
     }
 }
+
+
 audioStarter.onclick = startAudioOnceAndRemoveCover;
 window.onclick = function(e) {
     if (!audioStarted) {
@@ -815,6 +912,12 @@ const grayRampWidth = w / grayRampColors.length;
 grayRampColors.forEach((color, i) => {
     ctx.fillStyle = color;
     ctx.fillRect(i * grayRampWidth, grayRampY, grayRampWidth, grayRampH);
+});
+window.addEventListener('DOMContentLoaded', () => {
+    // Kör startAudioOnceAndRemoveCover() virtuellt vid load
+    setTimeout(() => {
+        startAudioOnceAndRemoveCover();
+    }, 100);
 });
 </script>
 <!-- 
