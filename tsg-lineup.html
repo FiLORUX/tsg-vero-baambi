@@ -184,28 +184,29 @@ const redRec709 = '#B41010';  // Broadcast-safe röd
 const params = new URLSearchParams(window.location.search);
 const STATE_MOS = 0, STATE_STEREOIDENT = 1, STATE_SYNC = 2;
 let syncState = STATE_MOS;
-// === Framerate-parsing med stöd för felstavningar och konventioner ===
+
+// === Framerate-parsing med stöd för broadcast-konventioner ===
 function parseFramerate(val) {
-    if (!val) return 50; // Default till 50p
+    if (!val) return 50;
 
     let raw = val.toString().toLowerCase()
         .replace(',', '.')
         .replace(/[^\d.pisdf]/g, '');
 
-    // Direktmatcha specialfall utan separator
     if (raw === '5994') return 59.94;
     if (raw === '2397' || raw === '23976') return 23.976;
 
-    // Identifiera scanning mode
     const isInterlaced = /i/.test(raw);
-    const isPsf = /psf/.test(raw) || /24df/.test(val.toLowerCase());
-    const isProgressive = !isInterlaced && !isPsf;
-
-    // Extrahera siffra
+    const isPsf = /psf/.test(raw);
     let num = parseFloat(raw.replace(/[^0-9.]/g, ''));
+
+    if (isInterlaced) {
+        if (Math.abs(num - 50) < 0.5) return 25.0;
+        if (Math.abs(num - 60) < 1) return 29.97;
+    }
+
     if (isNaN(num)) return 50;
 
-    // Rundningsnormalisering
     if (Math.abs(num - 23.976) < 0.02) return 23.976;
     if (Math.abs(num - 24.0) < 0.02) return 24.0;
     if (Math.abs(num - 25.0) < 0.02) return 25.0;
@@ -218,30 +219,36 @@ function parseFramerate(val) {
     return num;
 }
 
+// === Parse framerate och upplösning ===
 const framerateParam = params.get('fps') || params.get('fr');
 const framerate = parseFramerate(framerateParam || '50p');
 
-
-// === Identifiera DF och scanning mode ===
 let scanMode = 'p'; // default
-
-if (framerateParam?.toLowerCase().includes('i') || (framerate === 25 && framerateParam?.includes('i25'))) {
+if (framerateParam?.toLowerCase().includes('i')) {
     scanMode = 'i';
-} else if (framerateParam?.toLowerCase().includes('psf') || framerate === 23.976 || framerate === 24) {
+} else if (framerateParam?.toLowerCase().includes('psf')) {
     scanMode = 'psf';
 }
 
+// === Resolution parsing ===
+let resParam = (params.get('res') || '').toLowerCase();
+let resolution = '1080'; // default
+if (resParam.includes('720')) resolution = '720';
+else if (resParam.includes('sd') || resParam.includes('576')) resolution = '576';
+else if (resParam.includes('uhd') || resParam.includes('2160')) resolution = '2160';
+else if (resParam.includes('4320')) resolution = '4320';
 
+// === Drop-frame flagga ===
 let isDropFrame = (framerate === 23.976 || framerate === 29.97);
 
-// === Slate-id och EBU-formatering ===
+// === Slate-id + EBU-rad ===
 let slateId = params.get('slate') || 'TSG SUITE<br>Thåst Signal Generator';
 
-// Mappar EBU-format enligt Tech 3299
+// Visar EBU-rad som "EBU Tech 3299: 1080p/50" etc
 function ebuFormat(scan, fps, df) {
-    let fpsText = fps % 1 === 0 ? fps.toFixed(0) : fps.toFixed(3);
+    let fpsText = [23.976, 29.97, 59.94].includes(fps) ? fps.toFixed(2) : fps.toFixed(0);
     if (df) fpsText += ' DF';
-    return `EBU Tech 3299: 1080${scan}/${fpsText}`;
+    return `EBU Tech 3299: ${resolution}${scan}/${fpsText}`;
 }
 
 // Lägg till EBU-rad under slate endast om slate ej satt
