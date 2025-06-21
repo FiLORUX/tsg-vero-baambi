@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analog TV Simulering</title>
+    <style>
+        body, html {
+            margin: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
+        }
+
+        #static {
+            width: 100%;
+            height: 100%;
+            background: url('brus.gif');
+            background-size: cover;
+            position: absolute;
+        }
+
+        #testPattern {
+            width: 100%;
+            height: 100%;
+            background: url('philips-testbild.png');
+            background-size: cover;
+            position: absolute;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="static"></div>
+    <div id="testPattern"></div>
+
+    <script>
+        setTimeout(() => {
+            const testPattern = document.getElementById('testPattern');
+            testPattern.style.opacity = 1;  // Fade in testbilden
+        }, 1000);  // Vänta 1 sekund innan övergång
+    </script>
+</body>
+</html>
