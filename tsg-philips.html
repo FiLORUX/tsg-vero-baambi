@@ -1,10 +1,26 @@
 <!DOCTYPE html>
-
-<html lang="sv">
+<html lang="en">
 <head>
+<!--
+    Thåst Signal Generator - TSG Philips Test Card
+    ===============================================
+    This project renders a dynamic, web-based version of the classic Philips PM5564 test card.
+    The page is designed for fullscreen, pixel-perfect display, using a combination of SVG for the test card graphics,
+    a canvas for animated TV static, and dynamic overlays for ident text and a smooth, broadcast-style clock.
+
+    Methodology:
+    - SVG is used for the main test card, ensuring crisp, scalable graphics at any resolution.
+    - CSS Flexbox and absolute positioning are used to center and layer the SVG, canvas, and flash overlay.
+    - The canvas element generates animated static/noise, simulating analog TV.
+    - The flash overlay provides a white flash transition when the test card appears.
+    - Ident fields and the clock are rendered as SVG <foreignObject> overlays, allowing for dynamic updates.
+    - URL query parameters (ident1, ident2) allow remote control of the ident fields.
+    - The clock uses a smoothing algorithm to interpolate between system time and displayed time, creating a visually pleasing, "broadcast-like" update.
+    - Full credit for the SVG artwork: Created 2009 March 28 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>, released under CC-BY-SA.
+-->
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>TSG Philips Testbild</title>
+<title>TSG Philips Test Card</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&amp;display=swap" rel="stylesheet"/>
 <style>
         html, body {
@@ -61,7 +77,7 @@
 <canvas id="static"></canvas>
 <div id="flash"></div>
 <div id="svg-container">
-<svg height="1080" id="svg216" version="1.1" viewbox="-5 -2.5 1920 1080" width="1920" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg height="1080" id="svg216" version="1.1" viewBox="-5 -2.5 1920 1080" width="1920" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 <metadata id="metadata220">
 <rdf:rdf>
 <cc:work rdf:about="">
