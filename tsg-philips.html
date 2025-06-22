@@ -34,7 +34,7 @@
             position: absolute;
             opacity: 0;
             z-index: 3;
-            transition: opacity 0.2s ease-out;
+            transition: opacity 0.1s ease-out;
         }
 
         #svg-container {
@@ -719,7 +719,7 @@
                 flash.style.opacity = 0;
                 canvas.style.opacity = 0;
             }, 200);
-        }, 5000);
+        }, 3000);
     </script>
 
 <script>
@@ -747,8 +747,55 @@ window.onload = function() {
             if (flash) flash.style.opacity = 0;
             if (canvas) canvas.style.opacity = 0;
         }, 200);
-    }, 5000);
+    }, 3000);
 };
 </script>
+<script>
+(function() {
+  // Hitta klock-elementet
+  const clockElem = document.getElementById('clock');
+
+  // Spara “intern visningstid” (i ms)
+  let displayedTime = Date.now();
+
+  // Hur snabbt ska den interpolera mot systemtiden? (0.0 = ingen smooth, 1.0 = direkt)
+  const SMOOTHING = 0.20; // 0.2 = lagom snabbt för broadcast
+
+  // Hjälpfunktion för tvåsiffrig padding
+  function pad(n) { return n.toString().padStart(2, '0'); }
+
+  // Rendera tiden smygande
+  function animateClock() {
+    // Systemtiden nu
+    const realTime = Date.now();
+
+    // Stega displayedTime smooth mot realTime
+    displayedTime += (realTime - displayedTime) * SMOOTHING;
+
+    // Skapa Date-objekt avrundat till hel sekund
+    const t = new Date(Math.floor(displayedTime / 1000) * 1000);
+
+    // Formatera HH:MM:SS
+    const h = pad(t.getHours());
+    const m = pad(t.getMinutes());
+    const s = pad(t.getSeconds());
+
+    // Sätt texten
+    if(clockElem) clockElem.textContent = `${h}:${m}:${s}`;
+
+    // Fortsätt loopa varje frame
+    requestAnimationFrame(animateClock);
+  }
+
+  // Initiera och starta
+  displayedTime = Date.now();
+  animateClock();
+
+  // Extra safety: tvinga sync 1 gång per minut
+  setInterval(() => { displayedTime = Date.now(); }, 60000);
+
+})();
+</script>
+
 </body>
 </html>
