@@ -15,8 +15,9 @@
       --grid:#29323b;          /* graticule */
 
       --ok:#58d38c;            /* grönt */
-      --caution:#ffd15b;       /* gult */
-      --hot:#ff5a63;           /* rött */
+      --warn:#ffde58;          /* gult (-6 dBTP) */
+      --caution:#ff9a2d;       /* orange (-3 dBTP) */
+      --hot:#ff5a63;           /* rött (-1 dBTP) */
       --cyan:#69bfff;          /* cyan för scope */
 
       --btn:#2d6bff;           /* normal blå */
@@ -64,7 +65,7 @@
     /* VU: dubbelskala på båda sidor */
     .vu{position:relative;height:150px;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
     .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,var(--ok),#2da6ff);height:0}
-    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,var(--caution))}
+    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,#ffd15b)}
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
@@ -87,6 +88,9 @@
     .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
     .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
     .kv small{display:block;font-size:11px;color:var(--muted)}
+
+    /* Inputs */
+    input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
   </style>
 </head>
 <body>
@@ -107,6 +111,14 @@
       <span id="sysMonVal" class="tiny">0.20</span>
       <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
       <span id="sysMonState" class="tiny">(tyst)</span>
+    </div>
+    <!-- Ny: line-up/trim för Chrome-input, i dB -->
+    <div class="row" style="align-items:center">
+      <label>Line-up (Chrome, dB):</label>
+      <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="0" />
+      <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="0.0" />
+      <span class="tiny" id="sysTrimOut">0.0 dB</span>
+      <button id="sysTrimReset" class="btn-ghost">Reset 0 dB</button>
     </div>
     <div class="kv" id="info">
       <div><small>Källa</small><span id="srcKind">–</span></div>
@@ -232,6 +244,12 @@
   const sysMonGainEl = document.getElementById('sysMonGain');
   const sysMonVal = document.getElementById('sysMonVal');
 
+  // Line-up UI
+  const sysTrimRange = document.getElementById('sysTrimRange');
+  const sysTrimInput = document.getElementById('sysTrimInput');
+  const sysTrimOut = document.getElementById('sysTrimOut');
+  const sysTrimReset = document.getElementById('sysTrimReset');
+
   const info = {
     srcKind: document.getElementById('srcKind'),
     cc: document.getElementById('cc'),
@@ -245,6 +263,11 @@
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
   const uptimeEl = document.getElementById('uptime');
+
+  // ------- Helpers -------
+  function getCss(varName){ return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+  const dbToGain = dB => Math.pow(10, dB/20);
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max, v));
 
   // ------- Layout -------
   function sizeWrap(){
@@ -275,12 +298,21 @@
   const bufL = new Float32Array(analyserL.fftSize);
   const bufR = new Float32Array(analyserR.fftSize);
 
+  // K-väg för R128 (approx biquad)
+  const kHP_L = ac.createBiquadFilter(); kHP_L.type='highpass'; kHP_L.frequency.value=38; kHP_L.Q.value=0.5;
+  const kHS_L = ac.createBiquadFilter(); kHS_L.type='highshelf'; kHS_L.frequency.value=4000; kHS_L.gain.value=4; kHP_L.connect(kHS_L);
+  const kHP_R = ac.createBiquadFilter(); kHP_R.type='highpass'; kHP_R.frequency.value=38; kHP_R.Q.value=0.5;
+  const kHS_R = ac.createBiquadFilter(); kHS_R.type='highshelf'; kHS_R.frequency.value=4000; kHS_R.gain.value=4; kHP_R.connect(kHS_R);
+
+  const kAnL = ac.createAnalyser(); kAnL.fftSize = 2048; const kBufL = new Float32Array(kAnL.fftSize);
+  const kAnR = ac.createAnalyser(); kAnR.fftSize = 2048; const kBufR = new Float32Array(kAnR.fftSize);
+  kHS_L.connect(kAnL); kHS_R.connect(kAnR);
+
   function connectStereoToMix(node){
     const split = ac.createChannelSplitter(2);
     node.connect(split);
     split.connect(mixL,0);
     split.connect(mixR,1);
-    // K-väg för R128 (här approx med biquad-kedja)
     split.connect(kHP_L,0);
     split.connect(kHP_R,1);
     return split;
@@ -321,8 +353,7 @@
   // ------- Goniometer (vectorscope 45° mono) -------
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
-    // mjuk persistence
-    const fade = 0.12; // högre = snabbare fade
+    const fade = 0.12; // persistence
     const bg = `rgba(13,15,17,${fade})`;
     xyCtx.fillStyle = bg; xyCtx.fillRect(0,0,w,h);
 
@@ -365,27 +396,40 @@
     corrCtx.fillStyle='#88a3bf';
     const ticksV = [-1,-0.5,0,0.5,1];
     for(const tv of ticksV){ const y=yFromV(tv); corrCtx.fillRect(Math.floor(w*0.35)-6,y,6,1); corrCtx.fillRect(Math.floor(w*0.65),y,6,1); corrCtx.font=`${Math.max(10,12*dpr)}px ui-sans-serif`; corrCtx.textBaseline='middle'; corrCtx.fillText(tv.toString(), Math.floor(w*0.65)+8, y); }
-    const y=yFromV(corrHold); const col=(corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--caution'));
+    const y=yFromV(corrHold); const col=(corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--warn'));
     corrCtx.fillStyle=col; corrCtx.fillRect(Math.floor(w*0.35)+2,y,Math.floor(w*0.30)-4,4);
     const y0=yFromV(0); corrCtx.fillStyle='#2a3642'; corrCtx.fillRect(Math.floor(w*0.35)+1,y0,Math.floor(w*0.30)-2,1);
     corrVal.textContent = corrHold.toFixed(2);
   }
 
-  function getCss(varName){ return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
-
   // ------- dBFS (RMS, 300 ms) -------
   const dbfsMarks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
-  function layoutHScale(el, refLabel){
+  function layoutDBFSScale(el){
     el.innerHTML='';
-    const box = el.parentElement.getBoundingClientRect();
     dbfsMarks.forEach(m=>{
       const x = ((m+60)/60)*100; // -60..0 → 0..100%
       const tick = document.createElement('div');
       tick.style.position='absolute'; tick.style.left = `calc(${x}% - 1px)`; tick.style.top='20%'; tick.style.height='60%'; tick.style.width='2px'; tick.style.background='#2a3642';
       el.appendChild(tick);
-      const lab = document.createElement('div'); lab.textContent = m + (refLabel && m===-18 ? ' dBFS (TEST)' : ' dBFS'); lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab);
-      if(refLabel && m===-18){ const ref = document.createElement('div'); ref.style.position='absolute'; ref.style.left = `calc(${x}% - 1px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='2px'; ref.style.background='#ffd15b'; el.appendChild(ref); }
+      const lab = document.createElement('div'); lab.textContent = m + (m===-18 ? ' dBFS (TEST)' : ' dBFS'); lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab);
+      if(m===-18){ const ref = document.createElement('div'); ref.style.position='absolute'; ref.style.left = `calc(${x}% - 1px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='2px'; ref.style.background='#ffd15b'; el.appendChild(ref); }
     });
+  }
+
+  function layoutTPScale(el){
+    el.innerHTML='';
+    dbfsMarks.forEach(m=>{
+      const x = ((m+60)/60)*100;
+      const tick = document.createElement('div'); tick.style.position='absolute'; tick.style.left = `calc(${x}% - 1px)`; tick.style.top='18%'; tick.style.height='64%'; tick.style.width='2px'; tick.style.background='#2a3642'; el.appendChild(tick);
+      const lab = document.createElement('div'); lab.textContent = m + ' dBFS'; lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='6px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab);
+    });
+    // färgmarkörer: -6 (gul), -3 (orange), -1 (röd)
+    const marks=[{v:-6,c:'var(--warn)',w:2,label:'−6 dBTP'},{v:-3,c:'var(--caution)',w:2,label:'−3 dBTP'},{v:-1,c:'var(--hot)',w:3,label:'−1 dBTP'}];
+    for(const mk of marks){
+      const x=((mk.v+60)/60)*100; const line=document.createElement('div'); line.style.position='absolute'; line.style.left=`calc(${x}% - ${mk.w/2}px)`; line.style.top='0'; line.style.height='100%'; line.style.width=`${mk.w}px`; line.style.background=`var(--outline)`; el.appendChild(line);
+      const col=document.createElement('div'); col.style.position='absolute'; col.style.left=`calc(${x}% - ${mk.w/2}px)`; col.style.top='0'; col.style.height='100%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.9'; el.appendChild(col);
+      const tag=document.createElement('div'); tag.textContent=mk.label; tag.style.position='absolute'; tag.style.left=`calc(${x}% + 4px)`; tag.style.bottom='6px'; tag.style.fontSize='10px'; tag.style.color='#cfe1ff'; el.appendChild(tag);
+    }
   }
 
   function drawHBar(canvas, valueL, valueR, ref, mode){
@@ -395,15 +439,20 @@
     function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) }
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const refX=xFromDb(ref);
-    // färglogik för dBTP
     const colorFor = (v)=>{
-      if(mode==='tp'){ return (v>=-1? getCss('--hot') : (v>=-3? getCss('--caution') : getCss('--ok'))); }
+      if(mode==='tp'){
+        if(v>=-1) return getCss('--hot');
+        if(v>=-3) return getCss('--caution');
+        if(v>=-6) return getCss('--warn');
+        return getCss('--ok');
+      }
       return getCss('--ok');
     };
     ctx.fillStyle=colorFor(valueL); ctx.fillRect(0,h*0.35,xFromDb(valueL),h*0.12);
     ctx.fillStyle=colorFor(valueR); ctx.fillRect(0,h*0.55,xFromDb(valueR),h*0.12);
-    ctx.fillStyle=(mode==='tp'? '#aa2e2e' : getCss('--caution')); ctx.fillRect(refX,0,2,h); // ref-linje
-    // 0 dBFS linje till höger (maxvisning)
+    // ref-linje
+    ctx.fillStyle=(mode==='tp'? getCss('--hot') : '#ffd15b'); ctx.fillRect(refX,0,2,h);
+    // 0 dBFS linje till höger
     ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h);
   }
 
@@ -418,7 +467,7 @@
     dbL.textContent = dBL.toFixed(1)+' dBFS'; dbR.textContent = dBR.toFixed(1)+' dBFS';
     drawHBar(dbfs, dBL, dBR, -18, 'dbfs');
   }
-  layoutHScale(dbfsScale, true);
+  layoutDBFSScale(dbfsScale);
 
   // ------- True Peak (4×) -------
   function hermite(p0,p1,p2,p3,t){ const a= (-0.5*p0)+(1.5*p1)+(-1.5*p2)+(0.5*p3); const b=(p0*(-1))+ (2.5*p1)+(-2*p2)+ (0.5*p3); const c=(-0.5*p0)+(0.5*p2); const d=p1; return ((a*t+b)*t+c)*t+d; }
@@ -437,28 +486,17 @@
     const tpDbL = Math.min(0, truePeakDb(bufL));
     const tpDbR = Math.min(0, truePeakDb(bufR));
     tpL.textContent = tpDbL.toFixed(1)+' dBTP'; tpR.textContent = tpDbR.toFixed(1)+' dBTP';
-    drawHBar(tp, tpDbL, tpDbR, -1, 'tp'); // färger enligt −3/−1/0
+    drawHBar(tp, tpDbL, tpDbR, -1, 'tp');
   }
-  layoutHScale(tpScale, false);
+  layoutTPScale(tpScale);
 
-  // ------- R128 (approx) – K-väg via biquads + blockenergi -------
-  // K-weighting approx i WebAudio: HP 38 Hz + HighShelf +4 dB/4 kHz
-  const kHP_L = ac.createBiquadFilter(); kHP_L.type='highpass'; kHP_L.frequency.value=38; kHP_L.Q.value=0.5;
-  const kHS_L = ac.createBiquadFilter(); kHS_L.type='highshelf'; kHS_L.frequency.value=4000; kHS_L.gain.value=4; kHP_L.connect(kHS_L);
-  const kHP_R = ac.createBiquadFilter(); kHP_R.type='highpass'; kHP_R.frequency.value=38; kHP_R.Q.value=0.5;
-  const kHS_R = ac.createBiquadFilter(); kHS_R.type='highshelf'; kHS_R.frequency.value=4000; kHS_R.gain.value=4; kHP_R.connect(kHS_R);
-
-  const kAnL = ac.createAnalyser(); kAnL.fftSize = 2048; const kBufL = new Float32Array(kAnL.fftSize);
-  const kAnR = ac.createAnalyser(); kAnR.fftSize = 2048; const kBufR = new Float32Array(kAnR.fftSize);
-  kHS_L.connect(kAnL); kHS_R.connect(kAnR);
-
+  // ------- R128 (approx) – blockenergi + gating -------
   const frameDur = kAnL.fftSize / ac.sampleRate; // ≈ 42.7 ms @ 48 kHz
   const mLen = Math.max(1, Math.round(0.4 / frameDur));   // 400 ms
   const sLen = Math.max(1, Math.round(3.0 / frameDur));   // 3 s
 
   const mQ = []; const sQ = []; // energivärden (sum of ch)
   let intEnergy = 0, intCount = 0; // integrated gated
-  let gatedBlocks = 0;
   let stHistory = []; // för LRA
 
   function energyFromK(){
@@ -467,26 +505,21 @@
     const rmsL = eL/kBufL.length; const rmsR = eR/kBufR.length; // mean-square per kanal
     return (rmsL + rmsR) / 2; // tvåkanalsmedel (ITU 1770 kanalvikter ≈1 för L/R)
   }
-
-  function lufsFromEnergy(e){ return 10*Math.log10(e + 1e-12); } // ≈ LKFS/LUFS
+  function lufsFromEnergy(e){ return 10*Math.log10(e + 1e-12); }
 
   function updateR128(){
-    const e = energyFromK();
-    mQ.push(e); sQ.push(e);
-    if(mQ.length>mLen) mQ.shift();
-    if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/ (3.0)) ) stHistory.shift(); }
-
-    // Momentary & Short-term
+    const e = energyFromK(); mQ.push(e); sQ.push(e);
+    if(mQ.length>mLen) mQ.shift(); if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/3)) stHistory.shift(); }
+    // M & S
     const mE = mQ.reduce((a,b)=>a+b,0)/mQ.length; const sE = sQ.reduce((a,b)=>a+b,0)/sQ.length;
     const mLUFS = lufsFromEnergy(mE); const sLUFS = lufsFromEnergy(sE);
 
-    // Integrated gating: absolut −70 LUFS, relativ −10 LU under aktuell integrerad
+    // Integrated gating
     let gate = -70; if(intCount>0){ const iLU = lufsFromEnergy(intEnergy/intCount); gate = Math.max(-70, iLU - 10); }
-    const blockLU = sLUFS; // använd ST-block som gating-block (≈1770-4)
-    if(blockLU >= gate){ intEnergy += e; intCount++; gatedBlocks++; }
+    if(sLUFS >= gate){ intEnergy += e; intCount++; }
     const iLUFS = (intCount>0) ? lufsFromEnergy(intEnergy/intCount) : -Infinity;
 
-    // LRA: percentiler av ST över ~60 s, gate 20 LU under I
+    // LRA (10–95 percentil på ST, gate 20 LU under I)
     const stVals = stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v > (iLUFS - 20));
     let LRA='—';
     if(stVals.length>5){ const sorted=[...stVals].sort((a,b)=>a-b); const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)]; LRA=(p95-p10).toFixed(1)+' LU'; }
@@ -498,7 +531,15 @@
   }
 
   // ------- Capture (system/chrome) -------
-  let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true;
+  let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true, sysTrimNode=null;
+  let sysTrimDb = 0; // dB
+  function setSysTrim(dB){ sysTrimDb = clamp(parseFloat(dB)||0, -48, 24); sysTrimRange.value=sysTrimDb; sysTrimInput.value=sysTrimDb.toFixed(1); sysTrimOut.textContent = sysTrimDb.toFixed(1)+' dB'; if(sysTrimNode){ sysTrimNode.gain.value = dbToGain(sysTrimDb); } }
+  setSysTrim(0);
+  sysTrimRange.addEventListener('input', e=> setSysTrim(e.target.value));
+  sysTrimInput.addEventListener('change', e=> setSysTrim(e.target.value));
+  sysTrimInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ setSysTrim(e.target.value); e.target.blur(); }});
+  sysTrimReset.addEventListener('click', ()=> setSysTrim(0));
+
   async function startTabCapture(){
     try{
       await ac.resume();
@@ -508,8 +549,10 @@
       try{ track.applyConstraints({advanced:[{channelCount:2}]}); }catch{}
       track.contentHint='music';
       sysSrc = ac.createMediaStreamSource(sysStream);
-      sysSplit = connectStereoToMix(sysSrc); // analys + K-väg
-      sysMonGain = ac.createGain(); sysMonGain.gain.value = 0; sysSrc.connect(sysMonGain).connect(ac.destination);
+      sysTrimNode = ac.createGain(); sysTrimNode.gain.value = dbToGain(sysTrimDb);
+      sysSrc.connect(sysTrimNode);
+      sysSplit = connectStereoToMix(sysTrimNode); // analys + K-väg via trim
+      sysMonGain = ac.createGain(); sysMonGain.gain.value = 0; sysTrimNode.connect(sysMonGain).connect(ac.destination);
       btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(tyst)'; sysMonitorMuted=true;
       const set = track.getSettings?track.getSettings():{}; info.srcKind.textContent=track.kind||'audio'; info.cc.textContent=set.channelCount??'okänd'; info.sr.textContent=ac.sampleRate+' Hz'; info.stOK.textContent=(set.channelCount>=2?'Ja':'Osäkert/Mono?');
       btnTab.disabled=true; btnStop.disabled=false; dbgTab.textContent='ja';
@@ -518,9 +561,10 @@
   function stopCapture(){
     try{ sysStream && sysStream.getTracks().forEach(t=>t.stop()) }catch{}
     try{ sysSrc && sysSrc.disconnect() }catch{}
+    try{ sysTrimNode && sysTrimNode.disconnect() }catch{}
     try{ sysSplit && sysSplit.disconnect() }catch{}
     try{ sysMonGain && sysMonGain.disconnect() }catch{}
-    sysStream=null; sysSrc=null; sysSplit=null; sysMonGain=null; sysMonitorMuted=true;
+    sysStream=null; sysSrc=null; sysTrimNode=null; sysSplit=null; sysMonGain=null; sysMonitorMuted=true;
     btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(tyst)'; btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost');
     btnTab.disabled=false; btnStop.disabled=true; dbgTab.textContent='nej';
   }
@@ -534,7 +578,7 @@
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
   // ------- Generator (hörs + analys) -------
-  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null, genSplit=null;
+  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null;
   let monitorMuted=false;
   async function startGenerator(){
     await ac.resume(); if(genOsc) return;
@@ -570,7 +614,7 @@
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
   // ------- Loop -------
-  let startTs=performance.now(); let leftMuteTimer=0;
+  let startTs=performance.now(); let leftMuteTimer=0; let lastTsDB=performance.now();
   function loop(){
     if (muteLeft.checked && leftGain){ leftMuteTimer += 16.7; const period=1500, win=500; const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0; if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) } }
     layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
