@@ -35,7 +35,11 @@
     code.small{font-size:12px;color:var(--muted)}
 
     /* Visning: bred huvudkolumn + smal kolumn, all scroll INUTI denna rutan */
-    .meters{display:grid;grid-template-columns:minmax(360px,1fr) 260px;grid-auto-rows:unset;grid-template-rows:2fr 1fr 1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
+    .meters{display:grid;grid-template-columns:minmax(360px,1fr) 260px;grid-template-rows:2fr 1fr 1fr;grid-template-areas:
+      'xy xy'
+      'vu dbfs'
+      'r128 tp';
+      height:100%;gap:12px;min-height:0;overflow:hidden}
     .meter{background:#111416;border:1px solid var(--outline);border-radius:12px;padding:10px;position:relative;min-height:0;display:flex;flex-direction:column}
     .meter header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
@@ -80,6 +84,9 @@
 
     input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
       .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
+    .brand{flex:1 1 60%;min-width:480px}
+    .brand svg{display:block;height:64px;width:100%}
+    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
     .brand svg{display:block;height:60px;width:auto}
     .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
       .corrWrap>canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -96,7 +103,7 @@
 <header>
   <div class="hdr">
     <div class="brand">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 140" role="img" aria-label="TSG Suite | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface" width="100%" preserveAspectRatio="xMidYMid meet">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 140" role="img" aria-label="TSG Suite | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface" width="100%" preserveAspectRatio="xMinYMid meet">
         <defs>
           <linearGradient id="lock-cyan" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stop-color="#38BDF8"/>
@@ -220,7 +227,7 @@
         </div>
       </div>
       <div class="meter" id="r128">
-        <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA · Target −23 LUFS</span></header>
+        <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA</span></header>
         <div class="r128">
           <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
           <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
@@ -410,7 +417,7 @@
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
   function energyFromK(){ kAnL.getFloatTimeDomainData(kBufL); kAnR.getFloatTimeDomainData(kBufR); let eL=0,eR=0; for(let i=0;i<kBufL.length;i++){ eL+=kBufL[i]*kBufL[i]; eR+=kBufR[i]*kBufR[i]; } const rmsL = eL/kBufL.length; const rmsR = eR/kBufR.length; return (rmsL + rmsR)/2; }
   function lufsFromEnergy(e){ return 10*Math.log10(e + 1e-12); }
-  let lastText=0; function updateR128(){ const e = energyFromK(); mQ.push(e); sQ.push(e); if(mQ.length>mLen) mQ.shift(); if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/3)) stHistory.shift(); } const mE=mQ.reduce((a,b)=>a+b,0)/mQ.length; const sE=sQ.reduce((a,b)=>a+b,0)/sQ.length; const mLUFS=lufsFromEnergy(mE); const sLUFS=lufsFromEnergy(sE); let gate=-70; if(intCount>0){ const iLU=lufsFromEnergy(intEnergy/intCount); gate=Math.max(-70, iLU-10); } if(sLUFS>=gate){ intEnergy+=e; intCount++; } const iLUFS=(intCount>0)? lufsFromEnergy(intEnergy/intCount): -Infinity; const stVals=stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v>(iLUFS-20)); let LRA='—'; if(stVals.length>5){ const sorted=[...stVals].sort((a,b)=>a-b); const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)]; LRA=(p95-p10).toFixed(1)+' LU'; } const now=performance.now(); if(now-lastText>100){ const a=.35; const prevM=parseFloat(lufsM.dataset.v||'-999'); const prevS=parseFloat(lufsS.dataset.v||'-999'); const prevI=parseFloat(lufsI.dataset.v||'-999'); const mDisp=isFinite(prevM)? prevM + a*(mLUFS-prevM): mLUFS; const sDisp=isFinite(prevS)? prevS + a*(sLUFS-prevS): sLUFS; const iDisp=isFinite(prevI)? prevI + a*(iLUFS-prevI): iLUFS; lufsM.dataset.v=mDisp; lufsS.dataset.v=sDisp; lufsI.dataset.v=iDisp; lufsM.textContent=isFinite(mDisp)? mDisp.toFixed(1)+' LUFS':'—'; lufsS.textContent=isFinite(sDisp)? sDisp.toFixed(1)+' LUFS':'—'; lufsI.textContent=(isFinite(iDisp)? iDisp.toFixed(1)+' LUFS':'—')+'  (target −23)'; lraEl.textContent=LRA; lastText=now; } }
+  let lastText=0; function updateR128(){ const e = energyFromK(); mQ.push(e); sQ.push(e); if(mQ.length>mLen) mQ.shift(); if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/3)) stHistory.shift(); } const mE=mQ.reduce((a,b)=>a+b,0)/mQ.length; const sE=sQ.reduce((a,b)=>a+b,0)/sQ.length; const mLUFS=lufsFromEnergy(mE); const sLUFS=lufsFromEnergy(sE); let gate=-70; if(intCount>0){ const iLU=lufsFromEnergy(intEnergy/intCount); gate=Math.max(-70, iLU-10); } if(sLUFS>=gate){ intEnergy+=e; intCount++; } const iLUFS=(intCount>0)? lufsFromEnergy(intEnergy/intCount): -Infinity; const stVals=stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v>(iLUFS-20)); let LRA='—'; if(stVals.length>5){ const sorted=[...stVals].sort((a,b)=>a-b); const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)]; LRA=(p95-p10).toFixed(1)+' LU'; } const now=performance.now(); if(now-lastText>100){ const a=.35; const prevM=parseFloat(lufsM.dataset.v||'-999'); const prevS=parseFloat(lufsS.dataset.v||'-999'); const prevI=parseFloat(lufsI.dataset.v||'-999'); const mDisp=isFinite(prevM)? prevM + a*(mLUFS-prevM): mLUFS; const sDisp=isFinite(prevS)? prevS + a*(sLUFS-prevS): sLUFS; const iDisp=isFinite(prevI)? prevI + a*(iLUFS-prevI): iLUFS; lufsM.dataset.v=mDisp; lufsS.dataset.v=sDisp; lufsI.dataset.v=iDisp; lufsM.textContent=isFinite(mDisp)? mDisp.toFixed(1)+' LUFS':'—'; lufsS.textContent=isFinite(sDisp)? sDisp.toFixed(1)+' LUFS':'—'; lufsI.textContent = (isFinite(iDisp) ? iDisp.toFixed(1)+' LUFS' : '—'); lraEl.textContent=LRA; lastText=now; } }
 
   // ------- Capture -------
   let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true, sysTrimNode=null; let sysTrimDb = 0;
