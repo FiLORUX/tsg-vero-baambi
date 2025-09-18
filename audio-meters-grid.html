@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TSG – Mätmoduler i RTW-stil · Generator hörs, System tyst tills monitor ON</title>
+  <title>TSG Suite | VERO | Broadcast Audio Align Meter Bridge</title>
   <style>
     :root{
       /* RTW-lik palett */
@@ -29,7 +29,7 @@
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
 
-    /* Grid: vänster = tre huvudrutor i 50/25/25; höger = visning spänner de två översta raderna */
+    /* Grid: vänster = tre huvudrutor i 50/25/25; höger = visning spänner HELA höjden */
     .wrap{box-sizing:border-box;padding:20px;display:grid;gap:16px;grid-template-columns: 360px 1fr;grid-template-rows: 2fr 1fr 1fr; height:calc(100dvh - 56px)}
     .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0;overflow:auto}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
@@ -37,7 +37,7 @@
     .leftTop{grid-column:1;grid-row:1}
     .leftBottom{grid-column:1;grid-row:2}
     .leftFooter{grid-column:1;grid-row:3}
-    .visning{grid-column:2;grid-row:1 / span 2;display:grid;grid-template-rows:auto 1fr;gap:12px;min-height:0}
+    .visning{grid-column:2;grid-row:1 / span 3;display:grid;grid-template-rows:auto 1fr;gap:12px;min-height:0}
 
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     button{background:var(--btn);border:0;color:white;padding:9px 12px;border-radius:11px;font-weight:700;cursor:pointer}
@@ -59,42 +59,44 @@
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
     /* Goniometer (exakt kvadrat) */
-    .xySquare{position:relative;width:100%}
+    .xySquare{position:relative;width:100%;max-height:420px}
     .xySquare>canvas{position:absolute;inset:0;width:100%;height:100%}
 
-    /* VU: dubbelskala på båda sidor */
+    /* VU: dubbelskala på båda sidor + test-linje */
     .vu{position:relative;height:150px;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
-    .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,var(--ok),#2da6ff);height:0}
-    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,#ffd15b)}
+    .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,var(--ok),#2da6ff);height:0;opacity:.85}
+    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,#ffd15b);opacity:.85}
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
     .tick::before{content:attr(data-lab);position:absolute;left:6px;top:-7px;font-size:10px;color:#88a3bf}
+    .testline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#ffd15b,transparent);opacity:.75}
+    .testlabel{position:absolute;right:8px;top:-14px;font-size:10px;color:#ffd15b}
 
     /* Horisontella stapel-metrar (dBFS/True Peak) */
     .hMeter{position:relative;height:160px}
     .hScale{position:absolute;inset:0;pointer-events:none}
-    .hLabel{position:absolute;top:4px;right:8px;font-size:11px;color:#cfe1ff}
+    .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
 
     /* Korrelation overlay-label i hörnet */
     .overlay{position:absolute;right:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36}
 
-    /* R128 – panel med siffror */
+    /* R128 – panel med siffror (lugnare) */
     .r128{display:grid;grid-template-columns:1fr;gap:8px}
     .r128 .row{justify-content:space-between}
-    .r128 .big{font-size:28px;font-weight:800}
+    .r128 .big{font-size:26px;font-weight:800;letter-spacing:.3px}
     .r128 small{color:#a9b2c7}
 
     .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
     .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
-    .kv small{display:block;font-size:11px;color:var(--muted)}
+    .kv small{display:block;font-size:11px;color:#a9b2c7}
 
     /* Inputs */
     input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
   </style>
 </head>
 <body>
-<header><h1>TSG – Källor & Visning (RTW-stil) · Generator hörs (ON), System monitor OFF tills du säger till</h1></header>
+<header><h1>TSG Suite | VERO | Broadcast Audio Align Meter Bridge <small style="color:var(--muted);font-weight:600;margin-left:8px;">· Generator hörs (ON), System monitor OFF tills du säger till</small></h1></header>
 
 <div id="wrap" class="wrap">
   <!-- Vänster kolumn: 50% System/chrome, 25% Generator, 25% Status -->
@@ -155,7 +157,7 @@
     </div>
   </section>
 
-  <!-- Höger kolumn: Visning (spänner två översta rader) -->
+  <!-- Höger kolumn: Visning (spänner hela vänsterkolumnens höjd) -->
   <section class="card visning">
     <h2>Visning</h2>
     <div class="meters" id="meters">
@@ -172,11 +174,13 @@
 
       <!-- Rad 2: VU + dBFS -->
       <div class="meter">
-        <header><label>VU (0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
+        <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
         <div class="vu">
           <div class="bar l" id="barL"></div>
           <div class="bar r" id="barR"></div>
           <div class="ticks" id="ticks"></div>
+          <div class="testline" id="vuTest"></div>
+          <div class="testlabel" id="vuTestLabel">TEST −18 dBFS (0 VU)</div>
         </div>
       </div>
       <div class="meter">
@@ -184,7 +188,7 @@
         <div class="hMeter">
           <canvas id="dbfs" height="160"></canvas>
           <div class="hScale" id="dbfsScale"></div>
-          <span class="hLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b></span>
+          <span class="hLabel" id="dbfsLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b></span>
         </div>
       </div>
 
@@ -194,7 +198,7 @@
         <div class="hMeter">
           <canvas id="tp" height="160"></canvas>
           <div class="hScale" id="tpScale"></div>
-          <span class="hLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b></span>
+          <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b></span>
         </div>
       </div>
       <div class="meter" id="r128">
@@ -259,6 +263,8 @@
 
   const barL = document.getElementById('barL'), barR = document.getElementById('barR');
   const ticks = document.getElementById('ticks');
+  const vuTest = document.getElementById('vuTest');
+  const vuTestLabel = document.getElementById('vuTestLabel');
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
@@ -278,7 +284,8 @@
 
   function layoutXY(){
     const dpr = window.devicePixelRatio || 1;
-    const side = Math.max(260, xyWrap.clientWidth);
+    // håll XY exakt kvadrat men aldrig högre än 420px för att allt ska få plats visuellt
+    const side = Math.min(420, Math.max(260, xyWrap.clientWidth));
     xyWrap.style.height = side + 'px';
     const w = Math.floor(side*dpr), h = Math.floor(side*dpr);
     if(xy.width!==w||xy.height!==h){ xy.width=w; xy.height=h; }
@@ -321,13 +328,17 @@
   // ------- VU (300 ms) -------
   function buildTicks(){
     ticks.innerHTML='';
-    const vuMarks = [-20,-10,-5,0,3,6];
+    const vuMarks = [-20,-9,-6,-3,0,3,6]; // Nordic-ish
     for(const vu of vuMarks){
       const y = (1 - (vu + 20) / 26) * 100;
       const d = document.createElement('div');
       d.className='tick'; d.dataset.lab = `${vu>0?"+"+vu:vu} VU`;
       d.style.top = `calc(${y}% - 1px)`; ticks.appendChild(d);
     }
+    // TEST-linje vid 0 VU (−18 dBFS)
+    const y0 = (1 - (0 + 20) / 26) * 100;
+    vuTest.style.top = `calc(${y0}% - 1px)`;
+    vuTestLabel.style.top = `calc(${y0}% - 16px)`;
   }
   buildTicks();
 
@@ -350,21 +361,26 @@
     barL.style.height = `${pct(vuL)}%`; barR.style.height = `${pct(vuR)}%`;
   }
 
-  // ------- Goniometer (vectorscope 45° mono) -------
+  // ------- Goniometer (vectorscope 45° mono, DC-fri, mjukare) -------
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
-    const fade = 0.12; // persistence
-    const bg = `rgba(13,15,17,${fade})`;
-    xyCtx.fillStyle = bg; xyCtx.fillRect(0,0,w,h);
+    const fade = 0.10; // persistence lugnare
+    xyCtx.fillStyle = `rgba(13,15,17,${fade})`; xyCtx.fillRect(0,0,w,h);
 
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    const n=Math.min(bufL.length,bufR.length);
-    xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.95)';
+    // DC-borttagning
+    let n=Math.min(bufL.length,bufR.length), mL=0,mR=0; for(let i=0;i<n;i++){ mL+=bufL[i]; mR+=bufR[i]; } mL/=n; mR/=n;
+    xyCtx.globalAlpha=0.85; xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.85)';
     const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
-    for(let i=0;i<n;i++){
-      const x=(bufL[i]*.5+.5)*w; const y=(1-(bufR[i]*.5+.5))*h; xyCtx.fillRect(x,y,px,px);
+    let prevX=null, prevY=null;
+    for(let i=0;i<n;i+=2){ // lätt decimation
+      const L=bufL[i]-mL, R=bufR[i]-mR;
+      const x=(L*0.5+0.5)*w; const y=(1-(R*0.5+0.5))*h;
+      if(prevX!==null){ xyCtx.globalAlpha=.35; xyCtx.strokeStyle='rgba(105,191,255,.35)'; xyCtx.beginPath(); xyCtx.moveTo(prevX,prevY); xyCtx.lineTo(x,y); xyCtx.stroke(); }
+      xyCtx.globalAlpha=.85; xyCtx.fillRect(x,y,px,px);
+      prevX=x; prevY=y;
     }
-    xyCtx.globalCompositeOperation='source-over';
+    xyCtx.globalCompositeOperation='source-over'; xyCtx.globalAlpha=1;
 
     xyCtx.strokeStyle = '#3a4855'; xyCtx.lineWidth = 1;
     xyCtx.beginPath();
@@ -381,7 +397,7 @@
     const mL=sL/n, mR=sR/n; let num=0,dL=0,dR=0; for(let i=0;i<n;i++){ const L=l[i]-mL, R=r[i]-mR; num+=L*R; dL+=L*L; dR+=R*R }
     return num/(Math.sqrt(dL*dR)+1e-20);
   }
-  let corrHold=0, corrUp=.35, corrDn=.08;
+  let corrHold=0, corrUp=.25, corrDn=.06; // lugnare ballistik
   function drawCorr(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const c = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
@@ -397,8 +413,8 @@
     const ticksV = [-1,-0.5,0,0.5,1];
     for(const tv of ticksV){ const y=yFromV(tv); corrCtx.fillRect(Math.floor(w*0.35)-6,y,6,1); corrCtx.fillRect(Math.floor(w*0.65),y,6,1); corrCtx.font=`${Math.max(10,12*dpr)}px ui-sans-serif`; corrCtx.textBaseline='middle'; corrCtx.fillText(tv.toString(), Math.floor(w*0.65)+8, y); }
     const y=yFromV(corrHold); const col=(corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--warn'));
-    corrCtx.fillStyle=col; corrCtx.fillRect(Math.floor(w*0.35)+2,y,Math.floor(w*0.30)-4,4);
-    const y0=yFromV(0); corrCtx.fillStyle='#2a3642'; corrCtx.fillRect(Math.floor(w*0.35)+1,y0,Math.floor(w*0.30)-2,1);
+    corrCtx.globalAlpha=.8; corrCtx.fillStyle=col; corrCtx.fillRect(Math.floor(w*0.35)+2,y,Math.floor(w*0.30)-4,4);
+    const y0=yFromV(0); corrCtx.globalAlpha=1; corrCtx.fillStyle='#2a3642'; corrCtx.fillRect(Math.floor(w*0.35)+1,y0,Math.floor(w*0.30)-2,1);
     corrVal.textContent = corrHold.toFixed(2);
   }
 
@@ -432,13 +448,30 @@
     }
   }
 
+  function drawHBackground(canvas, mode){
+    // zonbakgrund (matt) för True Peak
+    if(mode!=='tp') return;
+    const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
+    const ctx = canvas.getContext('2d');
+    const xFromDb = db => Math.round((Math.max(-60,Math.min(0,db))+60)/60*w);
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = 'rgba(88,211,140,.12)'; ctx.fillRect(xFromDb(-60),0,xFromDb(-6)-xFromDb(-60),h);
+    ctx.fillStyle = 'rgba(255,222,88,.12)'; ctx.fillRect(xFromDb(-6),0,xFromDb(-3)-xFromDb(-6),h);
+    ctx.fillStyle = 'rgba(255,154,45,.12)'; ctx.fillRect(xFromDb(-3),0,xFromDb(-1)-xFromDb(-3),h);
+    ctx.fillStyle = 'rgba(255,90,99,.14)'; ctx.fillRect(xFromDb(-1),0,w-xFromDb(-1),h);
+  }
+
   function drawHBar(canvas, valueL, valueR, ref, mode){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
-    const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
+    const ctx = canvas.getContext('2d');
     function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) }
-    ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
+    // matt bakgrund
+    ctx.clearRect(0,0,w,h);
+    if(mode==='tp') drawHBackground(canvas,'tp'); else { ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h); }
     const refX=xFromDb(ref);
+    // färger, matt som standard
     const colorFor = (v)=>{
       if(mode==='tp'){
         if(v>=-1) return getCss('--hot');
@@ -448,8 +481,9 @@
       }
       return getCss('--ok');
     };
-    ctx.fillStyle=colorFor(valueL); ctx.fillRect(0,h*0.35,xFromDb(valueL),h*0.12);
-    ctx.fillStyle=colorFor(valueR); ctx.fillRect(0,h*0.55,xFromDb(valueR),h*0.12);
+    ctx.globalAlpha=.8; ctx.fillStyle=colorFor(valueL); ctx.fillRect(0,h*0.35,xFromDb(valueL),h*0.12);
+    ctx.globalAlpha=.8; ctx.fillStyle=colorFor(valueR); ctx.fillRect(0,h*0.55,xFromDb(valueR),h*0.12);
+    ctx.globalAlpha=1;
     // ref-linje
     ctx.fillStyle=(mode==='tp'? getCss('--hot') : '#ffd15b'); ctx.fillRect(refX,0,2,h);
     // 0 dBFS linje till höger
@@ -464,12 +498,12 @@
     const now=performance.now(); const dt=Math.max(0.001,(now-lastTsDB)/1000); lastTsDB=now; const tau=.3, a=1-Math.exp(-dt/tau);
     rmsHoldL += a*(rmsL - rmsHoldL); rmsHoldR += a*(rmsR - rmsHoldR);
     const dBL = 20*Math.log10(rmsHoldL+1e-12); const dBR = 20*Math.log10(rmsHoldR+1e-12);
-    dbL.textContent = dBL.toFixed(1)+' dBFS'; dbR.textContent = dBR.toFixed(1)+' dBFS';
+    document.getElementById('dbfsLabel').innerHTML = `L: <b>${dBL.toFixed(1)}</b> · R: <b>${dBR.toFixed(1)}</b> dBFS`;
     drawHBar(dbfs, dBL, dBR, -18, 'dbfs');
   }
   layoutDBFSScale(dbfsScale);
 
-  // ------- True Peak (4×) -------
+  // ------- True Peak (4×) med lugnare visning -------
   function hermite(p0,p1,p2,p3,t){ const a= (-0.5*p0)+(1.5*p1)+(-1.5*p2)+(0.5*p3); const b=(p0*(-1))+ (2.5*p1)+(-2*p2)+ (0.5*p3); const c=(-0.5*p0)+(0.5*p2); const d=p1; return ((a*t+b)*t+c)*t+d; }
   function truePeakDb(buf){
     let maxAbs=0; const n=buf.length; for(let i=1;i<n-2;i++){
@@ -481,16 +515,20 @@
     }
     return 20*Math.log10(maxAbs + 1e-9);
   }
+  let tpSmoothL=-60, tpSmoothR=-60; // lugnare display
   function drawTruePeak(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    const tpDbL = Math.min(0, truePeakDb(bufL));
-    const tpDbR = Math.min(0, truePeakDb(bufR));
-    tpL.textContent = tpDbL.toFixed(1)+' dBTP'; tpR.textContent = tpDbR.toFixed(1)+' dBTP';
-    drawHBar(tp, tpDbL, tpDbR, -1, 'tp');
+    const rawL = Math.min(0, truePeakDb(bufL));
+    const rawR = Math.min(0, truePeakDb(bufR));
+    const a = 0.25; // display-smoothing
+    tpSmoothL = tpSmoothL + a*(rawL - tpSmoothL);
+    tpSmoothR = tpSmoothR + a*(rawR - tpSmoothR);
+    document.getElementById('tpLabel').innerHTML = `L: <b>${tpSmoothL.toFixed(1)}</b> · R: <b>${tpSmoothR.toFixed(1)}</b> dBTP`;
+    drawHBar(tp, tpSmoothL, tpSmoothR, -1, 'tp');
   }
   layoutTPScale(tpScale);
 
-  // ------- R128 (approx) – blockenergi + gating -------
+  // ------- R128 (approx) – blockenergi + gating (lugnare UI) -------
   const frameDur = kAnL.fftSize / ac.sampleRate; // ≈ 42.7 ms @ 48 kHz
   const mLen = Math.max(1, Math.round(0.4 / frameDur));   // 400 ms
   const sLen = Math.max(1, Math.round(3.0 / frameDur));   // 3 s
@@ -507,6 +545,7 @@
   }
   function lufsFromEnergy(e){ return 10*Math.log10(e + 1e-12); }
 
+  let lastText=0;
   function updateR128(){
     const e = energyFromK(); mQ.push(e); sQ.push(e);
     if(mQ.length>mLen) mQ.shift(); if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/3)) stHistory.shift(); }
@@ -524,10 +563,21 @@
     let LRA='—';
     if(stVals.length>5){ const sorted=[...stVals].sort((a,b)=>a-b); const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)]; LRA=(p95-p10).toFixed(1)+' LU'; }
 
-    lufsM.textContent = isFinite(mLUFS)? mLUFS.toFixed(1)+' LUFS' : '—';
-    lufsS.textContent = isFinite(sLUFS)? sLUFS.toFixed(1)+' LUFS' : '—';
-    lufsI.textContent = (isFinite(iLUFS) ? iLUFS.toFixed(1)+' LUFS' : '—') + '  (mål −23)';
-    lraEl.textContent = LRA;
+    // Throttlad, lugn textuppdatering (10 Hz → 100 ms) + mild smoothing
+    const now = performance.now();
+    if(now - lastText > 100){
+      const a=0.35; // smoothing för visning, inte för mätningen
+      const prevM=parseFloat(lufsM.dataset.v||'-999'); const prevS=parseFloat(lufsS.dataset.v||'-999'); const prevI=parseFloat(lufsI.dataset.v||'-999');
+      const mDisp = isFinite(prevM)? prevM + a*(mLUFS-prevM) : mLUFS;
+      const sDisp = isFinite(prevS)? prevS + a*(sLUFS-prevS) : sLUFS;
+      const iDisp = isFinite(prevI)? prevI + a*(iLUFS-prevI) : iLUFS;
+      lufsM.dataset.v = mDisp; lufsS.dataset.v = sDisp; lufsI.dataset.v = iDisp;
+      lufsM.textContent = isFinite(mDisp)? mDisp.toFixed(1)+' LUFS' : '—';
+      lufsS.textContent = isFinite(sDisp)? sDisp.toFixed(1)+' LUFS' : '—';
+      lufsI.textContent = (isFinite(iDisp) ? iDisp.toFixed(1)+' LUFS' : '—') + '  (mål −23)';
+      lraEl.textContent = LRA;
+      lastText = now;
+    }
   }
 
   // ------- Capture (system/chrome) -------
@@ -614,7 +664,7 @@
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
   // ------- Loop -------
-  let startTs=performance.now(); let leftMuteTimer=0; let lastTsDB=performance.now();
+  let startTs=performance.now(); let leftMuteTimer=0;
   function loop(){
     if (muteLeft.checked && leftGain){ leftMuteTimer += 16.7; const period=1500, win=500; const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0; if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) } }
     layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
