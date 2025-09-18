@@ -35,11 +35,9 @@
     code.small{font-size:12px;color:var(--muted)}
 
     /* Visning: bred huvudkolumn + smal kolumn, all scroll INUTI denna rutan */
-    .meters{display:grid;grid-template-columns:minmax(360px,1fr) 260px;grid-template-rows:2fr 1fr 1fr;grid-template-areas:
-      'xy xy'
-      'vu dbfs'
-      'r128 tp';
-      height:100%;gap:12px;min-height:0;overflow:hidden}
+    .meters{display:grid;grid-template-columns:3fr 1fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
+    .stack-left{display:grid;grid-template-rows:2fr 1fr 1fr;gap:12px;min-height:0}
+    .stack-right{display:grid;grid-template-rows:2fr 1fr;gap:12px;min-height:0}
     .meter{background:#111416;border:1px solid var(--outline);border-radius:12px;padding:10px;position:relative;min-height:0;display:flex;flex-direction:column}
     .meter header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
@@ -55,9 +53,10 @@
     .corrWrap{position:relative;width:220px;height:100%}
 
     /* VU (Nordic) */
-    .vu{position:relative;height:150px;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
-    .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,var(--ok),#2da6ff);height:0;opacity:.85}
-    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,#ffd15b);opacity:.85}
+    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
+    .vu::before{content:"";position:absolute;left:6%;right:6%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
+    .bar{position:absolute;bottom:8px;width:42%;left:6%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--ok) 0 8px, transparent 8px 12px)}
+    .bar.r{left:auto;right:6%;background:repeating-linear-gradient(to top, var(--caution) 0 8px, transparent 8px 12px)}
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
@@ -91,12 +90,7 @@
     .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
       .corrWrap>canvas{position:absolute;inset:0;width:100%;height:100%}
     
-      #xyCard{grid-area:xy}
-    #vuCard{grid-area:vu}
-    #dbfsCard{grid-area:dbfs}
-    #r128{grid-area:r128;align-self:stretch}
-    #tpCard{grid-area:tp;align-self:stretch}
-  #xyCard{grid-column:1 / span 2}
+      
   </style>
 </head>
 <body>
@@ -188,51 +182,50 @@
   <section class="card visning">
     <h2>Meters</h2>
     <div class="meters" id="meters">
-      <!-- Rad 1: XY + Korrelation i samma kort -->
-      <div class="meter" id="xyCard">
-        <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
-        <div class="xyGrid">
-          <div class="xySquare" id="xyWrap"><canvas id="xy"></canvas></div>
-          <div class="corrWrap"><canvas id="corr"></canvas><div class="overlay">ρ = <b id="corrVal">0.00</b></div></div>
+      <div class="stack-left">
+        <div class="meter" id="xyCard">
+          <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
+          <div class="xyGrid">
+            <div class="xySquare" id="xyWrap"><canvas id="xy"></canvas></div>
+            <div class="corrWrap"><canvas id="corr"></canvas><div class="overlay">ρ = <b id="corrVal">0.00</b></div></div>
+          </div>
+        </div>
+        <div class="meter" id="dbfsCard">
+          <header><label>dBFS (RMS)</label><span class="badge">Ref −18 dBFS (TEST)</span></header>
+          <div class="hMeter">
+            <canvas id="dbfs" height="160"></canvas>
+            <div class="hScale" id="dbfsScale"></div>
+            <span class="hLabel" id="dbfsLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b></span>
+          </div>
+        </div>
+        <div class="meter" id="tpCard">
+          <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · Ref −1 dBTP</span></header>
+          <div class="hMeter">
+            <canvas id="tp" height="160"></canvas>
+            <div class="hScale" id="tpScale"></div>
+            <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b></span>
+          </div>
         </div>
       </div>
-
-      <!-- Rad 2: VU + dBFS -->
-      <div class="meter" id="vuCard">
-        <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
-        <div class="vu">
-          <div class="bar l" id="barL"></div>
-          <div class="bar r" id="barR"></div>
-          <div class="ticks" id="ticks"></div>
-          <div class="testline" id="vuTest"></div>
-          <div class="testlabel" id="vuTestLabel">TEST −18 dBFS (0 VU)</div>
+      <div class="stack-right">
+        <div class="meter" id="vuCard">
+          <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
+          <div class="vu">
+            <div class="bar l" id="barL"></div>
+            <div class="bar r" id="barR"></div>
+            <div class="ticks" id="ticks"></div>
+            <div class="testline" id="vuTest"></div>
+            <div class="testlabel" id="vuTestLabel">TEST −18 dBFS (0 VU)</div>
+          </div>
         </div>
-      </div>
-      <div class="meter" id="dbfsCard">
-        <header><label>dBFS (RMS)</label><span class="badge">Ref −18 dBFS (TEST)</span></header>
-        <div class="hMeter">
-          <canvas id="dbfs" height="160"></canvas>
-          <div class="hScale" id="dbfsScale"></div>
-          <span class="hLabel" id="dbfsLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b></span>
-        </div>
-      </div>
-
-      <!-- Rad 3: True Peak + R128 -->
-      <div class="meter" id="tpCard">
-        <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · Ref −1 dBTP</span></header>
-        <div class="hMeter">
-          <canvas id="tp" height="160"></canvas>
-          <div class="hScale" id="tpScale"></div>
-          <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b></span>
-        </div>
-      </div>
-      <div class="meter" id="r128">
-        <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA</span></header>
-        <div class="r128">
-          <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
-          <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
-          <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
-          <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
+        <div class="meter" id="r128">
+          <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA</span></header>
+          <div class="r128">
+            <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
+            <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
+            <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
+            <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
+          </div>
         </div>
       </div>
     </div>
@@ -385,11 +378,47 @@
 
   // ------- dBFS (RMS) -------
   const dbfsMarks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
-  function layoutDBFSScale(el){ el.innerHTML=''; dbfsMarks.forEach(m=>{ const x = ((m+60)/60)*100; const t=document.createElement('div'); t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='20%'; t.style.height='60%'; t.style.width='2px'; t.style.background='#2a3642'; el.appendChild(t); const lab=document.createElement('div'); lab.textContent=m + (m===-18?' dBFS (TEST)':' dBFS'); lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab); if(m===-18){ const ref=document.createElement('div'); ref.style.position='absolute'; ref.style.left=`calc(${x}% - 1px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='2px'; ref.style.background='#ffd15b'; el.appendChild(ref); }}); }
+  function layoutDBFSScale(el){
+    el.innerHTML='';
+    dbfsMarks.forEach(m=>{
+      const x = ((m+60)/60)*100;
+      const t=document.createElement('div');
+      t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='20%'; t.style.height='60%'; t.style.width='1px'; t.style.background='#2a3642';
+      el.appendChild(t);
+      const lab=document.createElement('div');
+      lab.textContent=m + ' dBFS';
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
+      el.appendChild(lab);
+    });
+    // single thin TEST line at -18 dBFS in theme cyan
+    const x = ((-18+60)/60)*100;
+    const ref=document.createElement('div');
+    ref.style.position='absolute'; ref.style.left=`calc(${x}% - 0.5px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='1px'; ref.style.background=getCss('--cyan'); ref.style.opacity='0.9';
+    el.appendChild(ref);
+    const tag=document.createElement('div'); tag.textContent='TEST −18 dBFS'; tag.style.position='absolute'; tag.style.left=`calc(${x}% + 6px)`; tag.style.top='6px'; tag.style.fontSize='10px'; tag.style.color=getCss('--cyan'); el.appendChild(tag);
+  }
 
   function layoutTPScale(el){ el.innerHTML=''; dbfsMarks.forEach(m=>{ const x = ((m+60)/60)*100; const t=document.createElement('div'); t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='18%'; t.style.height='64%'; t.style.width='2px'; t.style.background='#2a3642'; el.appendChild(t); const lab=document.createElement('div'); lab.textContent = m + ' dBFS'; lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='6px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab); }); const marks=[{v:-6,c:'var(--warn)',w:2,label:'−6 dBTP'},{v:-3,c:'var(--caution)',w:2,label:'−3 dBTP'},{v:-1,c:'var(--hot)',w:3,label:'−1 dBTP'}]; for(const mk of marks){ const x=((mk.v+60)/60)*100; const line=document.createElement('div'); line.style.position='absolute'; line.style.left=`calc(${x}% - ${mk.w/2}px)`; line.style.top='0'; line.style.height='100%'; line.style.width=`${mk.w}px`; line.style.background=`var(--outline)`; el.appendChild(line); const col=document.createElement('div'); col.style.position='absolute'; col.style.left=`calc(${x}% - ${mk.w/2}px)`; col.style.top='0'; col.style.height='100%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.9'; el.appendChild(col); const tag=document.createElement('div'); tag.textContent=mk.label; tag.style.position='absolute'; tag.style.left=`calc(${x}% + 4px)`; tag.style.bottom='6px'; tag.style.fontSize='10px'; tag.style.color='#cfe1ff'; el.appendChild(tag); } }
 
-  function drawHBar_DBFS(canvas, valueL, valueR, ref){ const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h } const ctx = canvas.getContext('2d'); function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) } ctx.clearRect(0,0,w,h); ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h); const refX=xFromDb(ref); ctx.globalAlpha=.9; ctx.fillStyle=getCss('--ok'); ctx.fillRect(0,h*0.35,xFromDb(valueL),h*0.12); ctx.fillRect(0,h*0.55,xFromDb(valueR),h*0.12); ctx.globalAlpha=1; ctx.fillStyle='#ffd15b'; ctx.fillRect(refX,0,2,h); ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); }
+  function drawHBar_DBFS(canvas, valueL, valueR){
+    const dpr=window.devicePixelRatio||1;
+    const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
+    const ctx = canvas.getContext('2d');
+    function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) }
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
+    const step=1;
+    function drawChannel(yTop, val){
+      // base – dim segments
+      for(let d=-60; d<0; d+=step){ const x0=xFromDb(d), x1=xFromDb(d+step); ctx.globalAlpha=.14; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      // lit up to value
+      const tEnd = Math.min(0, val);
+      for(let d=-60; d<tEnd; d+=step){ const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd)); ctx.globalAlpha=.9; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+    }
+    drawChannel(h*0.35, valueL); drawChannel(h*0.55, valueR);
+    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBFS fence
+  }
 
   // TRUE PEAK – LED-style bars (no coloured background)
   function drawDiodeBar_TP(canvas, valueL, valueR){ const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height); if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h } const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h); ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h); const step=1; const xFromDb = db => Math.round((Math.max(-60,Math.min(0,db))+60)/60*w); function segColor(db){ if(db>=-1) return getCss('--hot'); if(db>=-3) return getCss('--caution'); if(db>=-6) return getCss('--warn'); return getCss('--ok'); } function drawChannel(yTop, val){ // base – dim all segments using their zone colour
