@@ -3,23 +3,33 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>TSG – Källor (vänster) + Visning (höger) · Generator hörs, System tyst tills monitor ON</title>
+  <title>TSG – Mätmoduler i RTW-stil · Generator hörs, System tyst tills monitor ON</title>
   <style>
     :root{
-      --bg:#0b0f1a; --panel:#0f1624; --ink:#e8eef9; --muted:#98a6c7; --acc:#6aa6ff; --grid:#1d2a46;
-      --ok:#7ee787; --warn:#ffb86b; --err:#ff6b6b;
+      /* RTW-lik palett */
+      --bg:#141618;            /* mörk bakgrund */
+      --panel:#1b1f23;         /* paneler */
+      --ink:#e8eef9;           /* text */
+      --muted:#a9b2c7;         /* sekundär text */
+      --outline:#2a2f36;       /* ramar */
+      --grid:#29323b;          /* graticule */
+
+      --ok:#58d38c;            /* grönt */
+      --caution:#ffd15b;       /* gult */
+      --hot:#ff5a63;           /* rött */
+      --cyan:#69bfff;          /* cyan för scope */
+
       --btn:#2d6bff;           /* normal blå */
       --btn-dark:#1e4edd;      /* mörkare blå (aktiv/unmuted) */
       --btn-ghost:#0b1222;     /* ghost/muted bakgrund */
-      --outline:#1a2641;
     }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
-    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(11,15,26,.95),rgba(11,15,26,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid #17223a}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
 
-    /* Grid: vänster = 2 käll-rutor + extra halv-hög huvudruta under; höger = visning som spänner 2 översta raderna */
-    .wrap{padding:16px 20px;display:grid;gap:16px;grid-template-columns: 360px 1fr;grid-template-rows: 1fr 1fr auto; height:calc(100vh - 56px)}
+    /* Grid: vänster = tre huvudrutor i 50/25/25; höger = visning spänner de två översta raderna */
+    .wrap{box-sizing:border-box;padding:20px;display:grid;gap:16px;grid-template-columns: 360px 1fr;grid-template-rows: 2fr 1fr 1fr; height:calc(100dvh - 56px)}
     .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0;overflow:auto}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
 
@@ -37,39 +47,53 @@
     label{font-size:12px;color:var(--muted)}
     code.small{font-size:12px;color:var(--muted)}
 
-    /* Visningens meters – kolumn 1 stor, kolumn 2 smal (för korrelation m.m.) */
-    .meters{display:grid;grid-template-columns:minmax(340px,1fr) 220px;grid-auto-rows:auto;gap:12px;min-height:0;overflow:auto}
-    .meter{background:#0b1222;border:1px solid #1a2745;border-radius:12px;padding:10px;position:relative;min-height:0}
+    /* Visning: bred huvudkolumn + smal korrelations-/textkolumn */
+    .meters{display:grid;grid-template-columns:minmax(360px,1fr) 260px;grid-auto-rows:auto;gap:12px;min-height:0;overflow:auto}
+    .meter{background:#111416;border:1px solid var(--outline);border-radius:12px;padding:10px;position:relative;min-height:0}
     .meter header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-    .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid #2a3a5f;background:#0b1222;color:#cfe1ff}
+    .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
     .tiny{opacity:.85;font-size:12px}
 
     /* Canvas standardhöjder (utom goniometer som är exakt kvadrat) */
-    canvas{display:block;width:100%;height:160px;background: radial-gradient(1200px 1200px at 50% 50%, #0b1020, #0b0f1a);border-radius:10px;border:1px solid #1a2745}
+    canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
-    /* Exakt kvadratisk goniometer */
+    /* Goniometer (exakt kvadrat) */
     .xySquare{position:relative;width:100%}
     .xySquare>canvas{position:absolute;inset:0;width:100%;height:100%}
-    .monoLine{position:absolute;left:50%;top:0;bottom:0;width:1px;background:#1f355f;pointer-events:none}
 
-    /* VU staplar */
-    .vu{position:relative;height:150px;background:#0a1020;border:1px solid #1a2745;border-radius:12px;overflow:hidden}
-    .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,#1c7fff,#7ee787);height:0}
-    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#c24bff,#ffb86b)}
+    /* VU: dubbelskala på båda sidor */
+    .vu{position:relative;height:150px;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
+    .bar{position:absolute;bottom:0;width:42%;left:6%;background:linear-gradient(0deg,var(--ok),#2da6ff);height:0}
+    .bar.r{left:auto;right:6%;background:linear-gradient(0deg,#ff9a2d,var(--caution))}
     .ticks{position:absolute;inset:0;pointer-events:none}
-    .tick{position:absolute;left:0;right:0;height:1px;background:#1b2a4a;opacity:.8}
-    .tick::after{content:attr(data-db) " dB";position:absolute;right:6px;top:-7px;font-size:10px;color:#6a7aa6}
+    .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
+    .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
+    .tick::before{content:attr(data-lab);position:absolute;left:6px;top:-7px;font-size:10px;color:#88a3bf}
+
+    /* Horisontella stapel-metrar (dBFS/True Peak) */
+    .hMeter{position:relative;height:160px}
+    .hScale{position:absolute;inset:0;pointer-events:none}
+    .hLabel{position:absolute;top:4px;right:8px;font-size:11px;color:#cfe1ff}
+
+    /* Korrelation overlay-label i hörnet */
+    .overlay{position:absolute;right:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36}
+
+    /* R128 – panel med siffror */
+    .r128{display:grid;grid-template-columns:1fr;gap:8px}
+    .r128 .row{justify-content:space-between}
+    .r128 .big{font-size:28px;font-weight:800}
+    .r128 small{color:#a9b2c7}
 
     .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
-    .kv div{background:#0b1222;border:1px solid #1a2745;border-radius:9px;padding:6px 8px}
+    .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
     .kv small{display:block;font-size:11px;color:var(--muted)}
   </style>
 </head>
 <body>
-<header><h1>TSG – Källor & Visning · Generator hörs (ON), System monitor OFF tills du säger till</h1></header>
+<header><h1>TSG – Källor & Visning (RTW-stil) · Generator hörs (ON), System monitor OFF tills du säger till</h1></header>
 
 <div id="wrap" class="wrap">
-  <!-- Vänster kolumn: System/chrome överst, Generator underst (lika stora) -->
+  <!-- Vänster kolumn: 50% System/chrome, 25% Generator, 25% Status -->
   <section class="card leftTop">
     <h2>System-/Chrome-flik</h2>
     <div class="row">
@@ -98,7 +122,7 @@
     <div class="row" style="align-items:center">
       <button id="btnTone">Starta/Stoppa ton</button>
       <label><input type="checkbox" id="muteLeft"> Muta vänster 0,5 s var 1,5 s</label>
-      <span class="badge">440 Hz · ~-18 dBFS</span>
+      <span class="badge">440 Hz · ~−18 dBFS</span>
     </div>
     <div class="row" style="margin-top:6px;align-items:center">
       <label>Generator-monitor:</label>
@@ -109,7 +133,6 @@
     </div>
   </section>
 
-  <!-- Ny huvudruta (halv höjd, lika bred som käll-rutorna) med uptime & live-data -->
   <section class="card leftFooter">
     <h2>Status & Live-data</h2>
     <div class="kv">
@@ -124,23 +147,20 @@
   <section class="card visning">
     <h2>Visning</h2>
     <div class="meters" id="meters">
-      <!-- Rad 1: Goniometer vänster (stor, exakt kvadrat), Korrelation höger (liten ruta) -->
+      <!-- Rad 1: Goniometer + Korrelation -->
       <div class="meter">
-        <header><label>Goniometer (XY)</label><span class="badge">RTW: mono = 45°</span></header>
-        <div class="xySquare" id="xyWrap">
-          <div class="monoLine"></div>
-          <canvas id="xy"></canvas>
-        </div>
+        <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
+        <div class="xySquare" id="xyWrap"><canvas id="xy"></canvas></div>
       </div>
-      <div class="meter" id="corrCard">
-        <header><label>Correlation</label><span class="badge">−1 … +1</span></header>
+      <div class="meter" id="corrCard" style="position:relative">
+        <header><label>Korrelation</label><span class="badge">−1 … +1</span></header>
         <canvas id="corr" height="220"></canvas>
-        <p class="tiny">ρ = <span id="corrVal">0.00</span></p>
+        <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
       </div>
 
-      <!-- Rad 2: VU och Peak -->
+      <!-- Rad 2: VU + dBFS -->
       <div class="meter">
-        <header><label>VU (0 ≈ −18 dBFS)</label><span class="badge">EBU-lik release</span></header>
+        <header><label>VU (0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
         <div class="vu">
           <div class="bar l" id="barL"></div>
           <div class="bar r" id="barR"></div>
@@ -148,8 +168,31 @@
         </div>
       </div>
       <div class="meter">
-        <header><label>Peak hold</label><span class="badge">1 s hold</span></header>
-        <canvas id="peak" height="160"></canvas>
+        <header><label>dBFS (RMS)</label><span class="badge">Ref −18 dBFS (TEST)</span></header>
+        <div class="hMeter">
+          <canvas id="dbfs" height="160"></canvas>
+          <div class="hScale" id="dbfsScale"></div>
+          <span class="hLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b></span>
+        </div>
+      </div>
+
+      <!-- Rad 3: True Peak + R128 -->
+      <div class="meter">
+        <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · Ref −1 dBTP</span></header>
+        <div class="hMeter">
+          <canvas id="tp" height="160"></canvas>
+          <div class="hScale" id="tpScale"></div>
+          <span class="hLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b></span>
+        </div>
+      </div>
+      <div class="meter" id="r128">
+        <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA · Target −23 LUFS</span></header>
+        <div class="r128">
+          <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
+          <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
+          <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
+          <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
+        </div>
       </div>
     </div>
   </section>
@@ -161,6 +204,20 @@
   const wrap = document.getElementById('wrap');
   const meters = document.getElementById('meters');
   const xyWrap = document.getElementById('xyWrap');
+  const xy = document.getElementById('xy'), xyCtx = xy.getContext('2d');
+  const corr = document.getElementById('corr'), corrCtx = corr.getContext('2d');
+  const corrVal = document.getElementById('corrVal');
+
+  const dbfs = document.getElementById('dbfs'), dbfsScale = document.getElementById('dbfsScale');
+  const dbL = document.getElementById('dbL'), dbR = document.getElementById('dbR');
+  const tp = document.getElementById('tp'), tpScale = document.getElementById('tpScale');
+  const tpL = document.getElementById('tpL'), tpR = document.getElementById('tpR');
+
+  const lufsM = document.getElementById('lufsM');
+  const lufsS = document.getElementById('lufsS');
+  const lufsI = document.getElementById('lufsI');
+  const lraEl = document.getElementById('lra');
+
   const btnTab  = document.getElementById('btnTab');
   const btnStop = document.getElementById('btnStop');
   const btnTone = document.getElementById('btnTone');
@@ -182,40 +239,34 @@
     stOK: document.getElementById('stOK')
   };
 
-  const xy = document.getElementById('xy'),    xyCtx   = xy.getContext('2d');
-  const corr = document.getElementById('corr'), corrCtx = corr.getContext('2d');
-  const peak = document.getElementById('peak'), peakCtx = peak.getContext('2d');
   const barL = document.getElementById('barL'), barR = document.getElementById('barR');
   const ticks = document.getElementById('ticks');
-  const corrVal = document.getElementById('corrVal');
-
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
   const uptimeEl = document.getElementById('uptime');
 
-  // ------- Layout helpers -------
+  // ------- Layout -------
   function sizeWrap(){
     const headerH = document.querySelector('header').offsetHeight;
-    wrap.style.height = `calc(100vh - ${headerH}px)`;
+    wrap.style.height = `calc(100dvh - ${headerH}px)`;
   }
   sizeWrap(); window.addEventListener('resize', sizeWrap);
 
-  // Dynamisk goniometer: exakt kvadrat, fyll kolumnens bredd
   function layoutXY(){
     const dpr = window.devicePixelRatio || 1;
-    const side = Math.max(240, xyWrap.clientWidth);
+    const side = Math.max(260, xyWrap.clientWidth);
     xyWrap.style.height = side + 'px';
-    xy.width  = Math.floor(side * dpr);
-    xy.height = Math.floor(side * dpr);
+    const w = Math.floor(side*dpr), h = Math.floor(side*dpr);
+    if(xy.width!==w||xy.height!==h){ xy.width=w; xy.height=h; }
   }
 
-  // ------- Audio graph (central analys-mix) -------
+  // ------- Audio graph -------
   const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
   ctxState && (ctxState.textContent = ac.state);
   ac.onstatechange = () => { if(ctxState) ctxState.textContent = ac.state };
 
-  // mix-buss per kanal för analys
+  // Analysbuss L/R
   const mixL = ac.createGain(); mixL.gain.value = 1;
   const mixR = ac.createGain(); mixR.gain.value = 1;
   const analyserL = ac.createAnalyser(); analyserL.fftSize = 2048;
@@ -229,62 +280,71 @@
     node.connect(split);
     split.connect(mixL,0);
     split.connect(mixR,1);
+    // K-väg för R128 (här approx med biquad-kedja)
+    split.connect(kHP_L,0);
+    split.connect(kHP_R,1);
     return split;
   }
 
-  // ------- VU helpers -------
+  // ------- VU (300 ms) -------
   function buildTicks(){
     ticks.innerHTML='';
-    const marks = [-24,-18,-12,-6,0];
-    for(const db of marks){
-      const y = (1 - (db+48)/48) * 100;
+    const vuMarks = [-20,-10,-5,0,3,6];
+    for(const vu of vuMarks){
+      const y = (1 - (vu + 20) / 26) * 100;
       const d = document.createElement('div');
-      d.className='tick'; d.dataset.db = db; d.style.top = `calc(${y}% - 1px)`; ticks.appendChild(d);
+      d.className='tick'; d.dataset.lab = `${vu>0?"+"+vu:vu} VU`;
+      d.style.top = `calc(${y}% - 1px)`; ticks.appendChild(d);
     }
   }
   buildTicks();
 
-  function dbfs(buf){
-    let s=0; for(let i=0;i<buf.length;i++){ const v=buf[i]; s+=v*v }
-    const rms = Math.sqrt(s/Math.max(1,buf.length));
-    let db = 20*Math.log10(rms + 1e-12);
-    if(!isFinite(db)) db = -120;
-    return Math.max(-48, Math.min(0, db + 18));
-  }
+  let vuRmsL = 0, vuRmsR = 0, lastTsVU = performance.now();
+  function updateVU(){
+    const now = performance.now();
+    const dt = Math.max(0.001, (now - lastTsVU)/1000); lastTsVU = now;
+    const tau = 0.3, alpha = 1 - Math.exp(-dt/tau);
 
-  // ------- Ritningar -------
-  function drawVU(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    const dl = dbfs(bufL), dr = dbfs(bufR);
-    const atk=.5, rel=.012;
-    holdL = dl>holdL ? holdL + atk*(dl-holdL) : holdL + rel*(dl-holdL);
-    holdR = dr>holdR ? holdR + atk*(dr-holdR) : holdR + rel*(dr-holdR);
-    barL.style.height = `${Math.max(0, Math.min(100,(holdL+48)/48*100))}%`;
-    barR.style.height = `${Math.max(0, Math.min(100,(holdR+48)/48*100))}%`;
-  }
-  let holdL=-48, holdR=-48;
+    let sL=0,sR=0; for(let i=0;i<bufL.length;i++){ sL+=bufL[i]*bufL[i]; sR+=bufR[i]*bufR[i] }
+    const rmsL = Math.sqrt(sL/bufL.length), rmsR = Math.sqrt(sR/bufR.length);
+    vuRmsL += alpha*(rmsL - vuRmsL); vuRmsR += alpha*(rmsR - vuRmsR);
 
+    const dBfsL = 20*Math.log10(vuRmsL + 1e-12);
+    const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
+    const vuL = Math.max(-20, Math.min(6, dBfsL + 18));
+    const vuR = Math.max(-20, Math.min(6, dBfsR + 18));
+    const pct = (v) => (v + 20) / 26 * 100;
+    barL.style.height = `${pct(vuL)}%`; barR.style.height = `${pct(vuR)}%`;
+  }
+
+  // ------- Goniometer (vectorscope 45° mono) -------
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
-    xyCtx.clearRect(0,0,w,h);
-    // Axes + 45° guides (RTW-känsla)
-    xyCtx.strokeStyle = '#1c2b4c'; xyCtx.lineWidth = 1;
-    xyCtx.beginPath();
-    xyCtx.moveTo(w/2,0); xyCtx.lineTo(w/2,h); // vertikal
-    xyCtx.moveTo(0,h/2); xyCtx.lineTo(w,h/2); // horisontell
-    xyCtx.moveTo(0,h);   xyCtx.lineTo(w,0);   // 45°
-    xyCtx.moveTo(0,0);   xyCtx.lineTo(w,h);   // -45°
-    xyCtx.stroke();
+    // mjuk persistence
+    const fade = 0.12; // högre = snabbare fade
+    const bg = `rgba(13,15,17,${fade})`;
+    xyCtx.fillStyle = bg; xyCtx.fillRect(0,0,w,h);
 
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const n=Math.min(bufL.length,bufR.length);
-    xyCtx.globalCompositeOperation='lighter';
-    const dpr = window.devicePixelRatio||1; const px = Math.max(1, Math.floor(1.5*dpr));
-    xyCtx.fillStyle='rgba(122,199,255,.95)';
-    for(let i=0;i<n;i+=1){ const x=(bufL[i]*.5+.5)*w, y=(1-(bufR[i]*.5+.5))*h; xyCtx.fillRect(x,y,px,px) }
+    xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.95)';
+    const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
+    for(let i=0;i<n;i++){
+      const x=(bufL[i]*.5+.5)*w; const y=(1-(bufR[i]*.5+.5))*h; xyCtx.fillRect(x,y,px,px);
+    }
     xyCtx.globalCompositeOperation='source-over';
+
+    xyCtx.strokeStyle = '#3a4855'; xyCtx.lineWidth = 1;
+    xyCtx.beginPath();
+    xyCtx.moveTo(w/2,0); xyCtx.lineTo(w/2,h);
+    xyCtx.moveTo(0,h/2); xyCtx.lineTo(w,h/2);
+    xyCtx.moveTo(0,h); xyCtx.lineTo(w,0);  // +45° mono
+    xyCtx.moveTo(0,0); xyCtx.lineTo(w,h);  // -45°
+    xyCtx.stroke();
   }
 
+  // ------- Korrelationsmätare (−1..+1) -------
   function corrNow(l,r){
     let n=Math.min(l.length,r.length), sL=0,sR=0; for(let i=0;i<n;i++){ sL+=l[i]; sR+=r[i] }
     const mL=sL/n, mR=sR/n; let num=0,dL=0,dR=0; for(let i=0;i<n;i++){ const L=l[i]-mL, R=r[i]-mR; num+=L*R; dL+=L*L; dR+=R*R }
@@ -296,81 +356,148 @@
     const c = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
     corrHold = c>corrHold ? corrHold + corrUp*(c-corrHold) : corrHold + corrDn*(c-corrHold);
 
-    const dpr = window.devicePixelRatio||1;
-    const w = Math.floor(corr.clientWidth * dpr);
-    const h = Math.floor(220 * dpr);
+    const dpr = window.devicePixelRatio||1; const w=Math.floor(corr.clientWidth*dpr), h=Math.floor(220*dpr);
     if(corr.width!==w||corr.height!==h){ corr.width=w; corr.height=h }
     corrCtx.clearRect(0,0,w,h);
 
-    // Skala: -1 (botten) → +1 (toppen)
     const yFromV = v => Math.round((1 - (v+1)/2) * (h-1));
-
-    // Bakgrundsram
-    corrCtx.strokeStyle='#1c2b4c';
-    corrCtx.strokeRect(Math.floor(w*0.35), 4, Math.floor(w*0.30), h-8);
-
-    // Tickmarks
-    corrCtx.fillStyle='#6a7aa6';
-    const ticksV = [-1,-0.5,0,+0.5,+1];
-    for(const tv of ticksV){
-      const y = yFromV(tv);
-      corrCtx.fillRect(Math.floor(w*0.35)-6, y, 6, 1);
-      corrCtx.fillRect(Math.floor(w*0.65), y, 6, 1);
-      // små etiketter till höger
-      corrCtx.font = `${Math.max(10,12*dpr)}px ui-sans-serif`;
-      corrCtx.textBaseline='middle'; corrCtx.textAlign='left';
-      corrCtx.fillText(tv.toString(), Math.floor(w*0.65)+8, y);
-    }
-
-    // Färg per zon
-    const col = (corrHold<-0.2)?'#ff6b6b':(corrHold>0.9?'#7ee787':'#ffb86b');
-
-    // Fylld stapel upp/från mitten? RTW brukar visa indikator; här gör vi en stapel med markör
-    const y = yFromV(corrHold);
-    corrCtx.fillStyle=col;
-    corrCtx.fillRect(Math.floor(w*0.35)+2, y, Math.floor(w*0.30)-4, 4);
-
-    // Center-linje (0)
-    const y0 = yFromV(0);
-    corrCtx.fillStyle='#2a3a5f';
-    corrCtx.fillRect(Math.floor(w*0.35)+1, y0, Math.floor(w*0.30)-2, 1);
-
+    corrCtx.strokeStyle='#3a4855'; corrCtx.strokeRect(Math.floor(w*0.35), 4, Math.floor(w*0.30), h-8);
+    corrCtx.fillStyle='#88a3bf';
+    const ticksV = [-1,-0.5,0,0.5,1];
+    for(const tv of ticksV){ const y=yFromV(tv); corrCtx.fillRect(Math.floor(w*0.35)-6,y,6,1); corrCtx.fillRect(Math.floor(w*0.65),y,6,1); corrCtx.font=`${Math.max(10,12*dpr)}px ui-sans-serif`; corrCtx.textBaseline='middle'; corrCtx.fillText(tv.toString(), Math.floor(w*0.65)+8, y); }
+    const y=yFromV(corrHold); const col=(corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--caution'));
+    corrCtx.fillStyle=col; corrCtx.fillRect(Math.floor(w*0.35)+2,y,Math.floor(w*0.30)-4,4);
+    const y0=yFromV(0); corrCtx.fillStyle='#2a3642'; corrCtx.fillRect(Math.floor(w*0.35)+1,y0,Math.floor(w*0.30)-2,1);
     corrVal.textContent = corrHold.toFixed(2);
   }
 
-  let peakL=-120, peakR=-120, holdTimerL=0, holdTimerR=0;
-  function drawPeak(){
+  function getCss(varName){ return getComputedStyle(document.documentElement).getPropertyValue(varName).trim(); }
+
+  // ------- dBFS (RMS, 300 ms) -------
+  const dbfsMarks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
+  function layoutHScale(el, refLabel){
+    el.innerHTML='';
+    const box = el.parentElement.getBoundingClientRect();
+    dbfsMarks.forEach(m=>{
+      const x = ((m+60)/60)*100; // -60..0 → 0..100%
+      const tick = document.createElement('div');
+      tick.style.position='absolute'; tick.style.left = `calc(${x}% - 1px)`; tick.style.top='20%'; tick.style.height='60%'; tick.style.width='2px'; tick.style.background='#2a3642';
+      el.appendChild(tick);
+      const lab = document.createElement('div'); lab.textContent = m + (refLabel && m===-18 ? ' dBFS (TEST)' : ' dBFS'); lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; el.appendChild(lab);
+      if(refLabel && m===-18){ const ref = document.createElement('div'); ref.style.position='absolute'; ref.style.left = `calc(${x}% - 1px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='2px'; ref.style.background='#ffd15b'; el.appendChild(ref); }
+    });
+  }
+
+  function drawHBar(canvas, valueL, valueR, ref, mode){
+    const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
+    const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,w,h);
+    function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) }
+    ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
+    const refX=xFromDb(ref);
+    // färglogik för dBTP
+    const colorFor = (v)=>{
+      if(mode==='tp'){ return (v>=-1? getCss('--hot') : (v>=-3? getCss('--caution') : getCss('--ok'))); }
+      return getCss('--ok');
+    };
+    ctx.fillStyle=colorFor(valueL); ctx.fillRect(0,h*0.35,xFromDb(valueL),h*0.12);
+    ctx.fillStyle=colorFor(valueR); ctx.fillRect(0,h*0.55,xFromDb(valueR),h*0.12);
+    ctx.fillStyle=(mode==='tp'? '#aa2e2e' : getCss('--caution')); ctx.fillRect(refX,0,2,h); // ref-linje
+    // 0 dBFS linje till höger (maxvisning)
+    ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h);
+  }
+
+  let rmsHoldL=0, rmsHoldR=0; let lastTsDB=performance.now();
+  function drawDBFS(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    let pL=-120,pR=-120; for(let i=0;i<bufL.length;i++){ pL=Math.max(pL,20*Math.log10(Math.abs(bufL[i])+1e-9)); pR=Math.max(pR,20*Math.log10(Math.abs(bufR[i])+1e-9)); }
-    const now=performance.now(); if(pL>=peakL-0.1){ peakL=pL; holdTimerL=now } if(pR>=peakR-0.1){ peakR=pR; holdTimerR=now }
-    if(now-holdTimerL>1000) peakL-=0.5; if(now-holdTimerR>1000) peakR-=0.5;
-    const dpr=window.devicePixelRatio||1; const w=Math.floor(peak.clientWidth*dpr), h=Math.floor(160*dpr);
-    if(peak.width!==w||peak.height!==h){ peak.width=w; peak.height=h }
-    peakCtx.clearRect(0,0,w,h);
-    peakCtx.strokeStyle='#1c2b4c'; peakCtx.lineWidth=1; peakCtx.beginPath(); peakCtx.moveTo(0,h/2); peakCtx.lineTo(w,h/2); peakCtx.stroke();
-    function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return (c+60)/60*w }
-    peakCtx.fillStyle='#7ee787'; peakCtx.fillRect(0,h*0.35,xFromDb(peakL),h*0.12);
-    peakCtx.fillStyle='#ffb86b'; peakCtx.fillRect(0,h*0.55,xFromDb(peakR),h*0.12);
+    let sL=0,sR=0; for(let i=0;i<bufL.length;i++){ sL+=bufL[i]*bufL[i]; sR+=bufR[i]*bufR[i] }
+    const rmsL=Math.sqrt(sL/bufL.length), rmsR=Math.sqrt(sR/bufR.length);
+    const now=performance.now(); const dt=Math.max(0.001,(now-lastTsDB)/1000); lastTsDB=now; const tau=.3, a=1-Math.exp(-dt/tau);
+    rmsHoldL += a*(rmsL - rmsHoldL); rmsHoldR += a*(rmsR - rmsHoldR);
+    const dBL = 20*Math.log10(rmsHoldL+1e-12); const dBR = 20*Math.log10(rmsHoldR+1e-12);
+    dbL.textContent = dBL.toFixed(1)+' dBFS'; dbR.textContent = dBR.toFixed(1)+' dBFS';
+    drawHBar(dbfs, dBL, dBR, -18, 'dbfs');
   }
+  layoutHScale(dbfsScale, true);
 
-  // ------- Loop & uptime -------
-  let raf=0, startTs=performance.now();
-  let leftMuted=false, leftMuteTimer=0;
-  function loop(){
-    // vänster mute-cykel för generatorn
-    if (muteLeft.checked && leftGain){
-      leftMuteTimer += 16.7; const period=1500, win=500; const on = (leftMuteTimer % period) >= win;
-      const target = on ? 1 : 0; if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
+  // ------- True Peak (4×) -------
+  function hermite(p0,p1,p2,p3,t){ const a= (-0.5*p0)+(1.5*p1)+(-1.5*p2)+(0.5*p3); const b=(p0*(-1))+ (2.5*p1)+(-2*p2)+ (0.5*p3); const c=(-0.5*p0)+(0.5*p2); const d=p1; return ((a*t+b)*t+c)*t+d; }
+  function truePeakDb(buf){
+    let maxAbs=0; const n=buf.length; for(let i=1;i<n-2;i++){
+      const p0=buf[i-1], p1=buf[i], p2=buf[i+1], p3=buf[i+2];
+      const a=Math.abs(p1); if(a>maxAbs) maxAbs=a;
+      const t1=Math.abs(hermite(p0,p1,p2,p3,0.25)); if(t1>maxAbs) maxAbs=t1;
+      const t2=Math.abs(hermite(p0,p1,p2,p3,0.50)); if(t2>maxAbs) maxAbs=t2;
+      const t3=Math.abs(hermite(p0,p1,p2,p3,0.75)); if(t3>maxAbs) maxAbs=t3;
     }
-    layoutXY();
-    drawVU(); drawXY(); drawCorr(); drawPeak();
-    uptimeEl.textContent = ((performance.now()-startTs)/1000).toFixed(1);
-    raf = requestAnimationFrame(loop);
+    return 20*Math.log10(maxAbs + 1e-9);
   }
-  raf = requestAnimationFrame(loop);
-  new ResizeObserver(()=>layoutXY()).observe(meters);
+  function drawTruePeak(){
+    analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
+    const tpDbL = Math.min(0, truePeakDb(bufL));
+    const tpDbR = Math.min(0, truePeakDb(bufR));
+    tpL.textContent = tpDbL.toFixed(1)+' dBTP'; tpR.textContent = tpDbR.toFixed(1)+' dBTP';
+    drawHBar(tp, tpDbL, tpDbR, -1, 'tp'); // färger enligt −3/−1/0
+  }
+  layoutHScale(tpScale, false);
 
-  // ------- Capture (system/chrome) – analys alltid, monitor via toggle -------
+  // ------- R128 (approx) – K-väg via biquads + blockenergi -------
+  // K-weighting approx i WebAudio: HP 38 Hz + HighShelf +4 dB/4 kHz
+  const kHP_L = ac.createBiquadFilter(); kHP_L.type='highpass'; kHP_L.frequency.value=38; kHP_L.Q.value=0.5;
+  const kHS_L = ac.createBiquadFilter(); kHS_L.type='highshelf'; kHS_L.frequency.value=4000; kHS_L.gain.value=4; kHP_L.connect(kHS_L);
+  const kHP_R = ac.createBiquadFilter(); kHP_R.type='highpass'; kHP_R.frequency.value=38; kHP_R.Q.value=0.5;
+  const kHS_R = ac.createBiquadFilter(); kHS_R.type='highshelf'; kHS_R.frequency.value=4000; kHS_R.gain.value=4; kHP_R.connect(kHS_R);
+
+  const kAnL = ac.createAnalyser(); kAnL.fftSize = 2048; const kBufL = new Float32Array(kAnL.fftSize);
+  const kAnR = ac.createAnalyser(); kAnR.fftSize = 2048; const kBufR = new Float32Array(kAnR.fftSize);
+  kHS_L.connect(kAnL); kHS_R.connect(kAnR);
+
+  const frameDur = kAnL.fftSize / ac.sampleRate; // ≈ 42.7 ms @ 48 kHz
+  const mLen = Math.max(1, Math.round(0.4 / frameDur));   // 400 ms
+  const sLen = Math.max(1, Math.round(3.0 / frameDur));   // 3 s
+
+  const mQ = []; const sQ = []; // energivärden (sum of ch)
+  let intEnergy = 0, intCount = 0; // integrated gated
+  let gatedBlocks = 0;
+  let stHistory = []; // för LRA
+
+  function energyFromK(){
+    kAnL.getFloatTimeDomainData(kBufL); kAnR.getFloatTimeDomainData(kBufR);
+    let eL=0,eR=0; for(let i=0;i<kBufL.length;i++){ eL+=kBufL[i]*kBufL[i]; eR+=kBufR[i]*kBufR[i]; }
+    const rmsL = eL/kBufL.length; const rmsR = eR/kBufR.length; // mean-square per kanal
+    return (rmsL + rmsR) / 2; // tvåkanalsmedel (ITU 1770 kanalvikter ≈1 för L/R)
+  }
+
+  function lufsFromEnergy(e){ return 10*Math.log10(e + 1e-12); } // ≈ LKFS/LUFS
+
+  function updateR128(){
+    const e = energyFromK();
+    mQ.push(e); sQ.push(e);
+    if(mQ.length>mLen) mQ.shift();
+    if(sQ.length>sLen){ stHistory.push(sQ.shift()); if(stHistory.length>Math.round(60/ (3.0)) ) stHistory.shift(); }
+
+    // Momentary & Short-term
+    const mE = mQ.reduce((a,b)=>a+b,0)/mQ.length; const sE = sQ.reduce((a,b)=>a+b,0)/sQ.length;
+    const mLUFS = lufsFromEnergy(mE); const sLUFS = lufsFromEnergy(sE);
+
+    // Integrated gating: absolut −70 LUFS, relativ −10 LU under aktuell integrerad
+    let gate = -70; if(intCount>0){ const iLU = lufsFromEnergy(intEnergy/intCount); gate = Math.max(-70, iLU - 10); }
+    const blockLU = sLUFS; // använd ST-block som gating-block (≈1770-4)
+    if(blockLU >= gate){ intEnergy += e; intCount++; gatedBlocks++; }
+    const iLUFS = (intCount>0) ? lufsFromEnergy(intEnergy/intCount) : -Infinity;
+
+    // LRA: percentiler av ST över ~60 s, gate 20 LU under I
+    const stVals = stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v > (iLUFS - 20));
+    let LRA='—';
+    if(stVals.length>5){ const sorted=[...stVals].sort((a,b)=>a-b); const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)]; LRA=(p95-p10).toFixed(1)+' LU'; }
+
+    lufsM.textContent = isFinite(mLUFS)? mLUFS.toFixed(1)+' LUFS' : '—';
+    lufsS.textContent = isFinite(sLUFS)? sLUFS.toFixed(1)+' LUFS' : '—';
+    lufsI.textContent = (isFinite(iLUFS) ? iLUFS.toFixed(1)+' LUFS' : '—') + '  (mål −23)';
+    lraEl.textContent = LRA;
+  }
+
+  // ------- Capture (system/chrome) -------
   let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true;
   async function startTabCapture(){
     try{
@@ -381,11 +508,9 @@
       try{ track.applyConstraints({advanced:[{channelCount:2}]}); }catch{}
       track.contentHint='music';
       sysSrc = ac.createMediaStreamSource(sysStream);
-      sysSplit = connectStereoToMix(sysSrc); // analys
-      // monitor OFF default
+      sysSplit = connectStereoToMix(sysSrc); // analys + K-väg
       sysMonGain = ac.createGain(); sysMonGain.gain.value = 0; sysSrc.connect(sysMonGain).connect(ac.destination);
-      btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost');
-      btnSysMonMute.textContent = 'Unmute system monitor'; sysMonState.textContent='(tyst)'; sysMonitorMuted=true;
+      btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(tyst)'; sysMonitorMuted=true;
       const set = track.getSettings?track.getSettings():{}; info.srcKind.textContent=track.kind||'audio'; info.cc.textContent=set.channelCount??'okänd'; info.sr.textContent=ac.sampleRate+' Hz'; info.stOK.textContent=(set.channelCount>=2?'Ja':'Osäkert/Mono?');
       btnTab.disabled=true; btnStop.disabled=false; dbgTab.textContent='ja';
     }catch(e){ alert(e.message||e) }
@@ -400,8 +525,7 @@
     btnTab.disabled=false; btnStop.disabled=true; dbgTab.textContent='nej';
   }
   function toggleSysMonitorMute(){
-    if(!sysMonGain) return; // kräver aktiv capture
-    sysMonitorMuted = !sysMonitorMuted;
+    if(!sysMonGain) return; sysMonitorMuted = !sysMonitorMuted;
     sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
     sysMonVal.textContent = sysMonGainEl.value;
     if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(tyst)'; }
@@ -409,43 +533,52 @@
   }
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
-  // ------- Generator (hörs + analys) – robust L/R utan Worklet -------
+  // ------- Generator (hörs + analys) -------
   let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null, genSplit=null;
   let monitorMuted=false;
   async function startGenerator(){
     await ac.resume(); if(genOsc) return;
     genOsc = ac.createOscillator(); genOsc.type='sine'; genOsc.frequency.value=440;
-    genGain = ac.createGain(); genGain.gain.value=0.18; // nivå in i analys/monitor
+    genGain = ac.createGain(); genGain.gain.value=0.18; // ~ -18 dBFS RMS
     leftGain = ac.createGain(); rightGain = ac.createGain(); leftGain.gain.value=1; rightGain.gain.value=1;
     merger = ac.createChannelMerger(2);
-    genOsc.connect(genGain);
-    genGain.connect(leftGain); genGain.connect(rightGain);
+    genOsc.connect(genGain); genGain.connect(leftGain); genGain.connect(rightGain);
     leftGain.connect(merger,0,0); rightGain.connect(merger,0,1);
-    // Monitor (default ON) + analys
     genMonGain = ac.createGain(); genMonGain.gain.value = parseFloat(monGainEl.value);
-    merger.connect(genMonGain).connect(ac.destination);
-    genSplit = connectStereoToMix(merger);
+    merger.connect(genMonGain).connect(ac.destination); // monitor
+    const genSplit = ac.createChannelSplitter(2); merger.connect(genSplit);
+    genSplit.connect(mixL,0); genSplit.connect(mixR,1); // analys L/R
+    genSplit.connect(kHP_L,0); genSplit.connect(kHP_R,1); // K-väg
     genOsc.start();
-    btnTone.textContent='Stoppa ton'; dbgGen.textContent='ja';
-    monitorMuted=false; btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); monState.textContent='(på)';
+    btnTone.textContent='Stoppa ton'; dbgGen.textContent='ja'; monitorMuted=false; btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); monState.textContent='(på)';
   }
   async function stopGenerator(){
     try{ genOsc && genOsc.stop() }catch{}
-    [genOsc,genGain,leftGain,rightGain,merger,genMonGain,genSplit].forEach(n=>{ try{ n && n.disconnect && n.disconnect() }catch{} });
-    genOsc=null; genGain=null; leftGain=null; rightGain=null; merger=null; genMonGain=null; genSplit=null;
+    [genGain,leftGain,rightGain,merger,genMonGain].forEach(n=>{ try{ n && n.disconnect && n.disconnect() }catch{} });
+    genOsc=null; genGain=null; leftGain=null; rightGain=null; merger=null; genMonGain=null;
     btnTone.textContent='Starta ton'; dbgGen.textContent='nej';
   }
   async function toggleTone(){ if(!genOsc) await startGenerator(); else await stopGenerator() }
 
   function toggleGenMonitorMute(){
-    if(!genMonGain) return;
-    monitorMuted = !monitorMuted;
+    if(!genMonGain) return; monitorMuted = !monitorMuted;
     genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value);
     monVal.textContent = monGainEl.value;
     if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute generator monitor'; monState.textContent='(tyst)'; }
     else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(på)'; }
   }
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
+
+  // ------- Loop -------
+  let startTs=performance.now(); let leftMuteTimer=0;
+  function loop(){
+    if (muteLeft.checked && leftGain){ leftMuteTimer += 16.7; const period=1500, win=500; const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0; if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) } }
+    layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
+    uptimeEl.textContent = ((performance.now()-startTs)/1000).toFixed(1);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+  new ResizeObserver(()=>layoutXY()).observe(meters);
 
   // ------- Bind -------
   btnTab.onclick  = startTabCapture;
@@ -454,7 +587,7 @@
   btnMonMute.onclick = toggleGenMonitorMute;
   btnSysMonMute.onclick = toggleSysMonitorMute;
 
-  // ------- Defaults (autoplay-safe: starta generatorn ON efter första gest) -------
+  // ------- Boot (autoplay policy) -------
   let booted=false; async function boot(){ if(booted) return; booted=true; await ac.resume(); await startGenerator(); }
   ['pointerdown','click','keydown','touchstart'].forEach(evt=>window.addEventListener(evt, boot, { once:true, passive:true }));
 })();
