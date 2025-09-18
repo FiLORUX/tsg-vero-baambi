@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Audio Test Grid — EBU -18 dBFS (AL) • Complete (11 meters)</title>
+<style>
+  :root {
+    --bg:#0a0e14; --panel:#0f1420; --ink:#e6edf3; --muted:#9fb0c4;
+    --edge:#263247; --accent:#1f6feb;
+    --g:#18b26b; --y:#f4c152; --r:#ef4444;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  header{width:100%; max-width:1920px; padding:16px 20px 8px}
+  h1{margin:0 0 8px; font-size:18px; font-weight:700; letter-spacing:.2px}
+  .controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; color:var(--muted)}
+  button,.select{
+    background:var(--accent); color:#fff; border:0; border-radius:12px;
+    padding:.65rem .9rem; font-weight:700; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.25);
+  }
+  button:disabled{opacity:.6; cursor:not-allowed}
+  .select{appearance:none}
+  .pill{font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid var(--edge); color:var(--muted)}
+  main{
+    width:100%; max-width:1920px; padding:12px 20px 24px;
+    display:grid; gap:18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+  .card{
+    background:var(--panel); border:1px solid var(--edge); border-radius:16px; padding:14px 12px;
+    display:flex; flex-direction:column; gap:8px; min-height:300px;
+  }
+  .card h3{margin:0; font-size:14px; font-weight:700; color:#fff; opacity:.9}
+  canvas{width:100%; height:240px; background:#0b0f1a; border-radius:12px}
+  .sub{font-size:12px; color:var(--muted)}
+  footer{opacity:.65; padding:8px 20px 20px; font-size:12px}
+  .kv{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap}
+  .kv b{font-variant-numeric:tabular-nums}
+  .tiny{font-size:11px; opacity:.75}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Audio Test Grid — EBU AL = −18 dBFS (0 dB rel), PML ≈ +9 dB • 11 visningar</h1>
+    <div class="controls">
+      <button id="startBtn">Start audio</button>
+      <button id="stopBtn" disabled>Stop</button>
+      <button id="micBtn" disabled>Mikrofon</button>
+      <button id="sysBtn" disabled>System/Tab Audio</button>
+      <select id="toneSel" class="select" disabled title="Grundton">
+        <option value="440">440 Hz</option>
+        <option value="997">997 Hz (EBU)</option>
+        <option value="1000">1 kHz</option>
+        <option value="250">250 Hz</option>
+      </select>
+      <span class="pill">WebAudio</span>
+      <span class="pill">Stereo</span>
+      <span class="pill">AL −18 dBFS</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- 1 -->
+    <section class="card">
+      <h3>PPM-stil VU (LED, vertikal) — dBFS-skala, AL/PML-markering</h3>
+      <canvas id="vuLed"></canvas>
+      <div class="sub">Grön ≤ AL (−18), gul 0..+6 rel, röd > +6 rel. Hold-cap med EBU-släpp (~13 dB/s).</div>
+    </section>
+
+    <!-- 2 -->
+    <section class="card">
+      <h3>Bargraph (horisontell) — RMS (yta) + Peak (stick) [dBFS]</h3>
+      <canvas id="barH"></canvas>
+      <div class="sub">AL/+6/+9 markerat. Hold-stick med EBU-släpp.</div>
+    </section>
+
+    <!-- 3 -->
+    <section class="card">
+      <h3>Waveform — L/R</h3>
+      <canvas id="waves"></canvas>
+      <div class="sub">Tid-domän transients/clip.</div>
+    </section>
+
+    <!-- 4 -->
+    <section class="card">
+      <h3>Spectrum — L/R</h3>
+      <canvas id="spectrum"></canvas>
+      <div class="sub">FFT magnitud (adaptiv FFT upp till 8192).</div>
+    </section>
+
+    <!-- 5 -->
+    <section class="card">
+      <h3>Goniometer (M/S)</h3>
+      <canvas id="goniometer"></canvas>
+      <div class="sub">X=S=(L−R)/2, Y=M=(L+R)/2. Mono i fas = vertikalt mittstreck.</div>
+    </section>
+
+    <!-- 6 -->
+    <section class="card">
+      <h3>Phase correlation (ρ)</h3>
+      <canvas id="correlation"></canvas>
+      <div class="sub">ρ≈[−1..+1]. +1 mono/fas, 0 obundet, −1 motfas.</div>
+    </section>
+
+    <!-- 7 -->
+    <section class="card">
+      <h3>Needle-VU (dual) — dB rel. AL</h3>
+      <canvas id="needle"></canvas>
+      <div class="sub">Simulerad mekanisk ballistik (attack/retur). Skala −20…+9 dB (rel AL).</div>
+    </section>
+
+    <!-- 8 -->
+    <section class="card">
+      <h3>Spectrogram (per kanal)</h3>
+      <canvas id="spectro"></canvas>
+      <div class="sub">Övre halvan = L (blå/cyan), nedre halvan = R (grön→gul→röd).</div>
+    </section>
+
+    <!-- 9 -->
+    <section class="card">
+      <h3>LUFS (approx R128) — M / S / I</h3>
+      <canvas id="lufs"></canvas>
+      <div class="kv tiny">
+        <span>M (400 ms)</span> · <span>S (3 s)</span> · <span>I (enkel gate; demo)</span>
+      </div>
+      <div class="kv"><span>M:</span> <b id="valM">—</b> LUFS · <span>S:</span> <b id="valS">—</b> LUFS · <span>I:</span> <b id="valI">—</b> LUFS</div>
+      <div class="sub">Target R128 = −23 LUFS (markerad). (Demo – ej full BS.1770.)</div>
+    </section>
+
+    <!-- 10 -->
+    <section class="card">
+      <h3>Polar Stereo Image (MS-polär “ros”)</h3>
+      <canvas id="polar"></canvas>
+      <div class="sub">Vinkel = atan2(S, M). Radie ≈ energi.</div>
+    </section>
+
+    <!-- 11 -->
+    <section class="card">
+      <h3>True-Peak (4× oversampling, approx) — L/R</h3>
+      <canvas id="truepeak"></canvas>
+      <div class="sub">TP dBFS + rel AL. Hold-stick med EBU-släpp. (Demo – ej exakt ITU TP.)</div>
+    </section>
+  </main>
+
+  <footer>
+    Skala: −60…0 dBFS med AL (−18 dBFS) som 0 dB rel; PML ≈ +9 dB rel. Färger enligt vedertagen EBU/PPM-praxis.
+  </footer>
+
+<script>
+/* ====== EBU-kalibrering ====== */
+const ALIGN_DBFS = -18;   // Alignment Level (AL) i dBFS → 0 dB rel
+const PML_REL   =  +9;    // Permitted Max Level (rel AL)
+const YELLOW_UP =  +6;    // 0..+6 rel = gult
+const MIN_DBFS  = -60;    // visad botten
+const MAX_DBFS  =   0;    // topp 0 dBFS
+
+/* ===== Audio engine ===== */
+let audioCtx, merger, splitter, analyserL, analyserR, masterOut;
+let oscL, oscR, gL, gR, muteTimer;
+let usingMic=false, started=false;
+
+const UI = {
+  start: document.getElementById('startBtn'),
+  stop: document.getElementById('stopBtn'),
+  mic: document.getElementById('micBtn'),
+  sys: document.getElementById('sysBtn'),
+  toneSel: document.getElementById('toneSel'),
+};
+
+// analys-inställningar
+const METER_CFG = { smoothingTimeConstant: 0.5 };
+const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+// dBFS från byte-time-domän
+function rmsDbFS(samples){
+  let s=0; for(let i=0;i<samples.length;i++){ const x=(samples[i]-128)/128; s+=x*x; }
+  const rms=Math.sqrt(s/samples.length); return 20*Math.log10(rms||1e-9);
+}
+function peakDbFS(samples){
+  let p=0; for(let i=0;i<samples.length;i++){ const x=Math.abs((samples[i]-128)/128); if(x>p)p=x; }
+  return 20*Math.log10(p||1e-9);
+}
+const relToAL = (dbfs)=> dbfs - ALIGN_DBFS;
+
+// Adaptiv FFT efter panelbredd
+function pickFftSize(){
+  const w = canv.spectrum?.clientWidth || 600;
+  if (w >= 1000) return 8192;
+  if (w >= 700)  return 4096;
+  return 2048;
+}
+function applyAnalyserFftSize(){
+  const size = pickFftSize();
+  if (analyserL && analyserR){
+    analyserL.fftSize = size;
+    analyserR.fftSize = size;
+  }
+}
+
+function ensureCtx(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+
+  merger   = audioCtx.createChannelMerger(2);
+  splitter = audioCtx.createChannelSplitter(2);
+  analyserL= audioCtx.createAnalyser();
+  analyserR= audioCtx.createAnalyser();
+  analyserL.smoothingTimeConstant=METER_CFG.smoothingTimeConstant;
+  analyserR.smoothingTimeConstant=METER_CFG.smoothingTimeConstant;
+  applyAnalyserFftSize();
+
+  merger.connect(splitter);
+  splitter.connect(analyserL,0);
+  splitter.connect(analyserR,1);
+
+  masterOut = audioCtx.createGain();
+  masterOut.gain.value=1;
+  merger.connect(masterOut);
+  masterOut.connect(audioCtx.destination);
+}
+
+function startTone(hz=440){
+  usingMic=false; stopSource(); ensureCtx();
+  oscL=audioCtx.createOscillator(); oscR=audioCtx.createOscillator();
+  gL=audioCtx.createGain(); gR=audioCtx.createGain();
+  oscL.type=oscR.type="sine"; oscL.frequency.value=hz; oscR.frequency.value=hz; gL.gain.value=1; gR.gain.value=1;
+
+  const applyMute=()=>{
+    if(!gL) return;
+    const t=audioCtx.currentTime;
+    gL.gain.cancelScheduledValues(t);
+    gL.gain.setValueAtTime(gL.gain.value,t);
+    gL.gain.setTargetAtTime(0.0,t,0.005); // 0.5 s mute
+    gL.gain.setTargetAtTime(1.0,t+0.5,0.02);
+  };
+  muteTimer=setInterval(applyMute,1500); applyMute();
+
+  oscL.connect(gL); gL.connect(merger,0,0);
+  oscR.connect(gR); gR.connect(merger,0,1);
+  oscL.start(); oscR.start();
+}
+
+async function startMic(){
+  usingMic=true; stopSource(); ensureCtx();
+  const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+  const mic = audioCtx.createMediaStreamSource(stream);
+  const ch = mic.channelCount||1;
+  if(ch===1){ const g = audioCtx.createGain(); mic.connect(g); g.connect(merger,0,0); g.connect(merger,0,1); }
+  else mic.connect(merger);
+}
+
+async function startSystemAudio(){
+  usingMic = true; stopSource(); ensureCtx();
+  try{
+    let stream;
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: false }); }
+    catch { stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true }); }
+    const sys = audioCtx.createMediaStreamSource(stream);
+    const ch = sys.channelCount || 2;
+    if (ch === 1){
+      const g = audioCtx.createGain(); sys.connect(g); g.connect(merger,0,0); g.connect(merger,0,1);
+    } else {
+      sys.connect(merger);
+    }
+  }catch(e){
+    console.warn("System audio capture misslyckades:", e);
+    alert("Kunde inte fånga system-/tab-ljud. Testa Chrome/Edge och godkänn ljuddelning.");
+  }
+}
+
+function stopSource(){
+  if(muteTimer){ clearInterval(muteTimer); muteTimer=null; }
+  try{ if(oscL){ oscL.stop(); oscL.disconnect(); } }catch{}
+  try{ if(oscR){ oscR.stop(); oscR.disconnect(); } }catch{}
+  try{ if(gL){ gL.disconnect(); } }catch{}
+  try{ if(gR){ gR.disconnect(); } }catch{}
+  oscL=oscR=gL=gR=null;
+}
+
+UI.start.addEventListener('click', async ()=>{
+  if(started) return; started=true; ensureCtx(); await audioCtx.resume();
+  UI.mic.disabled=!navigator.mediaDevices?.getUserMedia;
+  UI.sys.disabled=!navigator.mediaDevices?.getDisplayMedia;
+  UI.toneSel.disabled=false; UI.start.disabled=true; UI.stop.disabled=false;
+  startTone(parseFloat(UI.toneSel.value)); startRenderLoop();
+});
+UI.stop.addEventListener('click', ()=>{ stopSource(); UI.start.disabled=false; UI.stop.disabled=true; });
+UI.mic.addEventListener('click', async ()=>{ try{ await startMic(); }catch(e){ alert("Kunde inte öppna mikrofon."); } });
+UI.sys.addEventListener('click', startSystemAudio);
+UI.toneSel.addEventListener('change',(e)=>{ if(usingMic) return; const hz=parseFloat(e.target.value);
+  if(oscL) oscL.frequency.setTargetAtTime(hz, audioCtx.currentTime, 0.01);
+  if(oscR) oscR.frequency.setTargetAtTime(hz, audioCtx.currentTime, 0.01);
+});
+
+/* ===== Canvas & resize ===== */
+const canv = {
+  vuLed: document.getElementById('vuLed'),
+  barH: document.getElementById('barH'),
+  waves: document.getElementById('waves'),
+  spectrum: document.getElementById('spectrum'),
+  goni: document.getElementById('goniometer'),
+  corr: document.getElementById('correlation'),
+  needle: document.getElementById('needle'),
+  spectro: document.getElementById('spectro'),
+  lufs: document.getElementById('lufs'),
+  polar: document.getElementById('polar'),
+  truepeak: document.getElementById('truepeak'),
+};
+const ctxs = Object.fromEntries(Object.entries(canv).map(([k,c])=>[k,c.getContext('2d')]));
+function resizeCanvasToCSSPixels(c){ const dpr=window.devicePixelRatio||1; const w=Math.floor(c.clientWidth*dpr), h=Math.floor(c.clientHeight*dpr); if(c.width!==w||c.height!==h){ c.width=w; c.height=h; } }
+function resizer(){ Object.values(canv).forEach(resizeCanvasToCSSPixels); applyAnalyserFftSize(); }
+window.addEventListener('resize', resizer); resizer();
+
+/* ===== Gemensam state & färger ===== */
+let rmsL=-60, rmsR=-60, peakL=-60, peakR=-60;
+const colorForRel=(rel)=> (rel<=0? "var(--g)" : (rel<=YELLOW_UP? "var(--y)" : "var(--r)"));
+
+/* ===== Overlay helper ===== */
+function overlayText(ctx, lines){
+  const w=ctx.canvas.width; const pad=10;
+  ctx.fillStyle="rgba(0,0,0,.35)";
+  const boxW = 260, boxH = 16*lines.length + 10;
+  ctx.fillRect(w - boxW - pad, pad, boxW, boxH);
+  ctx.fillStyle="#fff"; ctx.font="12px system-ui";
+  lines.forEach((t,i)=> ctx.fillText(t, w - boxW - pad + 8, pad + 16 + i*16));
+}
+
+/* ===== Peak-hold (EBU-lik släpp ~13 dB/s) ===== */
+let holdVuL = -Infinity, holdVuR = -Infinity;   // RMS-hold (dBFS, för VU)
+let holdPkL = -Infinity, holdPkR = -Infinity;   // sample-peak-hold (Bar)
+let holdTpL = -Infinity, holdTpR = -Infinity;   // true-peak-hold
+const EBU_RELEASE_DB_PER_S = 13.0;
+let lastTickMs = performance.now();
+
+/* ===== Panel 1: VU LED vertikal (ABS dBFS, rel-färg, hold) ===== */
+function drawVU_LED(ctx, dbfsL, dbfsR){
+  const w=ctx.canvas.width, h=ctx.canvas.height;
+  ctx.clearRect(0,0,w,h);
+
+  const pad=20, gutter=28, colW=(w-2*pad-gutter)/2, colX=[pad, pad+colW+gutter], top=18, bottom=h-24, usableH=bottom-top;
+  const tickStep=2;
+  const yForDb=(db)=> bottom - clamp((db-MIN_DBFS)/(MAX_DBFS-MIN_DBFS),0,1)*usableH;
+
+  function drawScale(x){
+    ctx.strokeStyle="rgba(255,255,255,.10)"; ctx.lineWidth=1; ctx.beginPath();
+    for(let d=MIN_DBFS; d<=MAX_DBFS; d+=tickStep){ const y=yForDb(d); ctx.moveTo(x,y); ctx.lineTo(x+colW,y); }
+    ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,.8)"; ctx.font=Math.max(10,Math.min(14,w/48))+"px system-ui";
+    [-60,-48,-36,-30,-24,-18,-12,-6,0].forEach(d=>{
+      if(d<MIN_DBFS||d>MAX_DBFS) return;
+      const y=yForDb(d);
+      if(d===-18){ ctx.fillText("AL 0 dB rel", x+colW-86, y-15); ctx.fillText("−18 dBFS", x+colW-86, y-2); }
+      else ctx.fillText(`${d} dBFS`, x+colW-58, y-2);
+    });
+    // AL/+6/+9
+    [{db:-18,c:"var(--g)"},{db:ALIGN_DBFS+YELLOW_UP,c:"var(--y)"},{db:ALIGN_DBFS+PML_REL,c:"var(--r)"}]
+      .forEach(r=>{ if(r.db<MIN_DBFS||r.db>MAX_DBFS) return; const y=yForDb(r.db); ctx.strokeStyle=r.c; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+colW,y); ctx.stroke(); });
+  }
+
+  function fillBar(x, dbfs, holdDbfs, label){
+    ctx.fillStyle="#0c1424"; ctx.fillRect(x, top, colW, usableH);
+    for(let d=MIN_DBFS; d<Math.min(dbfs,MAX_DBFS); d+=1){
+      const rel = d - ALIGN_DBFS;
+      ctx.fillStyle = colorForRel(rel);
+      const y1=yForDb(d), y2=yForDb(Math.min(d+1,dbfs));
+      ctx.fillRect(x+3, y2+1, colW-6, (y1-y2)-2);
+    }
+    // live cap
+    const y=yForDb(dbfs); ctx.fillStyle="#fff"; ctx.fillRect(x+2, y-2, colW-4, 2);
+    // hold cap
+    const yh=yForDb(holdDbfs); ctx.fillStyle="rgba(255,255,255,.6)"; ctx.fillRect(x+2, yh-2, colW-4, 2);
+
+    ctx.fillStyle="#fff"; ctx.font=Math.max(12,Math.min(16,w/40))+"px system-ui"; ctx.fillText(label, x+4, top-2);
+  }
+
+  drawScale(colX[0]); drawScale(colX[1]);
+  fillBar(colX[0], dbfsL, holdVuL, "L");
+  fillBar(colX[1], dbfsR, holdVuR, "R");
+
+  overlayText(ctx, [
+    `L: ${dbfsL.toFixed(1)} dBFS (${(dbfsL-ALIGN_DBFS>=0?'+':'')}${(dbfsL-ALIGN_DBFS).toFixed(1)} dB rel)`,
+    `R: ${dbfsR.toFixed(1)} dBFS (${(dbfsR-ALIGN_DBFS>=0?'+':'')}${(dbfsR-ALIGN_DBFS).toFixed(1)} dB rel)`,
+  ]);
+}
+
+/* ===== Panel 2: Bargraph horisontell (ABS dBFS, rel-färg, peak-hold) ===== */
+function drawBarH(ctx, dbfsRmsL, dbfsPeakL, dbfsRmsR, dbfsPeakR){
+  const w=ctx.canvas.width, h=ctx.canvas.height;
+  ctx.clearRect(0,0,w,h);
+  const pad=18, rowH=(h-3*pad)/2, yL=pad, yR=pad*2+rowH;
+  const xForDb=(db)=> pad + clamp((db-MIN_DBFS)/(MAX_DBFS-MIN_DBFS),0,1)*(w-2*pad);
+
+  function row(y, dbR, dbP, holdP, label){
+    ctx.fillStyle="#0c1424"; ctx.fillRect(pad,y,w-2*pad,rowH);
+    for(let d=MIN_DBFS; d<Math.min(dbR,MAX_DBFS); d+=1){
+      const rel=d-ALIGN_DBFS, x1=xForDb(d), x2=xForDb(Math.min(d+1,dbR));
+      ctx.fillStyle=colorForRel(rel);
+      ctx.fillRect(x1, y, Math.max(1,x2-x1), rowH);
+    }
+    // live + hold peak
+    const xp=xForDb(dbP); ctx.fillStyle="#fff"; ctx.fillRect(xp-2,y,4,rowH);
+    const xh=xForDb(holdP); ctx.fillStyle="rgba(255,255,255,.6)"; ctx.fillRect(xh-2,y,4,rowH);
+
+    // AL/+6/+9
+    const xAL=xForDb(ALIGN_DBFS), x6=xForDb(ALIGN_DBFS+YELLOW_UP), x9=xForDb(ALIGN_DBFS+PML_REL);
+    ctx.fillStyle="var(--g)"; ctx.fillRect(xAL,y,2,rowH);
+    ctx.fillStyle="var(--y)"; ctx.fillRect(x6,y,2,rowH);
+    ctx.fillStyle="var(--r)"; ctx.fillRect(x9,y,2,rowH);
+
+    // grid
+    ctx.fillStyle="rgba(255,255,255,.1)";
+    for(let d=MIN_DBFS; d<=MAX_DBFS; d+=6){ const x=xForDb(d); ctx.fillRect(x,y,1,rowH); }
+
+    ctx.fillStyle="#fff"; ctx.font="12px system-ui"; ctx.fillText(label, pad+4, y+rowH-6);
+  }
+
+  row(yL, dbfsRmsL, dbfsPeakL, holdPkL, "L");
+  row(yR, dbfsRmsR, dbfsPeakR, holdPkR, "R");
+
+  overlayText(ctx, [
+    `L RMS: ${dbfsRmsL.toFixed(1)} dBFS (${(dbfsRmsL-ALIGN_DBFS>=0?'+':'')}${(dbfsRmsL-ALIGN_DBFS).toFixed(1)} dB rel)`,
+    `R RMS: ${dbfsRmsR.toFixed(1)} dBFS (${(dbfsRmsR-ALIGN_DBFS>=0?'+':'')}${(dbfsRmsR-ALIGN_DBFS).toFixed(1)} dB rel)`
+  ]);
+}
+
+/* ===== Panel 3: Waveforms ===== */
+function drawWaves(ctx, bufL, bufR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=12;
+  function one(buf, yOff, col){
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.beginPath();
+    for(let i=0;i<buf.length;i++){
+      const t=i/(buf.length-1), x=pad + t*(w-2*pad), y= yOff + ((buf[i]-128)/128)*((h/2)-pad);
+      (i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+    }
+    ctx.stroke();
+  }
+  one(bufL, h*0.25, "#1f6feb"); one(bufR, h*0.75, "#18b26b");
+  ctx.strokeStyle="rgba(255,255,255,.1)"; ctx.beginPath(); ctx.moveTo(pad,h*0.5); ctx.lineTo(w-pad,h*0.5); ctx.stroke();
+}
+
+/* ===== Panel 4: Spectrum ===== */
+function drawSpectrum(ctx, specL, specR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=16, iw=w-2*pad, ih=h-2*pad;
+  const xForBin=(i,n)=> pad + Math.sqrt(i/n)*iw;
+  function one(arr,col){
+    ctx.strokeStyle=col; ctx.lineWidth=1; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){ const x=xForBin(i,arr.length), y=pad+(1-arr[i]/255)*ih; (i?ctx.lineTo(x,y):ctx.moveTo(x,y)); }
+    ctx.stroke();
+  }
+  one(specL, "#1f6feb"); one(specR, "#18b26b");
+}
+
+/* ===== Panel 5: Goniometer (M/S: X=S, Y=M) ===== */
+function drawGoniometer(ctx, bufL, bufR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2, R=Math.min(w,h)*0.45;
+  // grid
+  ctx.strokeStyle="rgba(255,255,255,.08)"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cx, 6); ctx.lineTo(cx, h-6); ctx.moveTo(6, cy); ctx.lineTo(w-6, cy); ctx.stroke();
+  // plot M/S
+  ctx.fillStyle="rgba(31,111,235,.9)";
+  const n=Math.min(bufL.length, bufR.length);
+  for(let i=0;i<n;i++){
+    const L=(bufL[i]-128)/128, Rch=(bufR[i]-128)/128;
+    const M=(L+Rch)/2, S=(L-Rch)/2;
+    const x=cx + S*R, y=cy - M*R;
+    ctx.fillRect(x,y,1,1);
+  }
+}
+
+/* ===== Panel 6: Phase correlation ===== */
+function correlationCoeff(a,b){
+  let n=Math.min(a.length,b.length), SA=0, SB=0, SAA=0, SBB=0, SAB=0;
+  for(let i=0;i<n;i++){ const xa=(a[i]-128)/128, xb=(b[i]-128)/128; SA+=xa; SB+=xb; SAA+=xa*xa; SBB+=xb*xb; SAB+=xa*xb; }
+  const num=n*SAB - SA*SB, den=Math.sqrt((n*SAA-SA*SA)*(n*SBB-SB*SB)) || 1e-9;
+  return clamp(num/den,-1,1);
+}
+function drawCorrelation(ctx, coeff){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=16, railH=(h-2*pad)/2;
+  ctx.fillStyle="#0c1424"; ctx.fillRect(pad, h/2-railH/2, w-2*pad, railH);
+  const t=(coeff+1)/2, x=pad + t*(w-2*pad);
+  const grad=ctx.createLinearGradient(pad,0,w-pad,0);
+  grad.addColorStop(0,"var(--r)"); grad.addColorStop(.5,"var(--y)"); grad.addColorStop(1,"var(--g)");
+  ctx.fillStyle=grad;
+  if(t>=.5){ ctx.fillRect(w/2, h/2-railH/2, x-w/2, railH); }
+  else{ ctx.fillRect(x, h/2-railH/2, w/2-x, railH); }
+  ctx.fillStyle="#fff"; ctx.fillRect(x-2, h/2-railH/1.5, 4, railH/0.75);
+  ctx.fillStyle="#fff"; ctx.font="13px system-ui"; ctx.fillText(`ρ = ${coeff.toFixed(3)}`, pad+6, h/2-railH/2-6);
+}
+
+/* ===== Panel 7: Needle-VU (dual, rel-AL-skala) ===== */
+const needleState = { L: -12, R: -12 };
+function drawNeedle(ctx, relL, relR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const min=-20, max=+9;
+  const angleFor=(d)=>{ const t=clamp((d-min)/(max-min),0,1); return (-110 + t*220) * Math.PI/180; };
+  function drawOne(cx, cy, rel, label, color){
+    ctx.strokeStyle="rgba(255,255,255,.15)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,cy, Math.min(w,h)*0.35, Math.PI*1.1, Math.PI*1.9); ctx.stroke();
+    const R = Math.min(w,h)*0.35;
+    for(let d=min; d<=max; d+=2){
+      const a=angleFor(d), x1=cx+Math.cos(a)*(R-8), y1=cy+Math.sin(a)*(R-8), x2=cx+Math.cos(a)*R, y2=cy+Math.sin(a)*R;
+      const style = colorForRel(d);
+      ctx.strokeStyle=style; ctx.lineWidth = (d%6===0)?2:1;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      if(d%6===0){
+        ctx.fillStyle="rgba(255,255,255,.8)"; ctx.font="12px system-ui";
+        const tx=cx+Math.cos(a)*(R-22), ty=cy+Math.sin(a)*(R-22);
+        ctx.fillText((d>0? "+"+d:d), tx-10, ty+4);
+      }
+    }
+    const aNeedle=angleFor(rel);
+    ctx.strokeStyle=color; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(aNeedle)*(R-26), cy+Math.sin(aNeedle)*(R-26)); ctx.stroke();
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.font="13px system-ui"; ctx.fillText(label, cx-6, cy+18);
+  }
+  const cx1 = w*0.33, cx2 = w*0.67, cy = h*0.65;
+  drawOne(cx1, cy, relL, "L", "#1f6feb"); drawOne(cx2, cy, relR, "R", "#18b26b");
+}
+
+/* ===== Panel 8: Spectrogram per kanal ===== */
+let spectroBuffer;
+function drawSpectrogram(ctx, specL, specR){
+  const w=ctx.canvas.width, h=ctx.canvas.height;
+  const half = Math.floor(h/2);
+  if(!spectroBuffer){
+    spectroBuffer=document.createElement('canvas');
+    spectroBuffer.width=w; spectroBuffer.height=h;
+    const sctx=spectroBuffer.getContext('2d'); sctx.fillStyle="#000"; sctx.fillRect(0,0,w,h);
+  }
+  const sctx=spectroBuffer.getContext('2d');
+  const colW=1;
+  // scroll
+  const img = sctx.getImageData(colW,0,w-colW,h);
+  sctx.putImageData(img,0,0);
+
+  function colorL(m){ const r=Math.floor(180*Math.max(0,m-0.6)); const g=Math.floor(255*Math.min(1,m)); const b=Math.floor(255*(0.4+0.6*m)); return `rgb(${r},${g},${b})`; }
+  function colorR(m){ const r=Math.floor(255*Math.max(0,m-0.5)*2); const g=Math.floor(255*Math.min(1,m*1.2)); const b=Math.floor(80*(1-m)); return `rgb(${r},${g},${b})`; }
+
+  for(let y=0;y<half;y++){
+    const t = 1 - y/(half-1);
+    const i = Math.floor((t*t)*(specL.length-1));
+    const mL = specL[i]/255; sctx.fillStyle=colorL(mL); sctx.fillRect(w-colW, y, colW, 1);
+    const mR = specR[i]/255; sctx.fillStyle=colorR(mR); sctx.fillRect(w-colW, half+y, colW, 1);
+  }
+  ctx.clearRect(0,0,w,h); ctx.drawImage(spectroBuffer,0,0);
+}
+
+/* ===== Panel 9: LUFS (approx) ===== */
+const LU = { M: -23, S: -23, I: -23 };
+let I_energy_sum = 0, I_frames = 0;
+function lufsFromSpectrum(spec){
+  const n=spec.length; let E=0;
+  for(let i=0;i<n;i++){
+    const f = i/n; const weight = (f<0.08? 0.3 : f<0.2? 0.6 : f<0.6? 1.0 : 1.25);
+    const mag = (spec[i]/255); const e = (mag*weight); E += e*e;
+  }
+  E /= n; const lufs = -0.691 + (-10*Math.log10(E+1e-12));
+  return lufs;
+}
+function drawLUFS(ctx, M, S, I){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=18, barW=(w-4*pad)/3, base=h-28, top=22;
+  const target=-23; const min=-48, max=-10;
+  function yFor(v){ const t=clamp((v-min)/(max-min),0,1); return base - t*(base-top); }
+  function bar(x,label,val,color){
+    ctx.fillStyle="#0c1424"; ctx.fillRect(x, top, barW, base-top);
+    const y=yFor(val);
+    ctx.fillStyle=color; ctx.fillRect(x+3, y, barW-6, base-y);
+    const yT=yFor(target);
+    ctx.fillStyle="rgba(255,255,255,.5)"; ctx.fillRect(x, yT, barW, 2);
+    ctx.fillStyle="#fff"; ctx.font="13px system-ui"; ctx.fillText(`${label} ${val.toFixed(1)} LUFS`, x+6, top-6);
+  }
+  bar(pad, "M", M, "#1f6feb"); bar(pad*2+barW, "S", S, "#18b26b"); bar(pad*3+barW*2, "I", I, "var(--y)");
+  ctx.fillStyle="rgba(255,255,255,.65)"; ctx.font="12px system-ui";
+  ["-48","-42","-36","-30","-24","-18","-12"].forEach(str=>{
+    const v=parseFloat(str), y=yFor(v);
+    ctx.fillText(str, 4, y+4);
+    ctx.fillStyle="rgba(255,255,255,.08)"; ctx.fillRect(28, y, w-34, 1);
+    ctx.fillStyle="rgba(255,255,255,.65)";
+  });
+  document.getElementById('valM').textContent=M.toFixed(1);
+  document.getElementById('valS').textContent=S.toFixed(1);
+  document.getElementById('valI').textContent=I.toFixed(1);
+}
+
+/* ===== Panel 10: Polar Stereo Image (MS-polär) ===== */
+function drawPolar(ctx, bufL, bufR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const cx=w/2, cy=h/2, R=Math.min(w,h)*0.45;
+  // grid
+  ctx.strokeStyle="rgba(255,255,255,.08)"; ctx.lineWidth=1;
+  for(let r=0.2;r<=1.0;r+=0.2){ ctx.beginPath(); ctx.arc(cx,cy,R*r,0,Math.PI*2); ctx.stroke(); }
+  for(let a=-Math.PI;a<Math.PI;a+=Math.PI/6){ ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(a)*R, cy+Math.sin(a)*R); ctx.stroke(); }
+  // M/S-plot som polär
+  const n=Math.min(bufL.length, bufR.length);
+  ctx.fillStyle="rgba(31,111,235,.9)";
+  for(let i=0;i<n;i++){
+    const L=((bufL[i]-128)/128), Rch=((bufR[i]-128)/128);
+    const M=(L+Rch)/2, S=(L-Rch)/2;
+    const ang = Math.atan2(S, M);
+    const rad = Math.min(1, Math.sqrt(M*M + S*S));
+    const x = cx + Math.cos(ang) * (R*rad);
+    const y = cy + Math.sin(ang) * (R*rad);
+    ctx.fillRect(x,y,1,1);
+  }
+}
+
+/* ===== Panel 11: True-Peak (4× oversampling approx) + hold ===== */
+function truePeak4x(samples){
+  let maxAbs=0;
+  for(let i=0;i<samples.length-1;i++){
+    const s0=(samples[i]-128)/128, s1=(samples[i+1]-128)/128;
+    for(let k=0;k<4;k++){ const t=k/4, v=s0 + (s1-s0)*t; const a=Math.abs(v); if(a>maxAbs) maxAbs=a; }
+  }
+  const db=20*Math.log10(maxAbs||1e-9);
+  return {lin:maxAbs, db:db};
+}
+function drawTruePeak(ctx, tpL, tpR, holdL, holdR){
+  const w=ctx.canvas.width, h=ctx.canvas.height; ctx.clearRect(0,0,w,h);
+  const pad=18, rowH=(h-3*pad)/2, yL=pad, yR=pad*2+rowH;
+  const xForDb=(db)=> pad + clamp((db-MIN_DBFS)/(MAX_DBFS-MIN_DBFS),0,1)*(w-2*pad);
+  function row(y, db, holdDb, label){
+    ctx.fillStyle="#0c1424"; ctx.fillRect(pad, y, w-2*pad, rowH);
+    const x=xForDb(db), xh=xForDb(holdDb);
+    const rel=db-ALIGN_DBFS;
+    ctx.fillStyle=colorForRel(rel); ctx.fillRect(pad, y, Math.max(2, x-pad), rowH);
+    // AL/PML
+    const xAL=xForDb(ALIGN_DBFS), xPML=xForDb(ALIGN_DBFS+PML_REL);
+    ctx.fillStyle="var(--g)"; ctx.fillRect(xAL,y,2,rowH);
+    ctx.fillStyle="var(--r)"; ctx.fillRect(xPML,y,2,rowH);
+    // grid
+    ctx.fillStyle="rgba(255,255,255,.1)"; for(let d=MIN_DBFS; d<=MAX_DBFS; d+=6){ const gx=xForDb(d); ctx.fillRect(gx,y,1,rowH); }
+    // live + hold sticks
+    ctx.fillStyle="#fff"; ctx.fillRect(x-2,y,4,rowH);
+    ctx.fillStyle="rgba(255,255,255,.6)"; ctx.fillRect(xh-2,y,4,rowH);
+    // etikett
+    ctx.fillStyle="#fff"; ctx.font="12px system-ui";
+    ctx.fillText(`${label} TP ${db.toFixed(1)} dBFS (${(db-ALIGN_DBFS>=0?'+':'')}${(db-ALIGN_DBFS).toFixed(1)} dB rel)`, pad+4, y+rowH-6);
+  }
+  row(yL, tpL.db, holdL, "L"); row(yR, tpR.db, holdR, "R");
+}
+
+/* ===== Render-loop ===== */
+const timeL=new Uint8Array(1024), timeR=new Uint8Array(1024);
+const specL=new Uint8Array(1024), specR=new Uint8Array(1024);
+let rafId=null;
+function startRenderLoop(){
+  cancelAnimationFrame(rafId);
+  const tick=()=>{
+    rafId=requestAnimationFrame(tick);
+    if(!analyserL||!analyserR) return;
+
+    // data
+    analyserL.getByteTimeDomainData(timeL); analyserR.getByteTimeDomainData(timeR);
+    analyserL.getByteFrequencyData(specL);  analyserR.getByteFrequencyData(specR);
+
+    // dBFS nu
+    const nowRmsL = rmsDbFS(timeL), nowRmsR = rmsDbFS(timeR);
+    const nowPkL  = peakDbFS(timeL), nowPkR  = peakDbFS(timeR);
+
+    // ballistik och hold
+    rmsL = lerp(rmsL, nowRmsL, 0.2);
+    rmsR = lerp(rmsR, nowRmsR, 0.2);
+    peakL = lerp(peakL, nowPkL, 0.5);
+    peakR = lerp(peakR, nowPkR, 0.5);
+
+    const nowMs = performance.now();
+    const dt = Math.max(0.0005, (nowMs - lastTickMs)/1000);
+    lastTickMs = nowMs;
+    const drop = EBU_RELEASE_DB_PER_S * dt;
+
+    // RMS-hold (VU)
+    holdVuL = Math.max( (rmsL > holdVuL? rmsL : holdVuL - drop), rmsL );
+    holdVuR = Math.max( (rmsR > holdVuR? rmsR : holdVuR - drop), rmsR );
+
+    // Peak-hold (Bar)
+    holdPkL = Math.max( (peakL > holdPkL? peakL : holdPkL - drop), peakL );
+    holdPkR = Math.max( (peakR > holdPkR? peakR : holdPkR - drop), peakR );
+
+    // REL för Needle
+    const relRmsL = rmsL - ALIGN_DBFS, relRmsR = rmsR - ALIGN_DBFS;
+
+    // 1) VU LED
+    drawVU_LED(ctxs.vuLed, rmsL, rmsR);
+
+    // 2) Bargraph
+    drawBarH(ctxs.barH, rmsL, peakL, rmsR, peakR);
+
+    // 3) Waveforms
+    drawWaves(ctxs.waves, timeL, timeR);
+
+    // 4) Spectrum
+    drawSpectrum(ctxs.spectrum, specL, specR);
+
+    // 5) Goniometer (M/S)
+    drawGoniometer(ctxs.goni, timeL, timeR);
+
+    // 6) Correlation
+    drawCorrelation(ctxs.corr, correlationCoeff(timeL, timeR));
+
+    // 7) Needle-VU – mekanisk dämpning
+    const attack=0.35, release=0.08;
+    const targetL=relRmsL, targetR=relRmsR;
+    needleState.L = (targetL>needleState.L) ? lerp(needleState.L, targetL, attack) : lerp(needleState.L, targetL, release);
+    needleState.R = (targetR>needleState.R) ? lerp(needleState.R, targetR, attack) : lerp(needleState.R, targetR, release);
+    drawNeedle(ctxs.needle, clamp(needleState.L,-20,+9), clamp(needleState.R,-20,+9));
+
+    // 8) Spectrogram per kanal
+    drawSpectrogram(ctxs.spectro, specL, specR);
+
+    // 9) LUFS approx
+    const mix = new Uint8Array(specL.length);
+    for(let i=0;i<mix.length;i++) mix[i]=Math.max(specL[i], specR[i]);
+    const lufsM = lufsFromSpectrum(mix);
+    LU.M = lerp(LU.M, lufsM, 0.5);
+    LU.S = lerp(LU.S, lufsM, 0.1);
+    if(lufsM > -33){ I_energy_sum = lerp(I_energy_sum, Math.pow(10, -0.1*lufsM), 0.05); I_frames = Math.min(I_frames+1, 1e9); }
+    const I_val = -10 * Math.log10((I_energy_sum||1e-9));
+    LU.I = lerp(LU.I, I_val, 0.02);
+    drawLUFS(ctxs.lufs, LU.M, LU.S, LU.I);
+
+    // 10) Polar (MS)
+    drawPolar(ctxs.polar, timeL, timeR);
+
+    // 11) True-Peak approx + hold
+    const tpL = truePeak4x(timeL), tpR = truePeak4x(timeR);
+    holdTpL = Math.max( (tpL.db > holdTpL? tpL.db : holdTpL - drop), tpL.db );
+    holdTpR = Math.max( (tpR.db > holdTpR? tpR.db : holdTpR - drop), tpR.db );
+    drawTruePeak(ctxs.truepeak, tpL, tpR, holdTpL, holdTpR);
+  };
+  tick();
+}
+</script>
+</body>
+</html>
