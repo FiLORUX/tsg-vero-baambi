@@ -1,8 +1,11 @@
-    .xyModule {
-      padding-top: 18px;
-      padding-bottom: 18px;
-      margin-bottom: 8px;
+.xyModule {
+      margin-bottom: var(--meter-gap);
       background: none;
+    }
+    .hMeter {
+      position: relative;
+      height: 160px;
+      margin-bottom: var(--meter-gap);
     }
 <!doctype html>
 <html lang="en-GB">
@@ -15,6 +18,7 @@
       --bg:#141618; --panel:#1b1f23; --ink:#e8eef9; --muted:#a9b2c7; --outline:#2a2f36; --grid:#29323b;
       --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
       --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
+      --meter-gap: 1.2em;
     }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
@@ -56,7 +60,7 @@
       background: #111416;
       border: 1px solid var(--outline);
       border-radius: 12px;
-      padding: 1.2em 2vw 2em 2vw;
+      padding: var(--meter-gap) 2vw;
       position: relative;
       min-height: 0;
       display: flex;
@@ -71,7 +75,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 0.8em;
+      margin-bottom: var(--meter-gap);
     }
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
     .tiny{opacity:.85;font-size:12px}
@@ -129,10 +133,10 @@
     }
 
     /* VU (Nordic) */
-    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
-    .vu::before{content:"";position:absolute;left:6%;right:6%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
-    .bar{position:absolute;bottom:8px;width:36%;left:6%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
-    .bar.r{left:auto;right:6%;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
+    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden;padding-top:48px;}
+    .bar{position:absolute;bottom:8px;width:36%;left:32%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
+    .bar.r{left:auto;right:32%;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
+    .vu::before{content:"";position:absolute;left:32%;right:32%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
@@ -141,7 +145,7 @@
     .testlabel{position:absolute;right:8px;top:-14px;font-size:10px;color:var(--cyan)}
 
     /* Horisontella stapel-metrar */
-    .hMeter{position:relative;height:160px}
+    .hMeter{position:relative;height:160px;margin-bottom: var(--meter-gap);}
     .hScale{position:absolute;inset:0;pointer-events:none}
     .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
 
@@ -180,6 +184,15 @@
       border-radius: 10px;
       border: 1px solid var(--outline);
       background: #0d0f11;
+    }
+
+    /* Divider/linje under rubrik */
+    .meter .divider {
+      border: none;
+      border-top: 1px solid var(--outline);
+      margin: 0 0 var(--meter-gap) 0;
+      width: 100%;
+      background: none;
     }
   </style>
 </head>
@@ -293,6 +306,7 @@
       <div class="stack-left">
         <div class="meter" id="xyCard">
           <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
+          <div class="divider"></div>
           <div class="xyModule">
             <div class="xyGrid">
               <div class="xySquare" id="xyWrap">
@@ -326,11 +340,15 @@
         <div class="meter" id="vuCard">
           <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
           <div class="vu">
+            <div class="testlabel" id="vuTestLabel" style="left:0;right:0;text-align:center;top:0;color:#69bfff;font-weight:bold;line-height:1.2;background:none;border-radius:0;padding:0;">
+              <div>TEST</div>
+              <div>0 VU NORDIC</div>
+              <div>-18 dBFS</div>
+            </div>
+            <div class="testline" id="vuTest" style="height:1px;left:0;right:0;top:48px;background:#69bfff;opacity:1;"></div>
             <div class="bar l" id="barL"></div>
             <div class="bar r" id="barR"></div>
             <div class="ticks" id="ticks"></div>
-            <div class="testline" id="vuTest"></div>
-            <div class="testlabel" id="vuTestLabel">TEST −18 dBFS (0 VU)</div>
           </div>
         </div>
         <div class="meter" id="r128">
@@ -532,15 +550,35 @@
       el.appendChild(t);
       const lab=document.createElement('div');
       lab.textContent=m + ' dBFS';
-      lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='8px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='8px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // TEST -18 dBFS
+    // TEST -18 dBFS (blue line, same as gray tick marks)
     const x = ((-18+60)/60)*100;
     const ref=document.createElement('div');
-    ref.style.position='absolute'; ref.style.left=`calc(${x}% - 0.5px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='1px'; ref.style.background=getCss('--cyan'); ref.style.opacity='0.95';
+    ref.style.position='absolute';
+    ref.style.left=`calc(${x}% - 0.5px)`;
+    ref.style.top='20%';
+    ref.style.height='60%';
+    ref.style.width='1px';
+    ref.style.background=getCss('--cyan');
+    ref.style.opacity='0.95';
     el.appendChild(ref);
-    const tag=document.createElement('div'); tag.textContent='TEST −18 dBFS'; tag.style.position='absolute'; tag.style.left=`calc(${x}% + 6px)`; tag.style.top='6px'; tag.style.fontSize='10px'; tag.style.color=getCss('--cyan'); el.appendChild(tag);
+    const tag=document.createElement('div');
+    tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
+    tag.style.position='absolute';
+    tag.style.left=`calc(${x}% - 32px)`;
+    tag.style.bottom='0';
+    tag.style.width='64px';
+    tag.style.textAlign='center';
+    tag.style.fontSize='10px';
+    tag.style.color=getCss('--cyan');
+    tag.style.fontWeight='bold';
+    tag.style.lineHeight='1.2';
+    tag.style.background='none';
+    tag.style.borderRadius='0';
+    tag.style.padding='0';
+    el.appendChild(tag);
   }
 
   // TRUE PEAK scale in dBTP + TEST -15 dBTP
@@ -554,22 +592,67 @@
       el.appendChild(t);
       const lab=document.createElement('div');
       lab.textContent = m + ' dBTP';
-      lab.style.position='absolute'; lab.style.left=`calc(${x}% + 4px)`; lab.style.top='6px'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='6px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // warn zones
-    const warn=[{v:-6,c:'var(--warn)',w:2,label:'−6 dBTP'},{v:-3,c:'var(--caution)',w:2,label:'−3 dBTP'},{v:-1,c:'var(--hot)',w:3,label:'−1 dBTP'}];
+    // warn zones (styled like VU Nordic, label at bottom, color-coded)
+    const warn=[
+      {v:-6,c:'var(--warn)',w:1,label:'−6 dBTP',color:getCss('--warn')},
+      {v:-3,c:'var(--caution)',w:1,label:'−3 dBTP',color:getCss('--caution')},
+      {v:-1,c:'var(--hot)',w:1,label:'−1 dBTP',color:getCss('--hot')}
+    ];
     for(const mk of warn){
       const x=((mk.v+60)/60)*100;
-      const col=document.createElement('div'); col.style.position='absolute'; col.style.left=`calc(${x}% - ${mk.w/2}px)`; col.style.top='0'; col.style.height='100%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.9'; el.appendChild(col);
-      const tag=document.createElement('div'); tag.textContent=mk.label; tag.style.position='absolute'; tag.style.left=`calc(${x}% + 4px)`; tag.style.bottom='6px'; tag.style.fontSize='10px'; tag.style.color='#cfe1ff'; el.appendChild(tag);
+      const col=document.createElement('div');
+      col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='18%'; col.style.height='64%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
+      el.appendChild(col);
+      let dbfsEq = '';
+      if(mk.v === -6) dbfsEq = '-9 dBFS';
+      if(mk.v === -3) dbfsEq = '-6 dBFS';
+      if(mk.v === -1) dbfsEq = '-4 dBFS';
+      const tag=document.createElement('div');
+      tag.innerHTML = `<div>${dbfsEq}</div>`;
+      tag.style.position='absolute';
+      tag.style.left=`calc(${x}% - 32px)`;
+      tag.style.bottom='0';
+      tag.style.width='64px';
+      tag.style.textAlign='center';
+      tag.style.fontSize='10px';
+      tag.style.color=mk.color;
+      tag.style.fontWeight='bold';
+      tag.style.lineHeight='1.2';
+      tag.style.background='none';
+      tag.style.borderRadius='0';
+      tag.style.padding='0';
+      el.appendChild(tag);
     }
-    // TEST -15 dBTP (≈ -18 dBFS RMS sine)
+    // TEST -15 dBTP (blue line, same as gray tick marks)
     const xRef = ((-15+60)/60)*100;
     const ref=document.createElement('div');
-    ref.style.position='absolute'; ref.style.left=`calc(${xRef}% - 0.5px)`; ref.style.top='0'; ref.style.height='100%'; ref.style.width='1px'; ref.style.background=getCss('--cyan'); ref.style.opacity='0.95';
+    ref.style.position='absolute';
+    ref.style.left=`calc(${xRef}% - 1px)`;
+    ref.style.top='18%';
+    ref.style.height='64%';
+    ref.style.width='2px';
+    ref.style.background=getCss('--cyan');
+    ref.style.opacity='0.95';
     el.appendChild(ref);
-    const tag=document.createElement('div'); tag.textContent='TEST −15 dBTP'; tag.style.position='absolute'; tag.style.left=`calc(${xRef}% + 6px)`; tag.style.top='6px'; tag.style.fontSize='10px'; tag.style.color=getCss('--cyan'); el.appendChild(tag);
+    // TEST label below blue line
+    const tag=document.createElement('div');
+    tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
+    tag.style.position='absolute';
+    tag.style.left=`calc(${xRef}% - 32px)`;
+    tag.style.bottom='0';
+    tag.style.width='64px';
+    tag.style.textAlign='center';
+    tag.style.fontSize='10px';
+    tag.style.color=getCss('--cyan');
+    tag.style.fontWeight='bold';
+    tag.style.lineHeight='1.2';
+    tag.style.background='none';
+    tag.style.borderRadius='0';
+    tag.style.padding='0';
+    el.appendChild(tag);
   }
 
   function drawHBar_DBFS(canvas, valueL, valueR){
