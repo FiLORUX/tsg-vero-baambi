@@ -341,14 +341,12 @@
         <div class="meter" id="vuCard">
           <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
           <div class="vu">
-            <div class="vuTestWrap" style="position:relative; width:100%; height:40px;">
-              <div class="testlabel" id="vuTestLabel" style="position:absolute; left:0; right:0; text-align:center; top:0; color:#69bfff; font-weight:bold; line-height:1.2; background:none; border-radius:0; padding:0;">
-                <div>TEST</div>
-                <div>0 VU NORDIC</div>
-                <div>-18 dBFS</div>
-              </div>
-              <div class="testline" id="vuTest" style="position:absolute; left:0; right:0; top:32px; height:1px; background:#69bfff; opacity:1;"></div>
+            <div class="testlabel" id="vuTestLabel" style="position:absolute; left:0; right:0; text-align:center; color:#69bfff; font-weight:bold; line-height:1.2; background:none; border-radius:0; padding:0;">
+              <div>TEST</div>
+              <div>0 VU NORDIC</div>
+              <div>-18 dBFS</div>
             </div>
+            <div class="testline" id="vuTest" style="position:absolute; left:0; right:0; height:1px; background:#69bfff; opacity:1;"></div>
             <div class="bar l" id="barL"></div>
             <div class="bar r" id="barR"></div>
             <div class="ticks" id="ticks"></div>
@@ -472,8 +470,8 @@
       const d = document.createElement('div'); d.className='tick'; d.dataset.lab = `${vu>0?"+"+vu:vu} VU`; d.style.top = `calc(${y}% - 1px)`; ticks.appendChild(d);
     }
     const y0 = (1 - (0 + 20) / 26) * 100;
-    vuTest.style.top = `calc(${y0}% - 1px)`;
-    vuTestLabel.style.top = `calc(${y0}% - 16px)`;
+  vuTest.style.top = `calc(${y0}% - 1px)`;
+  vuTestLabel.style.top = `calc(${y0}% - 22px)`;
   }
   buildTicks();
 
