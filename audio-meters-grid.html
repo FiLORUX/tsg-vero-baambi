@@ -133,10 +133,11 @@
     }
 
     /* VU (Nordic) */
-    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden;padding-top:48px;}
-    .bar{position:absolute;bottom:8px;width:36%;left:32%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
-    .bar.r{left:auto;right:32%;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
-    .vu::before{content:"";position:absolute;left:32%;right:32%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
+    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden;padding-top:80px;}
+    .bar{position:absolute;bottom:8px;width:16%;left:24%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
+    .bar.r{left:auto;right:24%;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
+    .vu::before{content:"";position:absolute;left:24%;width:16%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
+    .vu::after{content:"";position:absolute;right:24%;width:16%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
@@ -340,12 +341,14 @@
         <div class="meter" id="vuCard">
           <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
           <div class="vu">
-            <div class="testlabel" id="vuTestLabel" style="left:0;right:0;text-align:center;top:0;color:#69bfff;font-weight:bold;line-height:1.2;background:none;border-radius:0;padding:0;">
-              <div>TEST</div>
-              <div>0 VU NORDIC</div>
-              <div>-18 dBFS</div>
+            <div class="vuTestWrap" style="position:relative; width:100%; height:40px;">
+              <div class="testlabel" id="vuTestLabel" style="position:absolute; left:0; right:0; text-align:center; top:0; color:#69bfff; font-weight:bold; line-height:1.2; background:none; border-radius:0; padding:0;">
+                <div>TEST</div>
+                <div>0 VU NORDIC</div>
+                <div>-18 dBFS</div>
+              </div>
+              <div class="testline" id="vuTest" style="position:absolute; left:0; right:0; top:32px; height:1px; background:#69bfff; opacity:1;"></div>
             </div>
-            <div class="testline" id="vuTest" style="height:1px;left:0;right:0;top:48px;background:#69bfff;opacity:1;"></div>
             <div class="bar l" id="barL"></div>
             <div class="bar r" id="barR"></div>
             <div class="ticks" id="ticks"></div>
