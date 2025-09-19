@@ -76,7 +76,7 @@
     /* XY + Corr */
     .xyGrid {
       display: grid;
-      grid-template-columns: auto 220px;
+      grid-template-columns: 2fr 1fr;
       gap: 10px;
       height: 100%;
       align-items: center;
@@ -92,10 +92,12 @@
     }
     .corrWrap {
       position: relative;
+      width: 100%;
       aspect-ratio: 1;
-      height: 100%;
-      max-height: 100%;
-      min-height: 0;
+      /* Sätt max-width till 50% av föräldern för att matcha halva goniometerns storlek */
+      max-width: 50%;
+      align-self: center;
+      justify-self: center;
     }
     .canvasPad {
       width: 100%;
@@ -178,6 +180,7 @@
     .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
 
     .overlay{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36;text-align:left}
+    .gonio-overlay{left:auto;right:10px}
 
     /* R128 – sifferpanel */
     .r128{display:grid;grid-template-columns:1fr;gap:8px}
@@ -347,11 +350,12 @@
     <div class="meters" id="meters">
       <div class="stack-left">
         <div class="meter" id="xyCard">
-          <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
+          <header><label>Stereo Vectorscope (Goniometer + Phase Correlation)</label></header>
           <div class="xyModule">
             <div class="xyGrid">
               <div class="xySquare" id="xyWrap">
                 <div class="canvasPad"><canvas id="xy"></canvas></div>
+                <div class="overlay gonio-overlay">Mono = 45°</div>
               </div>
               <div class="corrWrap">
                 <div class="canvasPad"><canvas id="corr"></canvas></div>
@@ -361,7 +365,7 @@
           </div>
         </div>
         <div class="meter" id="dbfsCard">
-          <header><label>dBFS (RMS)</label><span class="badge">Ref TEST −18 dBFS</span></header>
+          <header><label>RMS (dBFS)</label><span class="badge">Ref TEST −18 dBFS</span></header>
           <div class="hMeter">
             <canvas id="dbfs" height="160"></canvas>
             <div class="hScale" id="dbfsScale"></div>
@@ -379,7 +383,7 @@
       </div>
       <div class="stack-right">
         <div class="meter" id="vuCard">
-          <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
+          <header><label>VU Nordic Scale</label><span class="badge">300 ms</span></header>
           <div class="vu">
             <div class="vu-scale-container">
               <div class="testlabel" id="vuTestLabel">
@@ -395,7 +399,7 @@
           </div>
         </div>
         <div class="meter" id="r128">
-          <header><label>EBU R128 – LUFS</label><span class="badge">M/S/I + LRA</span></header>
+          <header><label>Loudness (EBU R128, Integrated LUFS)</label><span class="badge">M/S/I + LRA</span></header>
           <div class="r128">
             <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
             <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
@@ -591,15 +595,42 @@
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const cRaw = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
     corrHold = cRaw>corrHold ? corrHold + corrUp*(cRaw-corrHold) : corrHold + corrDn*(cRaw-corrHold);
-    const dpr = window.devicePixelRatio||1; const w=Math.floor(220*dpr), h=xy.height; if(corr.width!==w||corr.height!==h){ corr.width=w; corr.height=h }
-    const ctx = corrCtx; ctx.clearRect(0,0,w,h);
-    const box = { x: Math.floor(w*0.18), y: 8, w: Math.floor(w*0.64), h: h-16 };
+    
+    // Uppdatera canvas-storlek baserat på faktisk elementstorlek
+    const dpr = window.devicePixelRatio || 1;
+    const rect = corr.getBoundingClientRect();
+    const w = Math.floor(rect.width * dpr);
+    const h = Math.floor(rect.height * dpr);
+    
+    if (corr.width !== w || corr.height !== h) {
+      corr.width = w;
+      corr.height = h;
+      // Sätt CSS-storlek för att matcha element
+      corr.style.width = `${rect.width}px`;
+      corr.style.height = `${rect.height}px`;
+    }
+    
+    const ctx = corrCtx;
+    ctx.clearRect(0,0,w,h);
+    const box = { x: Math.floor(w*0.18), y: Math.floor(16*dpr), w: Math.floor(w*0.64), h: h-(32*dpr) };
     const yFromV = v => Math.round(box.y + (1 - (v+1)/2) * box.h);
     ctx.strokeStyle='#3a4855'; ctx.strokeRect(box.x, box.y, box.w, box.h);
     ctx.fillStyle='#88a3bf'; const ticksV=[-1,-0.5,0,0.5,1];
+    
+    // Anpassa font och streck för HiDPI
+    const tickWidth = Math.ceil(6 * dpr);
+    const tickHeight = Math.ceil(1 * dpr);
+    ctx.font = `${Math.round(10*dpr)}px ui-sans-serif`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    
     for(const tv of ticksV){
-      const y=yFromV(tv); ctx.fillRect(box.x-6,y,6,1); ctx.fillRect(box.x+box.w,y,6,1);
-      ctx.font=`${Math.max(10,12*dpr)}px ui-sans-serif`; ctx.textBaseline='middle'; ctx.textAlign='left'; ctx.fillText(tv.toString(), box.x+box.w+8, y);
+      const y = yFromV(tv);
+      // Rita skalstreck med rätt DPR-storlek
+      ctx.fillRect(box.x-tickWidth, y, tickWidth, tickHeight);
+      ctx.fillRect(box.x+box.w, y, tickWidth, tickHeight);
+      // Rita text
+      ctx.fillText(tv.toString(), box.x+box.w+Math.round(8*dpr), y);
     }
     const y0 = yFromV(0); const yc = yFromV(corrHold);
     const col = (corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--warn'));
