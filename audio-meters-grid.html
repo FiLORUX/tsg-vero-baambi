@@ -1,12 +1,3 @@
-.xyModule {
-      margin-bottom: var(--meter-gap);
-      background: none;
-    }
-    .hMeter {
-      position: relative;
-      height: 160px;
-      margin-bottom: var(--meter-gap);
-    }
 <!doctype html>
 <html lang="en-GB">
 <head>
@@ -45,10 +36,10 @@
     code.small{font-size:12px;color:var(--muted)}
 
     /* Visning */
-    .meters{display:grid;grid-template-columns:3fr 1fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
+    .meters{display:grid;grid-template-columns:7fr 3fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
     .stack-left{
       display: grid;
-      grid-template-rows: 1fr 1fr 1fr;
+      grid-template-rows: 2fr 1fr 1fr;  /* Ge goniometern dubbel höjd */
       gap: 12px;
       min-height: 0;
       align-items: stretch;
@@ -85,65 +76,101 @@
     /* XY + Corr */
     .xyGrid {
       display: grid;
-      grid-template-columns: 1fr 220px;
+      grid-template-columns: auto 220px;
       gap: 10px;
-      align-items: stretch;
-    }
-    .xySquare, .corrWrap {
-      position: relative;
-      width: 100%;
       height: 100%;
-      min-height: 0;
-      aspect-ratio: 1 / 1;
-      padding: 0;
-      box-sizing: border-box;
-      display: flex;
-      align-items: stretch;
-      justify-content: stretch;
-      overflow: hidden;
-    }
-    .xySquare > .canvasPad,
-    .corrWrap > .canvasPad {
-      width: 100%;
-      height: 100%;
-      min-height: 0;
-      box-sizing: border-box;
-      display: flex;
-      align-items: stretch;
-      justify-content: stretch;
-      overflow: hidden;
-    }
-    .corrWrap > .canvasPad {
-      width: 100%;
-      height: 100%;
-      display: flex;
       align-items: center;
-      justify-content: center;
+      min-height: 0;
+    }
+    .xySquare {
+      position: relative;
+      aspect-ratio: 1;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+      margin: 0 auto;
+    }
+    .corrWrap {
+      position: relative;
+      aspect-ratio: 1;
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+    }
+    .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
     }
     .canvasPad > canvas {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
-      aspect-ratio: 1 / 1;
-      min-height: 0;
-      box-sizing: border-box;
-      display: block;
       border-radius: 10px;
       border: 1px solid var(--outline);
       background: #0d0f11;
+      box-sizing: border-box;
     }
 
     /* VU (Nordic) */
-    .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden;padding-top:80px;}
-    .bar{position:absolute;bottom:8px;width:16%;left:24%;height:0;opacity:.95;border-radius:6px;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
-    .bar.r{left:auto;right:24%;background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)}
-    .vu::before{content:"";position:absolute;left:24%;width:16%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
-    .vu::after{content:"";position:absolute;right:24%;width:16%;top:8px;bottom:8px;border-radius:8px;background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)}
+    .vu{
+      position:relative;
+      height:100%;
+      background:#0c0f12;
+      border:1px solid var(--outline);
+      border-radius:12px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    .vu-scale-container {
+      position:relative;
+      flex:1;
+      margin:8px;
+      min-height:0;
+    }
+    .bar{
+      position:absolute;
+      bottom:0;
+      width:16%;
+      left:24%;
+      height:0;
+      opacity:.95;
+      border-radius:6px;
+      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
+    }
+    .bar.r{
+      left:auto;
+      right:24%;
+      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
+    }
+    .vu-scale-container::before{
+      content:"";
+      position:absolute;
+      left:24%;
+      width:16%;
+      top:0;
+      bottom:0;
+      border-radius:8px;
+      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
+    }
+    .vu-scale-container::after{
+      content:"";
+      position:absolute;
+      right:24%;
+      width:16%;
+      top:0;
+      bottom:0;
+      border-radius:8px;
+      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
+    }
     .ticks{position:absolute;inset:0;pointer-events:none}
     .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
     .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
     .tick::before{content:attr(data-lab);position:absolute;left:6px;top:-7px;font-size:10px;color:#88a3bf}
-    .testline{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.95}
-    .testlabel{position:absolute;right:8px;top:-14px;font-size:10px;color:var(--cyan)}
+    .testline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.95;pointer-events:none}
+    .testlabel{position:absolute;font-size:10px;color:var(--cyan);pointer-events:none;width:100%;text-align:center}
 
     /* Horisontella stapel-metrar */
     .hMeter{position:relative;height:160px;margin-bottom: var(--meter-gap);}
@@ -195,6 +222,20 @@
       width: 100%;
       background: none;
     }
+    /* Modul styles */
+    .xyModule {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      background: none;
+      min-height: 0;
+      padding: var(--meter-gap);
+    }
+    .hMeter {
+      position: relative;
+      height: 160px;
+      margin-bottom: var(--meter-gap);
+    }
   </style>
 </head>
 <body>
@@ -240,7 +281,6 @@
   </text>
 </svg>
     </div>
-    <div class="status">Generator monitor: <b>OFF</b> · System monitor: <b>OFF</b> (default)</div>
   </div>
 </header>
 
@@ -298,6 +338,7 @@
       <div><small>AudioContext</small><span id="ctxState">–</span></div>
       <div><small>Tone running</small><span id="dbgGen">no</span></div>
       <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
+      <div><small>Monitor status</small><span id="monitorStatus" class="tiny">Generator monitor: <b>OFF</b> · System monitor: <b>OFF</b> (default)</span></div>
     </div>
   </section>
 
@@ -307,7 +348,6 @@
       <div class="stack-left">
         <div class="meter" id="xyCard">
           <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
-          <div class="divider"></div>
           <div class="xyModule">
             <div class="xyGrid">
               <div class="xySquare" id="xyWrap">
@@ -341,15 +381,17 @@
         <div class="meter" id="vuCard">
           <header><label>VU (Nordic, 0 VU = −18 dBFS)</label><span class="badge">300 ms</span></header>
           <div class="vu">
-            <div class="testlabel" id="vuTestLabel" style="position:absolute; left:0; right:0; text-align:center; color:#69bfff; font-weight:bold; line-height:1.2; background:none; border-radius:0; padding:0;">
-              <div>TEST</div>
-              <div>0 VU NORDIC</div>
-              <div>-18 dBFS</div>
+            <div class="vu-scale-container">
+              <div class="testlabel" id="vuTestLabel">
+                <div>TEST</div>
+                <div>0 VU NORDIC</div>
+                <div>-18 dBFS</div>
+              </div>
+              <div class="testline" id="vuTest"></div>
+              <div class="bar l" id="barL"></div>
+              <div class="bar r" id="barR"></div>
+              <div class="ticks" id="ticks"></div>
             </div>
-            <div class="testline" id="vuTest" style="position:absolute; left:0; right:0; height:1px; background:#69bfff; opacity:1;"></div>
-            <div class="bar l" id="barL"></div>
-            <div class="bar r" id="barR"></div>
-            <div class="ticks" id="ticks"></div>
           </div>
         </div>
         <div class="meter" id="r128">
@@ -464,14 +506,37 @@
 
   // ------- VU (300 ms) -------
   function buildTicks(){
-    ticks.innerHTML=''; const vuMarks = [-20,-9,-6,-3,0,3,6];
+    ticks.innerHTML='';
+    
+    // Nordic VU skala: -20 VU till +6 VU (26 VU totalt)
+    // -20 VU = -38 dBFS
+    //   0 VU = -18 dBFS (referenspunkt)
+    //  +6 VU = -12 dBFS
+    const vuMarks = [-20,-9,-6,-3,0,3,6];
+    const scale = vuMarks.length - 1;  // Antal steg i skalan
+    
+    // Beräkna position för varje markering, där 0 VU är exakt på -18 dBFS
     for(const vu of vuMarks){
-      const y = (1 - (vu + 20) / 26) * 100;
-      const d = document.createElement('div'); d.className='tick'; d.dataset.lab = `${vu>0?"+"+vu:vu} VU`; d.style.top = `calc(${y}% - 1px)`; ticks.appendChild(d);
+      // Normalisera VU till 0-1 skala där 0 VU är på 0.77 (20/26)
+      const normalizedPos = (vu + 20) / 26;  // +20 för att få -20 VU till 0
+      // Invertera för top position (0 är toppen, 1 är botten)
+      const y = (1 - normalizedPos) * 100;
+      
+      const d = document.createElement('div');
+      d.className = 'tick';
+      d.dataset.lab = `${vu>0?"+"+vu:vu} VU`;
+      d.style.top = `${y}%`;
+      ticks.appendChild(d);
     }
-    const y0 = (1 - (0 + 20) / 26) * 100;
-  vuTest.style.top = `calc(${y0}% - 1px)`;
-  vuTestLabel.style.top = `calc(${y0}% - 22px)`;
+    
+    // Placera 0 VU (-18 dBFS) referenslinjen exakt
+    const zeroVUPos = (20 / 26);  // 0 VU position som fraktion
+    const y0 = (1 - zeroVUPos) * 100;
+    vuTest.style.top = `${y0}%`;
+    vuTestLabel.style.top = `${y0 - 8}%`;  // Text strax ovanför linjen med mindre marginal
+    vuTestLabel.style.left = '0';  // Nollställ left position
+    vuTestLabel.style.right = '0';  // Sätt right till 0 för centrering
+    vuTestLabel.style.textAlign = 'center';  // Centrera texten
   }
   buildTicks();
 
@@ -482,8 +547,12 @@
     let sL=0,sR=0; for(let i=0;i<bufL.length;i++){ sL+=bufL[i]*bufL[i]; sR+=bufR[i]*bufR[i] }
     const rmsL = Math.sqrt(sL/bufL.length), rmsR = Math.sqrt(sR/bufR.length); vuRmsL += a*(rmsL - vuRmsL); vuRmsR += a*(rmsR - vuRmsR);
     const dBfsL = 20*Math.log10(vuRmsL + 1e-12); const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
-    const vuL = Math.max(-20, Math.min(6, dBfsL + 18)); const vuR = Math.max(-20, Math.min(6, dBfsR + 18));
-    const pct = (v) => (v + 20) / 26 * 100; barL.style.height = `${pct(vuL)}%`; barR.style.height = `${pct(vuR)}%`;
+    const vuL = Math.max(-20, Math.min(6, dBfsL - (-18))); // -18 dBFS = 0 VU
+    const vuR = Math.max(-20, Math.min(6, dBfsR - (-18)));
+    // Beräkna höjd så 0 VU hamnar exakt på referenslinjen
+    const pct = (v) => ((v + 20) / 26) * 100; // Normalisera -20 till +6 VU till 0-100%
+    barL.style.height = `${pct(vuL)}%`;
+    barR.style.height = `${pct(vuR)}%`;
   }
 
   // ------- XY + Correlation -------
@@ -496,7 +565,9 @@
     let prevX=null, prevY=null;
     for(let i=0;i<n;i+=2){
       const L=bufL[i]-mL, R=bufR[i]-mR;
-      const x=(L*0.5+0.5)*w; const y=(1-(R*0.5+0.5))*h;
+      // Centrera och skala korrekt för -18 dBFS
+      const x = (L * w/2) + w/2;  // Skala -1..1 till 0..w
+      const y = h - ((R * h/2) + h/2);  // Skala -1..1 till 0..h, invertera för y
       if(prevX!==null){ xyCtx.globalAlpha=.35; xyCtx.strokeStyle='rgba(105,191,255,.35)'; xyCtx.beginPath(); xyCtx.moveTo(prevX,prevY); xyCtx.lineTo(x,y); xyCtx.stroke(); }
       xyCtx.globalAlpha=.85; xyCtx.fillRect(x,y,px,px); prevX=x; prevY=y;
     }
@@ -547,7 +618,7 @@
     dbfsMarks.forEach(m=>{
       const x = ((m+60)/60)*100;
       const t=document.createElement('div');
-      t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='20%'; t.style.height='60%'; t.style.width='1px'; t.style.background='#2a3642';
+      t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='1px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
       lab.textContent=m + ' dBFS';
@@ -559,8 +630,8 @@
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${x}% - 0.5px)`;
-    ref.style.top='20%';
-    ref.style.height='60%';
+    ref.style.top='25%';
+    ref.style.height='50%';
     ref.style.width='1px';
     ref.style.background=getCss('--cyan');
     ref.style.opacity='0.95';
@@ -569,7 +640,7 @@
     tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
     tag.style.position='absolute';
     tag.style.left=`calc(${x}% - 32px)`;
-    tag.style.bottom='0';
+    tag.style.bottom='8px';  // Samma spacing som top labels
     tag.style.width='64px';
     tag.style.textAlign='center';
     tag.style.fontSize='10px';
@@ -589,7 +660,7 @@
     marks.forEach(m=>{
       const x = ((m+60)/60)*100;
       const t=document.createElement('div');
-      t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='18%'; t.style.height='64%'; t.style.width='2px'; t.style.background='#2a3642';
+      t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='2px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
       lab.textContent = m + ' dBTP';
@@ -605,7 +676,7 @@
     for(const mk of warn){
       const x=((mk.v+60)/60)*100;
       const col=document.createElement('div');
-      col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='18%'; col.style.height='64%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
+      col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='25%'; col.style.height='50%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
       el.appendChild(col);
       let dbfsEq = '';
       if(mk.v === -6) dbfsEq = '-9 dBFS';
@@ -615,7 +686,7 @@
       tag.innerHTML = `<div>${dbfsEq}</div>`;
       tag.style.position='absolute';
       tag.style.left=`calc(${x}% - 32px)`;
-      tag.style.bottom='0';
+      tag.style.bottom='8px';  // Samma luftiga spacing som blå TEST-text
       tag.style.width='64px';
       tag.style.textAlign='center';
       tag.style.fontSize='10px';
@@ -632,8 +703,8 @@
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xRef}% - 1px)`;
-    ref.style.top='18%';
-    ref.style.height='64%';
+    ref.style.top='25%';
+    ref.style.height='50%';
     ref.style.width='2px';
     ref.style.background=getCss('--cyan');
     ref.style.opacity='0.95';
@@ -643,7 +714,7 @@
     tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
     tag.style.position='absolute';
     tag.style.left=`calc(${xRef}% - 32px)`;
-    tag.style.bottom='0';
+    tag.style.bottom='8px';  // Samma spacing som top labels
     tag.style.width='64px';
     tag.style.textAlign='center';
     tag.style.fontSize='10px';
