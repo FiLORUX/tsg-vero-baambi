@@ -1,3 +1,9 @@
+    .xyModule {
+      padding-top: 18px;
+      padding-bottom: 18px;
+      margin-bottom: 8px;
+      background: none;
+    }
 <!doctype html>
 <html lang="en-GB">
 <head>
@@ -36,10 +42,37 @@
 
     /* Visning */
     .meters{display:grid;grid-template-columns:3fr 1fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
-    .stack-left{display:grid;grid-template-rows:2fr 1fr 1fr;gap:12px;min-height:0}
+    .stack-left{
+      display: grid;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 12px;
+      min-height: 0;
+      align-items: stretch;
+      grid-auto-rows: 1fr;
+      height: 100%;
+    }
     .stack-right{display:grid;grid-template-rows:2fr 1fr;gap:12px;min-height:0}
-    .meter{background:#111416;border:1px solid var(--outline);border-radius:12px;padding:10px;position:relative;min-height:0;display:flex;flex-direction:column}
-    .meter header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+    .meter{
+      background: #111416;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      padding: 1.2em 2vw 2em 2vw;
+      position: relative;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 0;
+      height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .meter header{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.8em;
+    }
     .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
     .tiny{opacity:.85;font-size:12px}
 
@@ -55,17 +88,45 @@
     .xySquare, .corrWrap {
       position: relative;
       width: 100%;
+      height: 100%;
+      min-height: 0;
       aspect-ratio: 1 / 1;
-      padding-top: 14px;
-      padding-bottom: 14px;
+      padding: 0;
       box-sizing: border-box;
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+      overflow: hidden;
     }
-    .xySquare > canvas,
-    .corrWrap > canvas {
+    .xySquare > .canvasPad,
+    .corrWrap > .canvasPad {
       width: 100%;
-      height: calc(100% - 8px);
+      height: 100%;
+      min-height: 0;
+      box-sizing: border-box;
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+      overflow: hidden;
     }
-    .corrWrap>canvas{position:absolute;inset:0;width:100%;height:100%;}
+    .corrWrap > .canvasPad {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .canvasPad > canvas {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      min-height: 0;
+      box-sizing: border-box;
+      display: block;
+      border-radius: 10px;
+      border: 1px solid var(--outline);
+      background: #0d0f11;
+    }
 
     /* VU (Nordic) */
     .vu{position:relative;height:100%;background:#0c0f12;border:1px solid var(--outline);border-radius:12px;overflow:hidden}
@@ -232,13 +293,15 @@
       <div class="stack-left">
         <div class="meter" id="xyCard">
           <header><label>Goniometer (Stereo Vectorscope)</label><span class="badge">Mono = 45°</span></header>
-          <div class="xyGrid">
-            <div class="xySquare" id="xyWrap">
-              <div class="canvasPad"><canvas id="xy"></canvas></div>
-            </div>
-            <div class="corrWrap">
-              <div class="canvasPad"><canvas id="corr"></canvas></div>
-              <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
+          <div class="xyModule">
+            <div class="xyGrid">
+              <div class="xySquare" id="xyWrap">
+                <div class="canvasPad"><canvas id="xy"></canvas></div>
+              </div>
+              <div class="corrWrap">
+                <div class="canvasPad"><canvas id="corr"></canvas></div>
+                <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
+              </div>
             </div>
           </div>
         </div>
