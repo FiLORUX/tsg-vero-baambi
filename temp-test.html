@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="sv">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>16:9 FuBK-inspirerad testbild (smart mashup)</title>
+<body style="margin:0;background:#111;display:grid;place-items:center;min-height:100vh">
+<!--
+FuBK-inspirerad mashup i 16:9: opak bakgrund, färgkäglor, multiburst, gråramp,
+Siemens-skivor och enkla sidopelare. Allt vektor och lättvikt.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="640" height="360" role="img" aria-label="FuBK-inspirerad testbild 16:9">
+  <defs>
+    <!-- Bakgrundstile (checker, opak) -->
+    <pattern id="checker" width="40" height="40" patternUnits="userSpaceOnUse">
+      <rect width="40" height="40" fill="#cfcfcf"/>
+      <rect width="20" height="20" fill="#e8e8e8"/>
+      <rect x="20" y="20" width="20" height="20" fill="#e8e8e8"/>
+    </pattern>
+
+    <!-- FuBK multiburst-ränder -->
+    <pattern id="vstripes" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#cfcfcf"/>
+      <rect width="4" height="8" fill="#111"/>
+    </pattern>
+
+    <!-- Diagonal hatch (för “skärp-test” ytor) -->
+    <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="10" height="10" fill="none"/>
+      <rect width="2" height="10" fill="#111"/>
+    </pattern>
+
+    <!-- Horisontell gråramp -->
+    <linearGradient id="gray" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#111"/>
+      <stop offset="0.25" stop-color="#555"/>
+      <stop offset="0.5" stop-color="#999"/>
+      <stop offset="0.75" stop-color="#ddd"/>
+      <stop offset="1"   stop-color="#fff"/>
+    </linearGradient>
+
+    <!-- Siemens-skiva (enkel, konsekvent) -->
+    <g id="siemens" transform="scale(1)">
+      <circle r="62" fill="#fff" stroke="#111" stroke-width="4"/>
+      <g stroke="#111" stroke-width="10" stroke-linecap="butt">
+        <!-- 12 sektorer -->
+        <line x1="0" y1="0" x2="0" y2="-56"/>
+        <g transform="rotate(30)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(60)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(90)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(120)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(150)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(180)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(210)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(240)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(270)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(300)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+        <g transform="rotate(330)"><line x1="0" y1="0" x2="0" y2="-56"/></g>
+      </g>
+      <circle r="12" fill="#fff" stroke="#111" stroke-width="6"/>
+    </g>
+
+    <!-- Clip för huvud-oval (FuBK kör oval, ej full cirkel) -->
+    <clipPath id="ovclip">
+      <ellipse cx="640" cy="360" rx="480" ry="290"/>
+    </clipPath>
+  </defs>
+
+  <!-- OPAK bakgrund + ram -->
+  <rect width="1280" height="720" fill="url(#checker)"/>
+  <rect x="12" y="12" width="1256" height="696" fill="none" stroke="#000" stroke-width="24" opacity=".9"/>
+
+  <!-- Sidopelare (enklare än Philips, likt FuBK) -->
+  <g>
+    <rect x="120" y="120" width="40" height="480" fill="#2fb29a"/>
+    <rect x="170" y="120" width="40" height="480" fill="#d25a7a"/>
+    <rect x="1070" y="120" width="40" height="480" fill="#8ea01f"/>
+    <rect x="1120" y="120" width="40" height="480" fill="#6c72f3"/>
+    <rect x="150" y="270" width="60" height="180" fill="url(#hatch)" stroke="#111" stroke-width="4"/>
+    <rect x="1070" y="270" width="60" height="180" fill="url(#hatch)" stroke="#111" stroke-width="4"/>
+  </g>
+
+  <!-- Fyra Siemens-skivor -->
+  <g transform="translate(180,160)"><use href="#siemens"/></g>
+  <g transform="translate(1100,160)"><use href="#siemens"/></g>
+  <g transform="translate(180,560)"><use href="#siemens"/></g>
+  <g transform="translate(1100,560)"><use href="#siemens"/></g>
+
+  <!-- Huvud-oval – lägg en ljus bakplåt så bakgrund aldrig lyser igenom -->
+  <ellipse cx="640" cy="360" rx="480" ry="290" fill="#efefef" stroke="#000" stroke-width="4"/>
+
+  <!-- Innehåll i ovalen (FuBK-liknande, men kondenserat) -->
+  <g clip-path="url(#ovclip)">
+
+    <!-- Toppljus + titelruta -->
+    <rect x="340" y="160" width="600" height="140" fill="#e7e7e7"/>
+    <rect x="540" y="195" width="200" height="45" fill="#000" rx="6"/>
+
+    <!-- Svarta “takter” under topp -->
+    <g fill="#000" transform="translate(360,300)">
+      <rect x="0"   y="0" width="60" height="22"/>
+      <rect x="120" y="0" width="60" height="22"/>
+      <rect x="240" y="0" width="60" height="22"/>
+      <rect x="360" y="0" width="60" height="22"/>
+      <rect x="480" y="0" width="60" height="22"/>
+    </g>
+
+    <!-- Färgkäglor (FuBK har andra ordningar; behåller igenkänning) -->
+    <g transform="translate(380,325)">
+      <rect width="520" height="90" fill="#cbd000"/>
+      <rect x="104" width="104" height="90" fill="#00cbd0"/>
+      <rect x="208" width="104" height="90" fill="#00c43a"/>
+      <rect x="312" width="104" height="90" fill="#cc22cc"/>
+      <rect x="416" width="104" height="90" fill="#c40000"/>
+      <rect x="520" width="0" height="90" fill="#0019d9"/>
+    </g>
+
+    <!-- Central svart center-bar -->
+    <rect x="626" y="315" width="28" height="140" fill="#111"/>
+
+    <!-- Multiburst-fält -->
+    <rect x="420" y="420" width="440" height="70" fill="url(#vstripes)" stroke="#111" stroke-width="4"/>
+
+    <!-- Gråramp + svart/vit block under (FuBK-känsla) -->
+    <rect x="480" y="508" width="320" height="36" fill="url(#gray)" stroke="#111" stroke-width="3"/>
+    <g>
+      <rect x="480" y="548" width="140" height="26" fill="#111"/>
+      <rect x="660" y="548" width="140" height="26" fill="#fff" stroke="#111" stroke-width="2"/>
+    </g>
+
+    <!-- Gul halvmåne + röd index (ikonisk touch) -->
+    <path d="M360,560 A480,290 0 0 0 920,560 L920,600 L360,600 Z" fill="#cbd000"/>
+    <rect x="630" y="540" width="20" height="70" fill="#c40000"/>
+  </g>
+
+  <!-- Små “E”-markörer (igenkänning) -->
+  <g fill="#fff" stroke="#111" stroke-width="4">
+    <rect x="620" y="104" width="40" height="26"/>
+    <rect x="626" y="110" width="28" height="6"/>
+    <rect x="626" y="120" width="28" height="6"/>
+    <rect x="626" y="130" width="28" height="6"/>
+
+    <rect x="620" y="590" width="40" height="26"/>
+    <rect x="626" y="596" width="28" height="6"/>
+    <rect x="626" y="606" width="28" height="6"/>
+    <rect x="626" y="616" width="28" height="6"/>
+  </g>
+</svg>
+</body>
+</html>

@@ -1,7 +1,22 @@
 <!doctype html>
 <html lang="en-GB">
-<head>
-  <meta charset="utf-8" />
+<h    .meters{display:grid;grid-template-columns:7fr 4fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
+    .stack-left{
+      display: grid;
+      grid-template-rows: 2fr 1fr 1fr;
+      gap: 12px;
+      min-height: 0;
+      align-items: stretch;
+      grid-auto-rows: 1fr;
+      height: 100%;
+    }
+    .stack-right{
+      display:grid;
+      grid-template-columns: 1fr 1fr;  /* Två kolumner för VU och PPM */
+      grid-template-rows:2fr 1fr;
+      gap:12px;
+      min-height:0
+    }a charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TSG Suite | VEROBAAMBI</title>
   <style>
