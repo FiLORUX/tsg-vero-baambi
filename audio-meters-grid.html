@@ -305,6 +305,7 @@
     .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
     .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
     .kv small{display:block;font-size:11px;color:#a9b2c7}
+    .kv .wide{grid-column:span 2}
 
     input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
     .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
@@ -367,7 +368,6 @@
     
     .meter:hover {
       box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 20px rgba(147, 197, 253, 0.3);
-      transform: translateY(-2px);
       border-color: rgba(147, 197, 253, 0.5);
       background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.03));
     }
@@ -379,11 +379,11 @@
     
     .meter.dragging {
       cursor: grabbing;
-      transform: scale(1.02);
-      box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.6);
-      border: 2px solid rgba(147, 197, 253, 0.8);
+      transform: scale(0.95);
+      box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.2);
+      border: 2px solid rgba(147, 197, 253, 0.3);
       z-index: 1000;
-      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.1));
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.02));
     }
     
     .meter.dragging::before {
@@ -514,7 +514,7 @@
           <div><small>AudioContext</small><span id="ctxState">–</span></div>
           <div><small>Tone running</small><span id="dbgGen">no</span></div>
           <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
-          <div><small>Monitor status</small><span id="monitorStatus" class="tiny">Generator monitor: <b>OFF</b> · System monitor: <b>OFF</b> (default)</span></div>
+          <div class="wide"><small>Monitor status</small><span id="monitorStatus" class="tiny">System monitor: <b>OFF</b> (default)<br>Generator monitor: <b>ON</b> (default)</span></div>
         </div>
       </section>
     </div>
@@ -1084,13 +1084,19 @@
     sysMonVal.textContent = sysMonGainEl.value;
     if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; }
     else { btnSysMonMute.classList.add('btn-active'); btnSysMonMute.classList.remove('btn-ghost'); btnSysMonMute.textContent='Mute system monitor'; sysMonState.textContent='(on)'; }
+    
+    // Update monitor status display
+    const monitorStatus = document.getElementById('monitorStatus');
+    const genStatus = monitorMuted ? '<b>OFF</b>' : '<b>ON</b>' + (!monitorMuted ? ' (default)' : '');
+    const sysStatus = sysMonitorMuted ? '<b>OFF</b>' + (sysMonitorMuted ? ' (default)' : '') : '<b>ON</b>';
+    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
   }
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
   // ------- Generator -------
   // Exakt -18.00 dBFS RMS för sinus ⇒ A = √2 * 10^(-18/20) ≈ 0.177827941
   const SINE_A_FOR_MINUS18 = Math.SQRT2 * Math.pow(10, -18/20);
-  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null; let monitorMuted=true;
+  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null; let monitorMuted=false;
 
   async function startGenerator(){
     await ac.resume();
@@ -1113,7 +1119,7 @@
 
     genOsc.start();
     btnTone.textContent='Stop tone'; dbgGen.textContent='yes';
-    btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute generator monitor'; monState.textContent='(muted)'; monitorMuted = true;
+    btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; monitorMuted = false;
   }
   async function stopGenerator(){
     try{ genOsc && genOsc.stop() }catch{}
@@ -1126,6 +1132,12 @@
     monVal.textContent = monGainEl.value;
     if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute generator monitor'; monState.textContent='(muted)'; }
     else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; }
+    
+    // Update monitor status display
+    const monitorStatus = document.getElementById('monitorStatus');
+    const genStatus = monitorMuted ? '<b>OFF</b>' : '<b>ON</b>' + (!monitorMuted ? ' (default)' : '');
+    const sysStatus = sysMonitorMuted ? '<b>OFF</b>' + (sysMonitorMuted ? ' (default)' : '') : '<b>ON</b>';
+    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
   }
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
@@ -1231,6 +1243,12 @@
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     
+    // Remove drag-over from all elements first
+    document.querySelectorAll('.meter').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+    
+    // Only add to current target if it's valid
     if (e.currentTarget !== draggedElement && e.currentTarget.classList.contains('meter')) {
       e.currentTarget.classList.add('drag-over');
     }
