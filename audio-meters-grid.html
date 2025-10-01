@@ -32,14 +32,113 @@
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
 
     /* Grid */
-    .wrap{box-sizing:border-box;padding:20px;display:grid;gap:16px;grid-template-columns: 360px 1fr;grid-template-rows: 2fr 1fr 1fr; height:calc(100dvh - 56px)}
+    .wrap{
+      box-sizing:border-box;
+      padding:20px;
+      display:grid;
+      gap:16px;
+      grid-template-columns: var(--sidebar-width, 360px) 1fr;
+      grid-template-rows: 1fr; 
+      height:calc(100dvh - 56px);
+      transition: grid-template-columns 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    
+    .wrap.sidebar-collapsed {
+      grid-template-columns: 0 1fr;
+      gap: 0;
+      padding: 20px;
+    }
+    
+    .wrap.sidebar-collapsed .visning {
+      margin: 0;
+    }
+    
+    .wrap.sidebar-collapsed .sidebar-container {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 48px;
+      height: 100%;
+      z-index: 50;
+    }
+    
+    /* Sidebar Collapse System */
+    .sidebar-container {
+      position: relative;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    
+    .sidebar-content {
+      display: grid;
+      gap: 16px;
+      grid-template-rows: 2fr 1fr 1fr;
+      height: 100%;
+      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease;
+    }
+    
+    .sidebar-collapsed .sidebar-content {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .collapse-toggle {
+      position: fixed;
+      left: calc(var(--sidebar-width, 360px) + 20px - 24px);
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.1));
+      border: 1px solid var(--outline);
+      border-radius: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    }
+    
+    .sidebar-collapsed .collapse-toggle {
+      left: calc(0px + 20px - 24px);
+    }
+    
+    .collapse-toggle:hover {
+      background: linear-gradient(135deg, rgba(147, 197, 253, 0.2), rgba(34, 211, 238, 0.1));
+      box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 16px rgba(147, 197, 253, 0.3);
+      transform: translateY(-50%) scale(1.05);
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+    
+    .collapse-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--ink);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .sidebar-collapsed .collapse-toggle svg {
+      transform: rotate(180deg);
+    }
+    
+    .collapse-toggle:hover svg {
+      fill: rgba(147, 197, 253, 0.9);
+    }
     .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0;overflow:hidden}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
 
-    .leftTop{grid-column:1;grid-row:1}
-    .leftBottom{grid-column:1;grid-row:2}
-    .leftFooter{grid-column:1;grid-row:3}
-    .visning{grid-column:2;grid-row:1 / span 3;display:grid;grid-template-rows:auto 1fr;gap:12px;min-height:0}
+    .visning{
+      grid-column:2;
+      grid-row:1;
+      display:grid;
+      grid-template-rows:auto 1fr;
+      gap:12px;
+      min-height:0;
+      transition: margin 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      margin-right: 0;
+    }
 
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     button{background:var(--btn);border:0;color:white;padding:9px 12px;border-radius:11px;font-weight:700;cursor:pointer}
@@ -254,6 +353,63 @@
       height: 160px;
       margin-bottom: var(--meter-gap);
     }
+
+    /* Drag & Drop Responsive Panels */
+    .meter {
+      cursor: grab;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+    }
+    
+    .meter:hover {
+      box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 20px rgba(147, 197, 253, 0.3);
+      transform: translateY(-2px);
+      border-color: rgba(147, 197, 253, 0.5);
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.03));
+    }
+    
+    .meter:hover h2 {
+      color: rgba(147, 197, 253, 0.9);
+      text-shadow: 0 0 8px rgba(147, 197, 253, 0.3);
+    }
+    
+    .meter.dragging {
+      cursor: grabbing;
+      transform: scale(1.02);
+      box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.6);
+      border: 2px solid rgba(147, 197, 253, 0.8);
+      z-index: 1000;
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.1));
+    }
+    
+    .meter.dragging::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 16px;
+      background: linear-gradient(45deg, rgba(147, 197, 253, 0.3), rgba(34, 211, 238, 0.3));
+      z-index: -1;
+      filter: blur(8px);
+    }
+    
+    .meter.drag-over {
+      border: 2px dashed rgba(147, 197, 253, 0.6);
+      background: rgba(147, 197, 253, 0.05);
+      animation: pulse-glow 1s ease-in-out infinite alternate;
+    }
+    
+    .meter.transitioning {
+      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    
+    @keyframes pulse-glow {
+      0% { box-shadow: 0 0 16px rgba(147, 197, 253, 0.3); }
+      100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
+    }
   </style>
 </head>
 <body>
@@ -303,62 +459,72 @@
 </header>
 
 <div id="wrap" class="wrap">
-  <section class="card leftTop">
-    <h2>System / Chrome tab</h2>
-    <div class="row">
-      <button id="btnTab">Start capture</button>
-      <button id="btnStop" class="btn-ghost" disabled>Stop capture</button>
-    </div>
-    <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
-    <div class="row" style="margin-top:6px;align-items:center">
-      <label>System monitor:</label>
-      <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
-      <span id="sysMonVal" class="tiny">0.20</span>
-      <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
-      <span id="sysMonState" class="tiny">(muted)</span>
-    </div>
-    <div class="row" style="align-items:center">
-      <label>Line-up (Chrome, dB):</label>
-      <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="0" />
-      <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="0.0" />
-      <span class="tiny" id="sysTrimOut">0.0 dB</span>
-      <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0 dB</button>
-    </div>
-    <div class="kv" id="info">
-      <div><small>Source</small><span id="srcKind">–</span></div>
-      <div><small>Channel count</small><span id="cc">–</span></div>
-      <div><small>Sample rate</small><span id="sr">–</span></div>
-      <div><small>Stereo OK?</small><span id="stOK">–</span></div>
-    </div>
-    <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you intend to enable the system monitor.</p>
-  </section>
+  <div class="sidebar-container">
+    <div class="sidebar-content">
+      <section class="card leftTop">
+        <h2>System / Chrome tab</h2>
+        <div class="row">
+          <button id="btnTab">Start capture</button>
+          <button id="btnStop" class="btn-ghost" disabled>Stop capture</button>
+        </div>
+        <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
+        <div class="row" style="margin-top:6px;align-items:center">
+          <label>System monitor:</label>
+          <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
+          <span id="sysMonVal" class="tiny">0.20</span>
+          <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
+          <span id="sysMonState" class="tiny">(muted)</span>
+        </div>
+        <div class="row" style="align-items:center">
+          <label>Line-up (Chrome, dB):</label>
+          <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="0" />
+          <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="0.0" />
+          <span class="tiny" id="sysTrimOut">0.0 dB</span>
+          <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0 dB</button>
+        </div>
+        <div class="kv" id="info">
+          <div><small>Source</small><span id="srcKind">–</span></div>
+          <div><small>Channel count</small><span id="cc">–</span></div>
+          <div><small>Sample rate</small><span id="sr">–</span></div>
+          <div><small>Stereo OK?</small><span id="stOK">–</span></div>
+        </div>
+        <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you intend to enable the system monitor.</p>
+      </section>
 
-  <section class="card leftBottom">
-    <h2>Internal test tone generator</h2>
-    <div class="row" style="align-items:center">
-      <button id="btnTone">Start/Stop tone</button>
-      <label><input type="checkbox" id="muteLeft"> Mute left 0.5 s every 1.5 s</label>
-      <span class="badge">440 Hz · −18 dBFS RMS (0 VU)</span>
-    </div>
-    <div class="row" style="margin-top:6px;align-items:center">
-      <label>Generator monitor:</label>
-      <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
-      <span id="monVal" class="tiny">0.20</span>
-      <button id="btnMonMute" class="btn-ghost">Unmute generator monitor</button>
-      <span id="monState" class="tiny">(muted)</span>
-    </div>
-  </section>
+      <section class="card leftBottom">
+        <h2>Internal test tone generator</h2>
+        <div class="row" style="align-items:center">
+          <button id="btnTone">Start/Stop tone</button>
+          <label><input type="checkbox" id="muteLeft"> Mute left 0.5 s every 1.5 s</label>
+          <span class="badge">440 Hz · −18 dBFS RMS (0 VU)</span>
+        </div>
+        <div class="row" style="margin-top:6px;align-items:center">
+          <label>Generator monitor:</label>
+          <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
+          <span id="monVal" class="tiny">0.20</span>
+          <button id="btnMonMute" class="btn-ghost">Unmute generator monitor</button>
+          <span id="monState" class="tiny">(muted)</span>
+        </div>
+      </section>
 
-  <section class="card leftFooter">
-    <h2>Status & live data</h2>
-    <div class="kv">
-      <div><small>Uptime (s)</small><span id="uptime">0.0</span></div>
-      <div><small>AudioContext</small><span id="ctxState">–</span></div>
-      <div><small>Tone running</small><span id="dbgGen">no</span></div>
-      <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
-      <div><small>Monitor status</small><span id="monitorStatus" class="tiny">Generator monitor: <b>OFF</b> · System monitor: <b>OFF</b> (default)</span></div>
+      <section class="card leftFooter">
+        <h2>Status & live data</h2>
+        <div class="kv">
+          <div><small>Uptime (s)</small><span id="uptime">0.0</span></div>
+          <div><small>AudioContext</small><span id="ctxState">–</span></div>
+          <div><small>Tone running</small><span id="dbgGen">no</span></div>
+          <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
+          <div><small>Monitor status</small><span id="monitorStatus" class="tiny">Generator monitor: <b>OFF</b> · System monitor: <b>OFF</b> (default)</span></div>
+        </div>
+      </section>
     </div>
-  </section>
+    
+    <div class="collapse-toggle" id="sidebarToggle">
+      <svg viewBox="0 0 24 24">
+        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+      </svg>
+    </div>
+  </div>
 
   <section class="card visning">
     <h2>Meters</h2>
@@ -963,6 +1129,228 @@
   }
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
+  // ------- Sidebar Collapse System -------
+  function initSidebarToggle() {
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const wrap = document.getElementById('wrap');
+    const metersSection = document.querySelector('.visning');
+    let isCollapsed = false;
+    
+    // Function to update toggle button vertical position (center to meters panel)
+    function updateToggleVerticalPosition() {
+      if (metersSection) {
+        const metersRect = metersSection.getBoundingClientRect();
+        const centerY = metersRect.top + (metersRect.height / 2);
+        sidebarToggle.style.top = centerY + 'px';
+      }
+    }
+    
+    // Update vertical position on load and resize
+    updateToggleVerticalPosition();
+    window.addEventListener('resize', updateToggleVerticalPosition);
+    
+    sidebarToggle.addEventListener('click', () => {
+      isCollapsed = !isCollapsed;
+      
+      if (isCollapsed) {
+        wrap.classList.add('sidebar-collapsed');
+      } else {
+        wrap.classList.remove('sidebar-collapsed');
+      }
+      
+      // Update toggle vertical position after animation and trigger layout recalculation
+      setTimeout(() => {
+        updateToggleVerticalPosition();
+        layoutXY();
+        // Trigger resize event for any other responsive elements
+        window.dispatchEvent(new Event('resize'));
+      }, 400);
+    });
+    
+    // Keyboard shortcut: Ctrl/Cmd + B to toggle sidebar
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        sidebarToggle.click();
+      }
+    });
+  }
+
+  // ------- Drag & Drop System -------
+  let draggedElement = null;
+  let dragOffset = { x: 0, y: 0 };
+  let isDragging = false;
+
+  function initDragAndDrop() {
+    const meterPanels = document.querySelectorAll('.meter');
+    
+    meterPanels.forEach(panel => {
+      // Mouse events
+      panel.addEventListener('mousedown', handleDragStart);
+      panel.addEventListener('dragover', handleDragOver);
+      panel.addEventListener('drop', handleDrop);
+      
+      // Touch events for mobile
+      panel.addEventListener('touchstart', handleTouchStart);
+      
+      // Make draggable
+      panel.draggable = true;
+      panel.addEventListener('dragstart', handleDragStartNative);
+    });
+
+    // Global events
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchend', handleTouchEnd);
+  }
+
+  function handleDragStart(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOffset.x = e.clientX - rect.left;
+    dragOffset.y = e.clientY - rect.top;
+    
+    // Visual feedback
+    e.currentTarget.classList.add('dragging');
+  }
+
+  function handleDragStartNative(e) {
+    draggedElement = e.currentTarget;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', e.currentTarget.outerHTML);
+    
+    // Delay to allow visual state to update
+    setTimeout(() => {
+      if (draggedElement) {
+        draggedElement.classList.add('dragging');
+      }
+    }, 0);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (e.currentTarget !== draggedElement && e.currentTarget.classList.contains('meter')) {
+      e.currentTarget.classList.add('drag-over');
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    
+    const dropTarget = e.currentTarget;
+    dropTarget.classList.remove('drag-over');
+    
+    if (draggedElement && dropTarget !== draggedElement && dropTarget.classList.contains('meter')) {
+      // Swap positions
+      swapElements(draggedElement, dropTarget);
+    }
+    
+    // Clean up
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging');
+      draggedElement = null;
+    }
+    
+    // Remove drag-over from all elements
+    document.querySelectorAll('.meter').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+  }
+
+  function handleTouchStart(e) {
+    const touch = e.touches[0];
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragOffset.x = touch.clientX - rect.left;
+    dragOffset.y = touch.clientY - rect.top;
+    
+    draggedElement = e.currentTarget;
+    draggedElement.classList.add('dragging');
+    isDragging = true;
+    
+    e.preventDefault();
+  }
+
+  function handleDragMove(e) {
+    if (!isDragging || !draggedElement) return;
+    // For mouse drag (if implementing custom drag)
+  }
+
+  function handleTouchMove(e) {
+    if (!isDragging || !draggedElement) return;
+    
+    const touch = e.touches[0];
+    const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    // Remove previous drag-over
+    document.querySelectorAll('.meter').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+    
+    // Add drag-over to current target
+    if (elementUnderTouch && elementUnderTouch.classList.contains('meter') && elementUnderTouch !== draggedElement) {
+      elementUnderTouch.classList.add('drag-over');
+    }
+    
+    e.preventDefault();
+  }
+
+  function handleDragEnd(e) {
+    if (draggedElement) {
+      draggedElement.classList.remove('dragging');
+    }
+    isDragging = false;
+  }
+
+  function handleTouchEnd(e) {
+    if (!isDragging || !draggedElement) return;
+    
+    const touch = e.changedTouches[0];
+    const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    if (elementUnderTouch && elementUnderTouch.classList.contains('meter') && elementUnderTouch !== draggedElement) {
+      swapElements(draggedElement, elementUnderTouch);
+    }
+    
+    // Clean up
+    draggedElement.classList.remove('dragging');
+    document.querySelectorAll('.meter').forEach(el => {
+      el.classList.remove('drag-over');
+    });
+    
+    draggedElement = null;
+    isDragging = false;
+  }
+
+  function swapElements(el1, el2) {
+    // Add transition class for smooth animation
+    el1.classList.add('transitioning');
+    el2.classList.add('transitioning');
+    
+    // Create temporary placeholder
+    const temp = document.createElement('div');
+    temp.style.display = 'none';
+    
+    // Insert temp before el1
+    el1.parentNode.insertBefore(temp, el1);
+    
+    // Move el1 to where el2 is
+    el2.parentNode.insertBefore(el1, el2);
+    
+    // Move el2 to where el1 was (temp position)
+    temp.parentNode.insertBefore(el2, temp);
+    
+    // Remove temp
+    temp.remove();
+    
+    // Remove transition class after animation
+    setTimeout(() => {
+      el1.classList.remove('transitioning');
+      el2.classList.remove('transitioning');
+    }, 400);
+  }
+
   // ------- Loop -------
   let startTs=performance.now(); let leftMuteTimer=0;
   function loop(){
@@ -977,6 +1365,11 @@
   }
   requestAnimationFrame(loop);
   new ResizeObserver(()=>layoutXY()).observe(meters);
+  
+  // Re-observe XY elements after potential drag operations
+  const xyObserver = new ResizeObserver(()=>layoutXY());
+  xyObserver.observe(xyCard);
+  xyObserver.observe(xyWrap);
 
   // ------- Bind -------
   btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOsc) await startGenerator(); else await stopGenerator(); };
@@ -985,6 +1378,10 @@
   // ------- Boot: ingen auto-ton, allt muted default -------
   let booted=false; async function boot(){ if(booted) return; booted=true; await ac.resume(); }
   ['pointerdown','click','keydown','touchstart'].forEach(evt=>window.addEventListener(evt, boot, { once:true, passive:true }));
+  
+  // Initialize systems
+  initSidebarToggle();
+  initDragAndDrop();
 })();
 </script>
 </body>
