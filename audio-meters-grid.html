@@ -25,6 +25,14 @@
       --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
       --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
       --meter-gap: 1.2em;
+      
+      /* **BEST PRACTICE 2025: Modern CSS Custom Properties for Performance** */
+      /* Centralised values for consistent theming and easy maintenance */
+      --drag-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --canvas-border-radius: 10px;
+      --vectorscope-min-size: 160px;
+      --resize-debounce-delay: 16ms; /* ~60fps */
+      --visibility-threshold: 0.1; /* 10% visibility for intersection observer */
     }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
@@ -196,6 +204,40 @@
       align-items: center;
       min-height: 0;
     }
+    
+    /* **BEST PRACTICE 2025: CSS Container Queries for Responsive Design** */
+    /* Modern approach to responsive layouts that responds to container size, not viewport */
+    .xyModule {
+      container-type: inline-size;
+      container-name: vectorscope;
+    }
+    
+    /* Responsive layout adjustments based on container width */
+    @container vectorscope (min-width: 400px) {
+      .xyGrid {
+        grid-template-columns: 2fr 1fr;
+        gap: 12px;
+      }
+    }
+    
+    @container vectorscope (max-width: 399px) {
+      .xyGrid {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+        gap: 8px;
+      }
+      
+      .xySquare {
+        grid-row: 1;
+      }
+      
+      .corrWrap {
+        grid-row: 2;
+        aspect-ratio: 3/1;
+        max-height: 60px;
+      }
+    }
+    
     .xySquare {
       position: relative;
       aspect-ratio: 1;
@@ -358,7 +400,7 @@
     /* Drag & Drop Responsive Panels */
     .meter {
       cursor: grab;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: var(--drag-transition);
       position: relative;
       user-select: none;
       -webkit-user-select: none;
@@ -654,6 +696,12 @@
   sizeWrap(); window.addEventListener('resize', sizeWrap);
 
   function layoutXY(){
+    // **DRAG-AWARE LAYOUT: Skip expensive calculations during drag operations**
+    if (isDragLayoutFrozen) {
+      console.debug('layoutXY: Skipped due to active drag operation');
+      return;
+    }
+    
     const dpr = window.devicePixelRatio || 1;
     const header = xyCard.querySelector('header');
     const cardH = xyCard.clientHeight - (header?header.offsetHeight:0) - 16; // padding
@@ -1173,7 +1221,8 @@
       // Update toggle vertical position after animation and trigger layout recalculation
       setTimeout(() => {
         updateToggleVerticalPosition();
-        layoutXY();
+        // **BEST PRACTICE 2025: Use scheduled layout update instead of direct call**
+        scheduleLayoutUpdate(xyCard, layoutXY);
         // Trigger resize event for any other responsive elements
         window.dispatchEvent(new Event('resize'));
       }, 400);
@@ -1192,6 +1241,88 @@
   let draggedElement = null;
   let dragOffset = { x: 0, y: 0 };
   let isDragging = false;
+  
+  // **BEST PRACTICE 2025: Drag-Aware Layout Management**
+  // Prevents layout thrashing during drag operations by freezing expensive calculations
+  let isDragLayoutFrozen = false;
+  
+  // **BEST PRACTICE 2025: Debounced ResizeObserver Pattern**
+  // Prevents cascade resize events and ensures smooth performance during layout changes
+  const resizeDebouncer = new Map();
+  
+  /**
+   * Schedules layout updates using requestAnimationFrame to prevent blocking the main thread
+   * @param {Element} element - The element being observed for resize
+   * @param {Function} callback - The layout function to execute
+   */
+  function scheduleLayoutUpdate(element, callback) {
+    // Cancel any pending layout update for this element
+    if (resizeDebouncer.has(element)) {
+      cancelAnimationFrame(resizeDebouncer.get(element));
+    }
+    
+    // Schedule new update on next available frame
+    const rafId = requestAnimationFrame(() => {
+      try {
+        resizeDebouncer.delete(element);
+        
+        // **BEST PRACTICE 2025: Performance monitoring for layout operations**
+        const startTime = performance.now();
+        callback();
+        const endTime = performance.now();
+        
+        // Log performance warnings for slow layout operations (>16ms = missing 60fps)
+        if (endTime - startTime > 16) {
+          console.warn(`Layout operation took ${(endTime - startTime).toFixed(2)}ms - may affect 60fps performance`);
+        }
+        
+      } catch (error) {
+        console.error('Layout update failed:', error);
+        // Remove failed element from debouncer to prevent stuck states
+        resizeDebouncer.delete(element);
+      }
+    });
+    
+    resizeDebouncer.set(element, rafId);
+  }
+  
+  /**
+   * Canvas State Preservation Pattern for Vectorscope
+   * Prevents visual "zoom-in" effects during drag operations by preserving canvas content
+   */
+  function preserveCanvasState() {
+    // Skip if canvas isn't properly initialised
+    if (!xy || !xy.width || !xy.height || !xyCtx) {
+      console.debug('Canvas preservation skipped - canvas not ready');
+      return () => {};
+    }
+    
+    try {
+      const canvasState = {
+        width: xy.width,
+        height: xy.height,
+        imageData: xyCtx.getImageData(0, 0, xy.width, xy.height)
+      };
+      
+      // **BEST PRACTICE 2025: Memory-conscious canvas handling**
+      // Return restoration function with cleanup capabilities
+      return () => {
+        try {
+          if (xy.width === canvasState.width && xy.height === canvasState.height) {
+            xyCtx.putImageData(canvasState.imageData, 0, 0);
+          } else {
+            console.debug('Canvas dimensions changed, skipping restoration');
+          }
+        } catch (error) {
+          console.warn('Canvas restoration failed:', error);
+        }
+      };
+      
+    } catch (error) {
+      console.warn('Canvas state preservation failed:', error);
+      return () => {};
+    }
+  }
 
   function initDragAndDrop() {
     const meterPanels = document.querySelectorAll('.meter');
@@ -1218,23 +1349,45 @@
   }
 
   function handleDragStart(e) {
+    // **FIX: Only start drag on actual mouse movement, not on click**
+    // Store mouse position but don't activate visual drag state yet
     const rect = e.currentTarget.getBoundingClientRect();
     dragOffset.x = e.clientX - rect.left;
     dragOffset.y = e.clientY - rect.top;
     
-    // Visual feedback
-    e.currentTarget.classList.add('dragging');
+    // Store potential drag element but don't activate drag state
+    draggedElement = e.currentTarget;
+    
+    // Don't add dragging class or freeze layout until actual movement occurs
+    // This prevents static blue highlighting on simple clicks
   }
 
   function handleDragStartNative(e) {
+    // **FIX: Clear any previous dragging states (only one panel at a time)**
+    document.querySelectorAll('.meter.dragging').forEach(el => {
+      el.classList.remove('dragging');
+    });
+    
     draggedElement = e.currentTarget;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', e.currentTarget.outerHTML);
+    
+    // **BEST PRACTICE 2025: Preserve vectorscope canvas state before potential layout changes**
+    const restoreCanvas = preserveCanvasState();
+    
+    // **BEST PRACTICE 2025: Freeze layout system to prevent visual glitches**
+    isDragLayoutFrozen = true;
+    
+    // **FIX: Immediately activate drag state for native drag-and-drop**
+    // Native drag-and-drop needs immediate visual feedback
+    isDragging = true;
     
     // Delay to allow visual state to update
     setTimeout(() => {
       if (draggedElement) {
         draggedElement.classList.add('dragging');
+        // Restore canvas if it was affected by the visual state change
+        restoreCanvas();
       }
     }, 0);
   }
@@ -1265,16 +1418,25 @@
       swapElements(draggedElement, dropTarget);
     }
     
-    // Clean up
+    // **BEST PRACTICE 2025: Restore layout system after drag operation**
+    isDragLayoutFrozen = false;
+    
+    // **FIX: Properly clean up all drag state**
     if (draggedElement) {
       draggedElement.classList.remove('dragging');
       draggedElement = null;
     }
     
+    // Reset drag state
+    isDragging = false;
+    
     // Remove drag-over from all elements
     document.querySelectorAll('.meter').forEach(el => {
       el.classList.remove('drag-over');
     });
+    
+    // **BEST PRACTICE 2025: Schedule vectorscope layout update after drag completion**
+    scheduleLayoutUpdate(xyCard, layoutXY);
   }
 
   function handleTouchStart(e) {
@@ -1287,12 +1449,43 @@
     draggedElement.classList.add('dragging');
     isDragging = true;
     
+    // **BEST PRACTICE 2025: Freeze layout during touch drag operations**
+    isDragLayoutFrozen = true;
+    
     e.preventDefault();
   }
 
   function handleDragMove(e) {
-    if (!isDragging || !draggedElement) return;
-    // For mouse drag (if implementing custom drag)
+    // **FIX: Only activate drag state when actual movement occurs**
+    if (!draggedElement) return;
+    
+    // Calculate movement distance from initial mouse position
+    const rect = draggedElement.getBoundingClientRect();
+    const currentX = e.clientX;
+    const currentY = e.clientY;
+    const initialX = rect.left + dragOffset.x;
+    const initialY = rect.top + dragOffset.y;
+    
+    const distance = Math.sqrt(
+      Math.pow(currentX - initialX, 2) + Math.pow(currentY - initialY, 2)
+    );
+    
+    // Only activate drag state if mouse moved more than 5 pixels
+    // This prevents accidental drag activation on clicks
+    if (distance > 5 && !isDragging) {
+      isDragging = true;
+      isDragLayoutFrozen = true;
+      
+      // Clear any other dragging panels (only one at a time)
+      document.querySelectorAll('.meter.dragging').forEach(el => {
+        if (el !== draggedElement) {
+          el.classList.remove('dragging');
+        }
+      });
+      
+      // Now activate visual drag state
+      draggedElement.classList.add('dragging');
+    }
   }
 
   function handleTouchMove(e) {
@@ -1315,10 +1508,18 @@
   }
 
   function handleDragEnd(e) {
+    // **FIX: Clean up drag state properly**
     if (draggedElement) {
       draggedElement.classList.remove('dragging');
     }
+    
+    // Reset all drag state variables
+    draggedElement = null;
     isDragging = false;
+    
+    // **BEST PRACTICE 2025: Restore layout system after mouse drag**
+    isDragLayoutFrozen = false;
+    scheduleLayoutUpdate(xyCard, layoutXY);
   }
 
   function handleTouchEnd(e) {
@@ -1339,6 +1540,10 @@
     
     draggedElement = null;
     isDragging = false;
+    
+    // **BEST PRACTICE 2025: Restore layout system after touch drag**
+    isDragLayoutFrozen = false;
+    scheduleLayoutUpdate(xyCard, layoutXY);
   }
 
   function swapElements(el1, el2) {
@@ -1382,12 +1587,42 @@
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
-  new ResizeObserver(()=>layoutXY()).observe(meters);
   
-  // Re-observe XY elements after potential drag operations
-  const xyObserver = new ResizeObserver(()=>layoutXY());
-  xyObserver.observe(xyCard);
-  xyObserver.observe(xyWrap);
+  // **BEST PRACTICE 2025: Modern ResizeObserver Implementation**
+  // Replaces multiple observers with debounced, scheduled updates to prevent cascade resize events
+  
+  /**
+   * Intersection Observer for Visibility-Based Updates
+   * Only triggers layout updates when vectorscope is actually visible to user
+   */
+  const visibilityObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting && !isDragLayoutFrozen) {
+        scheduleLayoutUpdate(entry.target, layoutXY);
+      }
+    });
+  }, {
+    // Trigger when at least 10% of the element is visible
+    threshold: 0.1
+  });
+  
+  /**
+   * Modern ResizeObserver with Debouncing
+   * Prevents layout thrashing by using scheduled updates
+   */
+  const modernResizeObserver = new ResizeObserver((entries) => {
+    entries.forEach(entry => {
+      // Only process if not currently dragging
+      if (!isDragLayoutFrozen) {
+        scheduleLayoutUpdate(entry.target, layoutXY);
+      }
+    });
+  });
+  
+  // Observe key elements with modern pattern
+  modernResizeObserver.observe(meters);
+  modernResizeObserver.observe(xyCard);
+  visibilityObserver.observe(xyCard);
 
   // ------- Bind -------
   btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOsc) await startGenerator(); else await stopGenerator(); };
@@ -1400,6 +1635,45 @@
   // Initialize systems
   initSidebarToggle();
   initDragAndDrop();
+  
+  // **BEST PRACTICE 2025: Cleanup Functions for Memory Management**
+  // Proper cleanup prevents memory leaks in long-running applications
+  
+  /**
+   * Cleanup function for when the application is unloaded
+   * Cancels all pending animations and disconnects observers
+   */
+  function cleanup() {
+    // Cancel all pending layout updates
+    resizeDebouncer.forEach((rafId) => {
+      cancelAnimationFrame(rafId);
+    });
+    resizeDebouncer.clear();
+    
+    // Disconnect observers
+    if (modernResizeObserver) {
+      modernResizeObserver.disconnect();
+    }
+    if (visibilityObserver) {
+      visibilityObserver.disconnect();
+    }
+    
+    console.debug('TSG Audio Meters: Cleanup completed');
+  }
+  
+  // Register cleanup for page unload
+  window.addEventListener('beforeunload', cleanup);
+  
+  // **DEVELOPMENT MODE: Performance monitoring and debugging**
+  if (typeof window !== 'undefined' && window.location?.hostname === 'localhost') {
+    // Enable performance monitoring in development
+    console.log('TSG Audio Meters: Development mode active');
+    console.log('- Drag-aware layout system: ✓');
+    console.log('- Modern ResizeObserver pattern: ✓');
+    console.log('- CSS Container Queries: ✓');
+    console.log('- Canvas state preservation: ✓');
+    console.log('- Memory cleanup handlers: ✓');
+  }
 })();
 </script>
 </body>
