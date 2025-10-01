@@ -1,22 +1,7 @@
 <!doctype html>
 <html lang="en-GB">
-<h    .meters{display:grid;grid-template-columns:7fr 4fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
-    .stack-left{
-      display: grid;
-      grid-template-rows: 2fr 1fr 1fr;
-      gap: 12px;
-      min-height: 0;
-      align-items: stretch;
-      grid-auto-rows: 1fr;
-      height: 100%;
-    }
-    .stack-right{
-      display:grid;
-      grid-template-columns: 1fr 1fr;  /* Två kolumner för VU och PPM */
-      grid-template-rows:2fr 1fr;
-      gap:12px;
-      min-height:0
-    }a charset="utf-8" />
+<head>
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TSG Suite | VEROBAAMBI</title>
   <style>
@@ -25,7 +10,6 @@
       --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
       --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
       --meter-gap: 1.2em;
-      
       /* **BEST PRACTICE 2025: Modern CSS Custom Properties for Performance** */
       /* Centralised values for consistent theming and easy maintenance */
       --drag-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -38,8 +22,96 @@
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
+    /* Loudness Radar Panel (RTW/TC style) */
+    .loudnessRadarModule {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: flex-start;
+  height: 100%;
+  gap: 2.5vw;
+  min-height: 0;
+  position: relative;
+  min-width: 0;
+    }
+    .loudnessRadarModule .canvasPad {
+  flex: 1 1 0;
+  min-width: 180px;
+  max-width: 420px;
+  aspect-ratio: 1/1;
+  margin: 0;
+  background: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+    }
+    #loudnessRadar {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1/1;
+      background: #181c20;
+      border-radius: 50%;
+      border: 2px solid var(--outline);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      display: block;
+      max-width: 340px;
+      min-width: 120px;
+      min-height: 120px;
+    }
+    .r128-subpanel {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 320px;
+  background: rgba(20,22,24,0.92);
+  border-radius: 10px;
+  border: 1px solid var(--outline);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  padding: 12px 16px 10px 16px;
+  margin-top: 0;
+  font-size: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-start;
+    }
+    .r128-subpanel header {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+    }
 
-    /* Grid */
+    @container (max-width: 420px) {
+      .loudnessRadarModule {
+        flex-direction: column;
+        align-items: center;
+          /* LUFS value in radar center */
+        }
+        .loudnessRadarModule .canvasPad .radar-lufs-value {
+          position: absolute;
+          left: 0; right: 0; top: 0; bottom: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          font-size: clamp(2.2rem, 6vw, 4.5rem);
+          font-weight: 800;
+          color: var(--cyan);
+          text-shadow: 0 2px 12px #000, 0 0 2px #69bfff;
+          letter-spacing: 0.5px;
+          z-index: 2;
+      }
+      .loudnessRadarModule .canvasPad { max-width: 180px; }
+      #loudnessRadar { max-width: 180px; min-width: 80px; min-height: 80px; }
+      .r128-subpanel { width: 100%; }
+    }
+
     .wrap{
       box-sizing:border-box;
       padding:20px;
@@ -572,17 +644,22 @@
     <h2>Meters</h2>
     <div class="meters" id="meters">
       <div class="stack-left">
-        <div class="meter" id="xyCard">
-          <header><label>Stereo Vectorscope (Goniometer + Phase Correlation)</label></header>
-          <div class="xyModule">
-            <div class="xyGrid">
-              <div class="xySquare" id="xyWrap">
-                <div class="canvasPad"><canvas id="xy"></canvas></div>
-                <div class="overlay gonio-overlay">Mono = 45°</div>
-              </div>
-              <div class="corrWrap">
-                <div class="canvasPad"><canvas id="corr"></canvas></div>
-                <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
+        <div class="meter" id="loudnessRadarCard">
+          <header><label>Loudness</label><span class="badge">Radar + EBU R128</span></header>
+          <div class="loudnessRadarModule">
+            <!-- Radar canvas will be implemented here -->
+            <div class="canvasPad">
+              <canvas id="loudnessRadar"></canvas>
+              <div class="radar-lufs-value" id="radarLufsValue">—</div>
+            </div>
+            <!-- Sub-panel: existing R128 loudness panel -->
+            <div class="r128-subpanel">
+              <header><label>Loudness (EBU R128, Integrated LUFS)</label><span class="badge">M/S/I + LRA</span></header>
+              <div class="r128">
+                <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
+                <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
+                <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
+                <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
               </div>
             </div>
           </div>
@@ -621,13 +698,19 @@
             </div>
           </div>
         </div>
-        <div class="meter" id="r128">
-          <header><label>Loudness (EBU R128, Integrated LUFS)</label><span class="badge">M/S/I + LRA</span></header>
-          <div class="r128">
-            <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
-            <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
-            <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
-            <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
+        <div class="meter" id="xyCard">
+          <header><label>Stereo Vectorscope (Goniometer + Phase Correlation)</label></header>
+          <div class="xyModule">
+            <div class="xyGrid">
+              <div class="xySquare" id="xyWrap">
+                <div class="canvasPad"><canvas id="xy"></canvas></div>
+                <div class="overlay gonio-overlay">Mono = 45°</div>
+              </div>
+              <div class="corrWrap">
+                <div class="canvasPad"><canvas id="corr"></canvas></div>
+                <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -637,9 +720,112 @@
 
 <script>
 (async function(){
+  /**
+   * Draws the Loudness Radar (RTW/TC style)
+   * Uses radarHistory buffer (short-term LUFS, 60s)
+   * Modern canvas, theme-matched, best practice 2025
+   */
+  function drawLoudnessRadar(momentaryLufs) {
+    const ctx = loudnessRadarCtx;
+    const w = loudnessRadar.width = loudnessRadar.offsetWidth * window.devicePixelRatio;
+    const h = loudnessRadar.height = loudnessRadar.offsetHeight * window.devicePixelRatio;
+    // Update LUFS value in radar center
+    const radarLufsValue = document.getElementById('radarLufsValue');
+    if (typeof momentaryLufs === 'number' && isFinite(momentaryLufs)) {
+      radarLufsValue.textContent = momentaryLufs.toFixed(1) + ' LUFS';
+    } else {
+      radarLufsValue.textContent = '—';
+    }
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,w,h);
+    if (!radarHistory.length) return;
+    // Radar geometry
+    const cx = w/2, cy = h/2;
+    const rOuter = Math.min(w,h)*0.48;
+    const rInner = rOuter*0.55;
+    // Draw background
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,rOuter+2,0,2*Math.PI); ctx.fillStyle = '#181c20'; ctx.fill();
+    ctx.restore();
+    // Draw reference rings (e.g. -23, -18, -9 LUFS)
+    const refLUFS = [-9, -18, -23, -30];
+    refLUFS.forEach((lufs, i) => {
+      const rr = rInner + (rOuter-rInner)*(lufs+30)/21; // -30 LUFS = inner, -9 = outer
+      ctx.beginPath(); ctx.arc(cx,cy,rr,0,2*Math.PI);
+      ctx.strokeStyle = i===2 ? '#69bfff' : '#2a2f36';
+      ctx.lineWidth = i===2 ? 2 : 1;
+      ctx.globalAlpha = i===2 ? 0.7 : 0.35;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.font = `bold ${Math.round(w*0.045)}px ui-sans-serif,Arial`;
+      ctx.fillStyle = '#69bfff';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(lufs+' LUFS', cx+rr+6, cy);
+      ctx.restore();
+    });
+    // Draw radar sweep (history)
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(-Math.PI/2); // 0° = up
+    const now = Date.now();
+    const maxAge = radarMaxSeconds*1000;
+    ctx.beginPath();
+    radarHistory.forEach((pt,i) => {
+      const age = now-pt.t;
+      if (age<0 || age>maxAge) return;
+      const theta = 2*Math.PI*(1-age/maxAge); // Newest = 0°, oldest = 360°
+      const v = Math.max(-30, Math.min(-9, pt.v));
+      const rr = rInner + (rOuter-rInner)*(v+30)/21;
+      if (i===0) ctx.moveTo(rr*Math.cos(theta), rr*Math.sin(theta));
+      else ctx.lineTo(rr*Math.cos(theta), rr*Math.sin(theta));
+    });
+    ctx.strokeStyle = '#69bfff';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#69bfff';
+    ctx.shadowBlur = 8;
+    ctx.globalAlpha = 0.95;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // Draw sweep head
+    if (radarHistory.length) {
+      const pt = radarHistory[radarHistory.length-1];
+      const v = Math.max(-30, Math.min(-9, pt.v));
+      const rr = rInner + (rOuter-rInner)*(v+30)/21;
+      const theta = 0;
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(-Math.PI/2);
+      ctx.beginPath();
+      ctx.arc(rr*Math.cos(theta), rr*Math.sin(theta), 7, 0, 2*Math.PI);
+      ctx.fillStyle = '#69bfff';
+      ctx.globalAlpha = 0.85;
+      ctx.shadowColor = '#69bfff';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.restore();
+    }
+    // Draw centre label
+    ctx.save();
+    ctx.font = 'bold 18px ui-sans-serif,Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#cfe1ff';
+    ctx.globalAlpha = 0.92;
+    ctx.fillText('LUFS', cx, cy);
+    ctx.restore();
+  }
   // ------- DOM -------
+
   const wrap = document.getElementById('wrap');
   const meters = document.getElementById('meters');
+  // --- Loudness Radar ---
+  const loudnessRadar = document.getElementById('loudnessRadar');
+  const loudnessRadarCtx = loudnessRadar.getContext('2d');
+  // --- Stereo Vectorscope ---
   const xyCard = document.getElementById('xyCard');
   const xyWrap = document.getElementById('xyWrap');
   const xy = document.getElementById('xy'), xyCtx = xy.getContext('2d');
@@ -651,10 +837,23 @@
   const tp = document.getElementById('tp'), tpScale = document.getElementById('tpScale');
   const tpL = document.getElementById('tpL'), tpR = document.getElementById('tpR');
 
+  // --- R128 Subpanel ---
   const lufsM = document.getElementById('lufsM');
   const lufsS = document.getElementById('lufsS');
   const lufsI = document.getElementById('lufsI');
   const lraEl = document.getElementById('lra');
+
+  // --- Radar Data Buffer ---
+  // Holds the last 60s of short-term loudness (or as much as fits)
+  const radarHistory = [];
+  const radarMaxSeconds = 60;
+  // Called from updateR128()
+  function pushRadarLoudness(val) {
+    const now = Date.now();
+    radarHistory.push({ t: now, v: val });
+    // Remove old
+    while (radarHistory.length > 2 && (now - radarHistory[0].t) > radarMaxSeconds*1000) radarHistory.shift();
+  }
 
   const btnTab  = document.getElementById('btnTab');
   const btnStop = document.getElementById('btnStop');
@@ -1093,6 +1292,8 @@
       lufsS.textContent=isFinite(sDisp)? sDisp.toFixed(1)+' LUFS':'—';
       lufsI.textContent = (isFinite(iDisp) ? iDisp.toFixed(1)+' LUFS' : '—');
       lraEl.textContent=LRA; lastText=now;
+      // --- Update radar buffer with short-term loudness ---
+      pushRadarLoudness(sDisp);
     }
   }
 
@@ -1582,7 +1783,10 @@
       const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0;
       if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
     }
-    layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
+  layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
+  // Pass momentary LUFS to radar for live value
+  let mVal = parseFloat(lufsM && lufsM.dataset.v);
+  drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
     uptimeEl.textContent = ((performance.now()-startTs)/1000).toFixed(1);
     requestAnimationFrame(loop);
   }
