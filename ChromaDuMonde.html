@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>camAlign - ChromaDuMonde Test Pattern</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #1a1a1a;
+            font-family: 'Arial', sans-serif;
+            padding: 20px;
+        }
+        
+        .test-pattern {
+            width: 1280px;
+            height: 720px;
+            background: #4a4a4a;
+            border: 42px solid #2a2a2a;
+            position: relative;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+        }
+        
+        /* Header */
+        .header {
+            position: absolute;
+            top: -38px;
+            left: 0;
+            right: 0;
+            height: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 14px;
+            color: #ffffff;
+        }
+        
+        .header-left { font-weight: bold; }
+        .header-center { font-size: 26px; font-weight: bold; letter-spacing: 1px; }
+        .header-right { font-size: 13px; }
+        
+        /* Top color bars */
+        .top-colors {
+            position: absolute;
+            top: 28px;
+            left: 245px;
+            right: 245px;
+            height: 88px;
+            display: flex;
+        }
+        
+        .color-bar {
+            flex: 1;
+            border-right: 1px solid #333;
+        }
+        
+        .color-bar:last-child { border-right: none; }
+        
+        /* Left and right gradients */
+        .side-gradient {
+            position: absolute;
+            top: 75px;
+            width: 135px;
+            height: 570px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .side-gradient.left { left: 70px; }
+        .side-gradient.right { right: 70px; }
+        
+        .gradient-section {
+            position: relative;
+        }
+        
+        .gradient-label {
+            position: absolute;
+            font-size: 10px;
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        /* Center panel */
+        .center-panel {
+            position: absolute;
+            top: 116px;
+            left: 245px;
+            right: 245px;
+            height: 440px;
+            background: #7a7a7a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .panel-title {
+            font-size: 22px;
+            font-weight: bold;
+            color: #2a2a2a;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        
+        .grayscale-container {
+            background: #888;
+            padding: 20px;
+            width: 90%;
+        }
+        
+        .grayscale {
+            display: flex;
+            height: 180px;
+            position: relative;
+        }
+        
+        .gray-bar {
+            flex: 1;
+        }
+        
+        /* Center cross pattern */
+        .cross-pattern {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 180px;
+            height: 120px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+        }
+        
+        .cross-cell {
+            border: 1px solid #666;
+        }
+        
+        /* Bottom info */
+        .bottom-info {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+            width: 90%;
+            font-size: 11px;
+            color: #2a2a2a;
+        }
+        
+        /* Bottom color bars */
+        .bottom-colors {
+            position: absolute;
+            bottom: 28px;
+            left: 245px;
+            right: 245px;
+            height: 88px;
+            display: flex;
+        }
+        
+        /* Side markers */
+        .side-markers {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            padding: 120px 0;
+        }
+        
+        .side-markers.left { left: 5px; }
+        .side-markers.right { right: 5px; }
+        
+        .marker {
+            color: #fff;
+            font-size: 11px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .marker-line {
+            height: 1px;
+            background: #fff;
+            opacity: 0.5;
+        }
+        
+        /* Black blocks on sides */
+        .black-block {
+            position: absolute;
+            background: #000;
+        }
+        
+        .black-block.top-left { top: 75px; left: 70px; width: 70px; height: 190px; }
+        .black-block.bottom-left { bottom: 75px; left: 70px; width: 70px; height: 190px; }
+        .black-block.top-right { top: 75px; right: 70px; width: 70px; height: 190px; }
+        .black-block.bottom-right { bottom: 75px; right: 70px; width: 70px; height: 190px; }
+        
+        /* Gray blocks below black */
+        .gray-block {
+            position: absolute;
+            background: #5a5a5a;
+        }
+        
+        .gray-block.left { bottom: 75px; left: 70px; width: 70px; height: 50px; }
+        .gray-block.right { bottom: 75px; right: 70px; width: 70px; height: 50px; }
+        
+        /* Dashed guidelines */
+        .dashed-line {
+            position: absolute;
+            border-style: dashed;
+            border-color: #2a2a2a;
+        }
+        
+        .dashed-line.horizontal {
+            left: 0;
+            right: 0;
+            border-top-width: 2px;
+        }
+        
+        .dashed-line.vertical {
+            top: 0;
+            bottom: 0;
+            border-left-width: 2px;
+        }
+        
+        .corner-marker {
+            position: absolute;
+            width: 15px;
+            height: 15px;
+            border: 2px solid #2a2a2a;
+        }
+        
+        .corner-marker.tl { top: 5px; left: 5px; border-right: none; border-bottom: none; }
+        .corner-marker.tr { top: 5px; right: 5px; border-left: none; border-bottom: none; }
+        .corner-marker.bl { bottom: 5px; left: 5px; border-right: none; border-top: none; }
+        .corner-marker.br { bottom: 5px; right: 5px; border-left: none; border-top: none; }
+    </style>
+</head>
+<body>
+    <div class="test-pattern">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-left">ColorBar/GrayScale Test Pattern</div>
+            <div class="header-center">Camera Alignment</div>
+            <div class="header-right"></div>
+        </div>
+        
+        <!-- Dashed guidelines -->
+        <div class="dashed-line horizontal" style="top: 50px;"></div>
+        <div class="dashed-line horizontal" style="top: 116px;"></div>
+        <div class="dashed-line horizontal" style="bottom: 116px;"></div>
+        <div class="dashed-line horizontal" style="bottom: 50px;"></div>
+        <div class="dashed-line vertical" style="left: 220px;"></div>
+        <div class="dashed-line vertical" style="right: 220px;"></div>
+        
+        <!-- Corner markers -->
+        <div class="corner-marker tl"></div>
+        <div class="corner-marker tr"></div>
+        <div class="corner-marker bl"></div>
+        <div class="corner-marker br"></div>
+        
+        <!-- Side markers -->
+        <div class="side-markers left">
+            <div class="marker">1.78<br>───</div>
+            <div class="marker">2.39<br>───</div>
+            <div class="marker">───<br>2.39</div>
+            <div class="marker">───<br>1.85<br>1.78</div>
+        </div>
+        
+        <div class="side-markers right">
+            <div class="marker">───<br>90%<br>1.85</div>
+            <div class="marker">───<br>2.39</div>
+        </div>
+        
+        <!-- Black and gray blocks -->
+        <div class="black-block top-left"></div>
+        <div class="black-block bottom-left"></div>
+        <div class="black-block top-right"></div>
+        <div class="black-block bottom-right"></div>
+        <div class="gray-block left"></div>
+        <div class="gray-block right"></div>
+        
+        <!-- Top color bars -->
+        <div class="top-colors" id="topColors"></div>
+        
+        <!-- Center panel -->
+        <div class="center-panel">
+            <div class="panel-title">DSC Labs - SW - CDM 24 - v15.2 A3</div>
+            <div class="grayscale-container">
+                <div class="grayscale" id="grayscale">
+                    <div class="cross-pattern" id="crossPattern"></div>
+                </div>
+            </div>
+            <div class="bottom-info">
+                <div>V/S Gain x 2</div>
+                <div>Recommended upgrade date: Sept. 20XX</div>
+                <div>S/N SW1XXX17XX A3</div>
+            </div>
+        </div>
+        
+        <!-- Bottom color bars -->
+        <div class="bottom-colors" id="bottomColors"></div>
+    </div>
+    
+    <script>
+        // Top color bars
+        const topColors = [
+            '#FFFF66', '#FFE566', '#FFBB66', '#FF9966',
+            '#FF6666', '#FF66AA', '#FF66DD', '#DD66FF', '#AA66FF'
+        ];
+        
+        const topColorsContainer = document.getElementById('topColors');
+        topColors.forEach(color => {
+            const bar = document.createElement('div');
+            bar.className = 'color-bar';
+            bar.style.background = color;
+            topColorsContainer.appendChild(bar);
+        });
+        
+        // Bottom color bars
+        const bottomColors = [
+            '#66FF66', '#88FF88', '#66FFAA', '#66FFDD',
+            '#66FFFF', '#66DDFF', '#66AAFF', '#6688FF', '#6666FF'
+        ];
+        
+        const bottomColorsContainer = document.getElementById('bottomColors');
+        bottomColors.forEach(color => {
+            const bar = document.createElement('div');
+            bar.className = 'color-bar';
+            bar.style.background = color;
+            bottomColorsContainer.appendChild(bar);
+        });
+        
+        // Grayscale bars
+        const grayscale = document.getElementById('grayscale');
+        const grayLevels = [
+            '#FFFFFF', '#F0F0F0', '#D0D0D0', '#B0B0B0',
+            '#909090', '#707070', '#505050', '#303030',
+            '#202020', '#000000'
+        ];
+        
+        grayLevels.forEach(color => {
+            const bar = document.createElement('div');
+            bar.className = 'gray-bar';
+            bar.style.background = color;
+            grayscale.appendChild(bar);
+        });
+        
+        // Cross pattern in center
+        const crossPattern = document.getElementById('crossPattern');
+        const crossGrid = [
+            [0, 0, 1, 0, 0],
+            [0, 1, 1, 1, 0],
+            [1, 1, 0, 1, 1],
+            [0, 1, 1, 1, 0],
+            [0, 0, 1, 0, 0]
+        ];
+        
+        // Adjust for 3 rows
+        const pattern = [
+            [0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1],
+            [0, 0, 0, 0, 0]
+        ];
+        
+        // Better cross pattern
+        const betterPattern = [
+            [0, 0, 1, 0, 0],
+            [1, 1, 0, 1, 1],
+            [0, 0, 1, 0, 0]
+        ];
+        
+        betterPattern.forEach(row => {
+            row.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = 'cross-cell';
+                div.style.background = cell === 1 ? '#FFFFFF' : '#000000';
+                crossPattern.appendChild(div);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,12 +1,3 @@
-Ja, jag kan göra hela implementeringen åt dig! Jag har full kontext och kan leverera en komplett, fungerande fil.
-
-Här är **HELA den korrekta HTML-filen** med den nya radar-modulen korrekt implementerad:
-
----
-
-**LADDA NER DENNA KOMPLETTA FIL:**
-
-```html
 <!doctype html>
 <html lang="en-GB">
 <head>
@@ -276,16 +267,77 @@ Här är **HELA den korrekta HTML-filen** med den nya radar-modulen korrekt impl
 
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
-    /* XY + Corr */
-    .xyGrid {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 10px;
-      height: 100%;
-      align-items: center;
-      min-height: 0;
-    }
-    
+/* XY + Corr */
+.xyGrid {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.xySquare, .corrWrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 100%;
+}
+
+/* EN regel för .xySquare */
+.xySquare {
+  flex: 1 1 0;
+  aspect-ratio: 1;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  min-width: 160px;
+}
+
+/* EN regel för .corrWrap */
+.corrWrap {
+  flex: 1 1 0;
+  aspect-ratio: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 100px;
+}
+
+.corrWrap .canvasPad {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+#corr {
+  height: 100% !important;
+  width: 100% !important;
+  display: block;
+}
+
+.xySquare .overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.corrWrap .overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}    
     /* **BEST PRACTICE 2025: CSS Container Queries for Responsive Design** */
     /* Modern approach to responsive layouts that responds to container size, not viewport */
     .xyModule {
@@ -301,13 +353,7 @@ Här är **HELA den korrekta HTML-filen** med den nya radar-modulen korrekt impl
       }
     }
     
-    @container vectorscope (max-width: 399px) {
-      .xyGrid {
-        grid-template-columns: 1fr;
-        grid-template-rows: 1fr auto;
-        gap: 8px;
-      }
-      
+    /* Ta bort container query som gör att .xyGrid slår om till en kolumn vid smal bredd */
       .xySquare {
         grid-row: 1;
       }
@@ -326,15 +372,6 @@ Här är **HELA den korrekta HTML-filen** med den nya radar-modulen korrekt impl
       max-height: 100%;
       min-height: 0;
       margin: 0 auto;
-    }
-    .corrWrap {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 1;
-      /* Sätt max-width till 50% av föräldern för att matcha halva goniometerns storlek */
-      max-width: 50%;
-      align-self: center;
-      justify-self: center;
     }
     .canvasPad {
       width: 100%;
@@ -481,40 +518,70 @@ Här är **HELA den korrekta HTML-filen** med den nya radar-modulen korrekt impl
     /* Drag & Drop Responsive Panels */
     .meter {
       cursor: grab;
-      transition: var(--drag-transition);
-      position: relative;
-      user-select: none;
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-    }
-    
-    .meter:hover {
-      box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 20px rgba(147, 197, 253, 0.3);
-      border-color: rgba(147, 197, 253, 0.5);
-      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.03));
-    }
-    
-    .meter:hover h2 {
-      color: rgba(147, 197, 253, 0.9);
-      text-shadow: 0 0 8px rgba(147, 197, 253, 0.3);
+      .corrWrap {
+        position: relative;
+        flex: 1 1 0;
+        aspect-ratio: 1;
+        height: 100%;
+        min-height: 0;
+        min-width: 100px;
+      }
     }
     
     .meter.dragging {
       cursor: grabbing;
-      transform: scale(0.95);
-      box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.2);
-      border: 2px solid rgba(147, 197, 253, 0.3);
-      z-index: 1000;
-      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.02));
-    }
-    
-    .meter.dragging::before {
-      content: '';
-      position: absolute;
-      inset: -2px;
-      border-radius: 16px;
-      background: linear-gradient(45deg, rgba(147, 197, 253, 0.3), rgba(34, 211, 238, 0.3));
+        transition: var(--drag-transition);
+        position: relative;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+
+      .meter:hover {
+        box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 20px rgba(147, 197, 253, 0.3);
+        border-color: rgba(147, 197, 253, 0.5);
+        background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.03));
+      }
+
+      .meter:hover h2 {
+        color: rgba(147, 197, 253, 0.9);
+        text-shadow: 0 0 8px rgba(147, 197, 253, 0.3);
+      }
+
+      .meter.dragging {
+        cursor: grabbing;
+        transform: scale(0.95);
+        box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.2);
+        border: 2px solid rgba(147, 197, 253, 0.3);
+        z-index: 1000;
+        background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.02));
+      }
+
+      .meter.dragging::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: 16px;
+        background: linear-gradient(45deg, rgba(147, 197, 253, 0.3), rgba(34, 211, 238, 0.3));
+        z-index: -1;
+        filter: blur(8px);
+      }
+
+      .meter.drag-over {
+        border: 2px dashed rgba(147, 197, 253, 0.6);
+        background: rgba(147, 197, 253, 0.05);
+        animation: pulse-glow 1s ease-in-out infinite alternate;
+      }
+
+      .meter.transitioning {
+        transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
+
+      @keyframes pulse-glow {
+        0% { box-shadow: 0 0 16px rgba(147, 197, 253, 0.3); }
+        100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
+      }
       z-index: -1;
       filter: blur(8px);
     }
