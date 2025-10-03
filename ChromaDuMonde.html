@@ -38,16 +38,34 @@
             right: 0;
             height: 30px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
             padding: 0 20px;
             font-size: 14px;
             color: #ffffff;
         }
-        
-        .header-left { font-weight: bold; }
-        .header-center { font-size: 26px; font-weight: bold; letter-spacing: 1px; }
-        .header-right { font-size: 13px; }
+        .header-left {
+            font-weight: bold;
+            flex: 1;
+            text-align: left;
+            min-width: 0;
+        }
+        .header-center {
+            font-size: 26px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: max-content;
+            text-align: center;
+            margin: 0 auto;
+        }
+        .header-right {
+            font-size: 13px;
+            flex: 1;
+            text-align: right;
+            min-width: 0;
+        }
         
         /* Top color bars */
         .top-colors {
