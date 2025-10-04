@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadcast Test Pattern Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 20, 25, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            min-width: 320px;
+            z-index: 1000;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .controls.hidden {
+            opacity: 0;
+            transform: translateX(-20px);
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .pattern-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .pattern-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .pattern-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+        }
+
+        .control-group {
+            margin-bottom: 16px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toggle-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            width: 100%;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+        }
+
+        .toggle-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .stats {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 20, 25, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            z-index: 1000;
+            min-width: 200px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #0f0;
+            font-weight: bold;
+        }
+
+        .keyboard-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(20, 20, 25, 0.85);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 11px;
+            color: #888;
+            z-index: 1000;
+        }
+
+        .keyboard-hint kbd {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #fff;
+            margin: 0 2px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .recording {
+            animation: pulse 1s infinite;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <div class="controls" id="controls">
+        <h1>Broadcast Test Generator</h1>
+        <div class="subtitle">Professional Pattern Suite</div>
+
+        <div class="pattern-grid">
+            <button class="pattern-btn active" data-pattern="smpte">SMPTE Bars</button>
+            <button class="pattern-btn" data-pattern="checkerboard">Checkerboard</button>
+            <button class="pattern-btn" data-pattern="gradient">Gradient Ramp</button>
+            <button class="pattern-btn" data-pattern="crosshatch">Crosshatch</button>
+            <button class="pattern-btn" data-pattern="pluge">PLUGE Black</button>
+            <button class="pattern-btn" data-pattern="color">Color Bars</button>
+            <button class="pattern-btn" data-pattern="motion">Motion Test</button>
+            <button class="pattern-btn" data-pattern="focus">Focus Chart</button>
+        </div>
+
+        <div class="control-group">
+            <label>Display Options</label>
+            <button class="toggle-btn" onclick="toggleFullscreen()">⛶ Fullscreen (F)</button>
+            <button class="toggle-btn" onclick="toggleUI()">👁 Hide UI (H)</button>
+            <button class="toggle-btn" onclick="toggleAnimation()">▶ Toggle Animation (Space)</button>
+        </div>
+    </div>
+
+    <div class="stats">
+        <div class="stat-row">
+            <span class="stat-label">FPS:</span>
+            <span class="stat-value" id="fps">60</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Resolution:</span>
+            <span class="stat-value" id="resolution">1920x1080</span>
+        </div>
+        <div class="stat-row">
+            <span class="stat-label">Pattern:</span>
+            <span class="stat-value" id="pattern">SMPTE</span>
+        </div>
+    </div>
+
+    <div class="keyboard-hint">
+        <kbd>1-8</kbd> Patterns • <kbd>F</kbd> Fullscreen • <kbd>H</kbd> Hide UI • <kbd>Space</kbd> Animate
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let currentPattern = 'smpte';
+        let animationEnabled = true;
+        let animationFrame = 0;
+        let lastTime = performance.now();
+        let fps = 60;
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            document.getElementById('resolution').textContent = `${canvas.width}x${canvas.height}`;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // SMPTE Color Bars
+        function drawSMPTE() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const barHeight = h * 0.75;
+            
+            // Top bars
+            const colors = [
+                '#c0c0c0', '#c0c000', '#00c0c0', '#00c000',
+                '#c000c0', '#c00000', '#0000c0'
+            ];
+            
+            const barWidth = w / 7;
+            colors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, 0, barWidth, barHeight);
+            });
+
+            // Middle section
+            const midColors = ['#0000c0', '#000000', '#c000c0', '#000000', '#00c0c0', '#000000', '#c0c0c0'];
+            const midHeight = h * 0.08;
+            midColors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, barHeight, barWidth, midHeight);
+            });
+
+            // Bottom PLUGE section
+            const plugeY = barHeight + midHeight;
+            const plugeHeight = h - plugeY;
+            
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(w * 0.25, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#141414';
+            ctx.fillRect(w * 0.5, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(w * 0.75, plugeY, w * 0.25, plugeHeight);
+        }
+
+        // Checkerboard
+        function drawCheckerboard() {
+            const size = 40;
+            for (let y = 0; y < canvas.height; y += size) {
+                for (let x = 0; x < canvas.width; x += size) {
+                    ctx.fillStyle = ((x / size) + (y / size)) % 2 === 0 ? '#ffffff' : '#000000';
+                    ctx.fillRect(x, y, size, size);
+                }
+            }
+        }
+
+        // Gradient Ramp
+        function drawGradient() {
+            const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            for (let i = 0; i <= 100; i += 10) {
+                const val = Math.floor(255 * i / 100);
+                gradient.addColorStop(i / 100, `rgb(${val},${val},${val})`);
+            }
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Add percentage markers
+            ctx.fillStyle = '#ff0000';
+            ctx.font = '20px monospace';
+            for (let i = 0; i <= 100; i += 10) {
+                const x = canvas.width * i / 100;
+                ctx.fillText(`${i}%`, x, canvas.height / 2);
+            }
+        }
+
+        // Crosshatch
+        function drawCrosshatch() {
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+
+            const spacing = 50;
+            for (let x = 0; x < canvas.width; x += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+
+            for (let y = 0; y < canvas.height; y += spacing) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Center crosshair
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(cx - 50, cy);
+            ctx.lineTo(cx + 50, cy);
+            ctx.moveTo(cx, cy - 50);
+            ctx.lineTo(cx, cy + 50);
+            ctx.stroke();
+        }
+
+        // PLUGE Black Level
+        function drawPluge() {
+            const w = canvas.width / 5;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#050505';
+            ctx.fillRect(w, 0, w, canvas.height);
+
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(w * 2, 0, w, canvas.height);
+
+            ctx.fillStyle = '#0f0f0f';
+            ctx.fillRect(w * 3, 0, w, canvas.height);
+
+            ctx.fillStyle = '#141414';
+            ctx.fillRect(w * 4, 0, w, canvas.height);
+
+            // Labels
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px monospace';
+            const labels = ['-7.5 IRE', '0 IRE', '+7.5 IRE', '+15 IRE', '+22.5 IRE'];
+            labels.forEach((label, i) => {
+                ctx.fillText(label, w * i + 20, canvas.height / 2);
+            });
+        }
+
+        // Full Color Bars
+        function drawColorBars() {
+            const colors = [
+                '#ff0000', '#00ff00', '#0000ff',
+                '#ffff00', '#ff00ff', '#00ffff',
+                '#ffffff', '#000000'
+            ];
+            
+            const barWidth = canvas.width / colors.length;
+            colors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, 0, barWidth, canvas.height);
+            });
+        }
+
+        // Motion Test
+        function drawMotion() {
+            const offset = (animationFrame * 5) % canvas.width;
+            
+            for (let i = -1; i < 20; i++) {
+                const x = (i * 100 + offset) % (canvas.width + 100);
+                ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#000000';
+                ctx.fillRect(x, 0, 100, canvas.height);
+            }
+
+            // Speed indicator
+            ctx.fillStyle = '#ff0000';
+            ctx.font = 'bold 30px monospace';
+            ctx.fillText('→ 5px/frame', 20, 40);
+        }
+
+        // Focus Chart
+        function drawFocus() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 100px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('FOCUS', canvas.width / 2, canvas.height / 2 - 100);
+            
+            // Resolution lines
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 10; i++) {
+                const spacing = i * 2;
+                for (let y = canvas.height / 2; y < canvas.height / 2 + 200; y += spacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+            }
+
+            // Corner markers
+            const markerSize = 50;
+            ctx.lineWidth = 3;
+            [[0, 0], [canvas.width - markerSize, 0], 
+             [0, canvas.height - markerSize], [canvas.width - markerSize, canvas.height - markerSize]].forEach(([x, y]) => {
+                ctx.strokeRect(x, y, markerSize, markerSize);
+            });
+
+            ctx.font = '16px monospace';
+            ctx.fillText(`${canvas.width}x${canvas.height}px`, canvas.width / 2, canvas.height - 30);
+        }
+
+        const patterns = {
+            smpte: drawSMPTE,
+            checkerboard: drawCheckerboard,
+            gradient: drawGradient,
+            crosshatch: drawCrosshatch,
+            pluge: drawPluge,
+            color: drawColorBars,
+            motion: drawMotion,
+            focus: drawFocus
+        };
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            patterns[currentPattern]();
+            
+            if (animationEnabled) {
+                animationFrame++;
+            }
+
+            // Calculate FPS
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsUpdate >= 1000) {
+                fps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
+                document.getElementById('fps').textContent = fps;
+                frameCount = 0;
+                lastFpsUpdate = now;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // Pattern selection
+        document.querySelectorAll('.pattern-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.pattern-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentPattern = btn.dataset.pattern;
+                document.getElementById('pattern').textContent = btn.textContent;
+                animationFrame = 0;
+            });
+        });
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function toggleUI() {
+            document.getElementById('controls').classList.toggle('hidden');
+            document.querySelector('.stats').classList.toggle('hidden');
+            document.querySelector('.keyboard-hint').classList.toggle('hidden');
+        }
+
+        function toggleAnimation() {
+            animationEnabled = !animationEnabled;
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            const patterns = ['smpte', 'checkerboard', 'gradient', 'crosshatch', 'pluge', 'color', 'motion', 'focus'];
+            const key = e.key.toLowerCase();
+            
+            if (key >= '1' && key <= '8') {
+                const index = parseInt(key) - 1;
+                currentPattern = patterns[index];
+                document.querySelectorAll('.pattern-btn').forEach((btn, i) => {
+                    btn.classList.toggle('active', i === index);
+                });
+                document.getElementById('pattern').textContent = document.querySelectorAll('.pattern-btn')[index].textContent;
+            } else if (key === 'f') {
+                toggleFullscreen();
+            } else if (key === 'h') {
+                toggleUI();
+            } else if (key === ' ') {
+                e.preventDefault();
+                toggleAnimation();
+            }
+        });
+
+        draw();
+    </script>
+</body>
+</html>
