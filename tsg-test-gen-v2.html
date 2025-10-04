@@ -32,7 +32,7 @@
             position: fixed;
             top: 20px;
             left: 20px;
-            background: rgba(20, 20, 25, 0.85);
+            background: rgba(20, 20, 25, 0.95);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 16px;
@@ -129,7 +129,7 @@
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(20, 20, 25, 0.85);
+            background: rgba(20, 20, 25, 0.95);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 12px;
@@ -138,6 +138,13 @@
             font-size: 14px;
             z-index: 1000;
             min-width: 200px;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .stats.hidden {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
         }
 
         .stat-row {
@@ -158,8 +165,9 @@
         .keyboard-hint {
             position: fixed;
             bottom: 20px;
-            left: 20px;
-            background: rgba(20, 20, 25, 0.85);
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(20, 20, 25, 0.95);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 12px;
@@ -167,6 +175,31 @@
             font-size: 11px;
             color: #888;
             z-index: 1000;
+            transition: opacity 0.3s, transform 0.3s;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .keyboard-hint.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .keyboard-hint.hidden {
+            opacity: 0;
+            transform: translateX(-50%) translateY(20px);
+            pointer-events: none;
+        }
+
+        .keyboard-hint.ui-hidden {
+            opacity: 0 !important;
+            transform: translateX(-50%) translateY(20px) !important;
+            pointer-events: none !important;
+        }
+
+        body:hover .keyboard-hint:not(.ui-hidden) {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
         }
 
         .keyboard-hint kbd {
@@ -177,22 +210,13 @@
             color: #fff;
             margin: 0 2px;
         }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-
-        .recording {
-            animation: pulse 1s infinite;
-        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
 
     <div class="controls" id="controls">
-        <h1>Broadcast Test Generator</h1>
+        <h1>TSG Broadcast Test Generator</h1>
         <div class="subtitle">Professional Pattern Suite</div>
 
         <div class="pattern-grid">
@@ -235,31 +259,35 @@
 
     <script>
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         let currentPattern = 'smpte';
-        let animationEnabled = true;
+        let animationEnabled = true; // Motion test ON by default
         let animationFrame = 0;
-        let lastTime = performance.now();
-        let fps = 60;
+        let needsRedraw = true;
+        let resizeTimeout;
+        let fps = 0;
         let frameCount = 0;
         let lastFpsUpdate = performance.now();
 
         function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            document.getElementById('resolution').textContent = `${canvas.width}x${canvas.height}`;
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                document.getElementById('resolution').textContent = `${canvas.width}x${canvas.height}`;
+                needsRedraw = true;
+            }, 100);
         }
 
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // SMPTE Color Bars
+        // SMPTE Color Bars - OPTIMIZED
         function drawSMPTE() {
             const w = canvas.width;
             const h = canvas.height;
             const barHeight = h * 0.75;
             
-            // Top bars
             const colors = [
                 '#c0c0c0', '#c0c000', '#00c0c0', '#00c000',
                 '#c000c0', '#c00000', '#0000c0'
@@ -271,7 +299,6 @@
                 ctx.fillRect(i * barWidth, 0, barWidth, barHeight);
             });
 
-            // Middle section
             const midColors = ['#0000c0', '#000000', '#c000c0', '#000000', '#00c0c0', '#000000', '#c0c0c0'];
             const midHeight = h * 0.08;
             midColors.forEach((color, i) => {
@@ -279,7 +306,6 @@
                 ctx.fillRect(i * barWidth, barHeight, barWidth, midHeight);
             });
 
-            // Bottom PLUGE section
             const plugeY = barHeight + midHeight;
             const plugeHeight = h - plugeY;
             
@@ -293,13 +319,18 @@
             ctx.fillRect(w * 0.75, plugeY, w * 0.25, plugeHeight);
         }
 
-        // Checkerboard
+        // Checkerboard - OPTIMIZED
         function drawCheckerboard() {
-            const size = 40;
-            for (let y = 0; y < canvas.height; y += size) {
-                for (let x = 0; x < canvas.width; x += size) {
-                    ctx.fillStyle = ((x / size) + (y / size)) % 2 === 0 ? '#ffffff' : '#000000';
-                    ctx.fillRect(x, y, size, size);
+            const size = Math.max(40, Math.floor(canvas.width / 40));
+            const cols = Math.ceil(canvas.width / size);
+            const rows = Math.ceil(canvas.height / size);
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    if ((row + col) % 2 === 0) {
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(col * size, row * size, size, size);
+                    }
                 }
             }
         }
@@ -307,44 +338,47 @@
         // Gradient Ramp
         function drawGradient() {
             const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
-            for (let i = 0; i <= 100; i += 10) {
-                const val = Math.floor(255 * i / 100);
-                gradient.addColorStop(i / 100, `rgb(${val},${val},${val})`);
+            for (let i = 0; i <= 10; i++) {
+                const val = Math.floor(255 * i / 10);
+                gradient.addColorStop(i / 10, `rgb(${val},${val},${val})`);
             }
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Add percentage markers
             ctx.fillStyle = '#ff0000';
-            ctx.font = '20px monospace';
-            for (let i = 0; i <= 100; i += 10) {
-                const x = canvas.width * i / 100;
-                ctx.fillText(`${i}%`, x, canvas.height / 2);
+            ctx.font = 'bold 20px monospace';
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 10; i++) {
+                const x = canvas.width * i / 10;
+                ctx.fillText(`${i * 10}%`, x, canvas.height / 2);
             }
         }
 
-        // Crosshatch
+        // Crosshatch - OPTIMIZED
         function drawCrosshatch() {
             ctx.fillStyle = '#808080';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
 
             const spacing = 50;
-            for (let x = 0; x < canvas.width; x += spacing) {
-                ctx.beginPath();
+            const cols = Math.ceil(canvas.width / spacing);
+            const rows = Math.ceil(canvas.height / spacing);
+
+            for (let i = 0; i <= cols; i++) {
+                const x = i * spacing;
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, canvas.height);
-                ctx.stroke();
             }
 
-            for (let y = 0; y < canvas.height; y += spacing) {
-                ctx.beginPath();
+            for (let i = 0; i <= rows; i++) {
+                const y = i * spacing;
                 ctx.moveTo(0, y);
                 ctx.lineTo(canvas.width, y);
-                ctx.stroke();
             }
+            ctx.stroke();
 
             // Center crosshair
             ctx.strokeStyle = '#ff0000';
@@ -363,27 +397,19 @@
         // PLUGE Black Level
         function drawPluge() {
             const w = canvas.width / 5;
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const levels = ['#000000', '#050505', '#0a0a0a', '#0f0f0f', '#141414'];
+            
+            levels.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * w, 0, w, canvas.height);
+            });
 
-            ctx.fillStyle = '#050505';
-            ctx.fillRect(w, 0, w, canvas.height);
-
-            ctx.fillStyle = '#0a0a0a';
-            ctx.fillRect(w * 2, 0, w, canvas.height);
-
-            ctx.fillStyle = '#0f0f0f';
-            ctx.fillRect(w * 3, 0, w, canvas.height);
-
-            ctx.fillStyle = '#141414';
-            ctx.fillRect(w * 4, 0, w, canvas.height);
-
-            // Labels
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 24px monospace';
+            ctx.font = 'bold 20px monospace';
+            ctx.textAlign = 'center';
             const labels = ['-7.5 IRE', '0 IRE', '+7.5 IRE', '+15 IRE', '+22.5 IRE'];
             labels.forEach((label, i) => {
-                ctx.fillText(label, w * i + 20, canvas.height / 2);
+                ctx.fillText(label, w * i + w/2, canvas.height / 2);
             });
         }
 
@@ -402,54 +428,338 @@
             });
         }
 
-        // Motion Test
+        // Motion Test - PERFECT SEAMLESS SCROLL
         function drawMotion() {
-            const offset = (animationFrame * 5) % canvas.width;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            for (let i = -1; i < 20; i++) {
-                const x = (i * 100 + offset) % (canvas.width + 100);
-                ctx.fillStyle = i % 2 === 0 ? '#ffffff' : '#000000';
-                ctx.fillRect(x, 0, 100, canvas.height);
+            const barWidth = 100;
+            const speed = 5;
+            
+            // Virtual world position (continuous, no modulo!)
+            const worldOffset = animationFrame * speed;
+            
+            // Find first visible bar in the virtual world
+            const firstBarIndex = Math.floor(worldOffset / barWidth);
+            
+            // Draw enough bars to cover screen
+            const numBars = Math.ceil(canvas.width / barWidth) + 1;
+            
+            for (let i = 0; i < numBars; i++) {
+                const barIndex = firstBarIndex + i;
+                const x = barIndex * barWidth - worldOffset;
+                
+                // Simple alternating pattern based on bar index
+                const isWhite = barIndex % 2 === 0;
+                ctx.fillStyle = isWhite ? '#ffffff' : '#000000';
+                ctx.fillRect(x, 0, barWidth, canvas.height);
             }
 
             // Speed indicator
             ctx.fillStyle = '#ff0000';
-            ctx.font = 'bold 30px monospace';
-            ctx.fillText('→ 5px/frame', 20, 40);
+            ctx.font = 'bold 24px monospace';
+            ctx.fillText('5px/frame @ 60fps = 300px/sec', 20, 40);
         }
 
-        // Focus Chart
+        // DUCLOS-STYLE PROFESSIONAL FOCUS CHART
         function drawFocus() {
-            ctx.fillStyle = '#ffffff';
+            // White background
+            ctx.fillStyle = '#f5f5f5';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 100px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('FOCUS', canvas.width / 2, canvas.height / 2 - 100);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const minDim = Math.min(canvas.width, canvas.height);
             
-            // Resolution lines
-            ctx.lineWidth = 1;
-            for (let i = 1; i <= 10; i++) {
-                const spacing = i * 2;
-                for (let y = canvas.height / 2; y < canvas.height / 2 + 200; y += spacing) {
-                    ctx.beginPath();
-                    ctx.moveTo(0, y);
-                    ctx.lineTo(canvas.width, y);
-                    ctx.stroke();
+            ctx.strokeStyle = '#000000';
+            ctx.fillStyle = '#000000';
+            
+            // === CORNER SIEMENS STARS (Large) ===
+            const cornerStarRadius = minDim * 0.12;
+            const cornerPositions = [
+                {x: cornerStarRadius * 1.2, y: cornerStarRadius * 1.2},
+                {x: canvas.width - cornerStarRadius * 1.2, y: cornerStarRadius * 1.2},
+                {x: cornerStarRadius * 1.2, y: canvas.height - cornerStarRadius * 1.2},
+                {x: canvas.width - cornerStarRadius * 1.2, y: canvas.height - cornerStarRadius * 1.2}
+            ];
+            
+            function drawSiemensStar(x, y, radius, segments = 36) {
+                ctx.beginPath();
+                for (let i = 0; i < segments; i++) {
+                    if (i % 2 === 0) {
+                        const a1 = (i / segments) * Math.PI * 2;
+                        const a2 = ((i + 1) / segments) * Math.PI * 2;
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + Math.cos(a1) * radius, y + Math.sin(a1) * radius);
+                        ctx.lineTo(x + Math.cos(a2) * radius, y + Math.sin(a2) * radius);
+                    }
                 }
+                ctx.fill();
             }
-
-            // Corner markers
-            const markerSize = 50;
-            ctx.lineWidth = 3;
-            [[0, 0], [canvas.width - markerSize, 0], 
-             [0, canvas.height - markerSize], [canvas.width - markerSize, canvas.height - markerSize]].forEach(([x, y]) => {
-                ctx.strokeRect(x, y, markerSize, markerSize);
+            
+            // Draw large corner stars
+            cornerPositions.forEach(pos => {
+                drawSiemensStar(pos.x, pos.y, cornerStarRadius, 48);
             });
-
-            ctx.font = '16px monospace';
-            ctx.fillText(`${canvas.width}x${canvas.height}px`, canvas.width / 2, canvas.height - 30);
+            
+            // === CONVERGING WEDGES FROM CORNERS ===
+            function drawCornerWedge(x, y, toX, toY) {
+                const lines = 15;
+                const spread = cornerStarRadius * 0.4;
+                const angle = Math.atan2(toY - y, toX - x);
+                
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                for (let i = 0; i < lines; i++) {
+                    const offset = -spread + (i / lines) * spread * 2;
+                    const dist = Math.sqrt((toX - x) ** 2 + (toY - y) ** 2) * 0.6;
+                    ctx.moveTo(cornerStarRadius, offset);
+                    ctx.lineTo(dist, offset * 0.3);
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+            
+            cornerPositions.forEach(pos => {
+                drawCornerWedge(pos.x, pos.y, cx, cy);
+            });
+            
+            // === CURVED ARCS FROM CORNERS ===
+            ctx.strokeStyle = '#666666';
+            ctx.lineWidth = 8;
+            cornerPositions.forEach(pos => {
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+                ctx.quadraticCurveTo(
+                    (pos.x + cx) / 2,
+                    (pos.y + cy) / 2,
+                    cx + (cx - pos.x) * 0.3,
+                    cy + (cy - pos.y) * 0.3
+                );
+                ctx.stroke();
+            });
+            
+            // === CONCENTRIC CIRCLES ===
+            ctx.strokeStyle = '#999999';
+            ctx.lineWidth = 2;
+            const circleRadii = [0.18, 0.22, 0.26];
+            circleRadii.forEach(r => {
+                ctx.beginPath();
+                ctx.arc(cx, cy, minDim * r, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+            
+            // === CENTRAL SIEMENS STAR WITH COLOR WHEEL ===
+            const centerRadius = minDim * 0.15;
+            
+            // Color wheel segments
+            const colors = [
+                '#FF0000', '#FF8800', '#FFFF00', '#00FF00', 
+                '#00FFFF', '#0000FF', '#FF00FF', '#FF0000'
+            ];
+            const colorSegments = 8;
+            const colorRingInner = centerRadius * 0.85;
+            const colorRingOuter = centerRadius * 1.05;
+            
+            for (let i = 0; i < colorSegments; i++) {
+                const a1 = (i / colorSegments) * Math.PI * 2 - Math.PI / 2;
+                const a2 = ((i + 1) / colorSegments) * Math.PI * 2 - Math.PI / 2;
+                
+                ctx.fillStyle = colors[i];
+                ctx.beginPath();
+                ctx.arc(cx, cy, colorRingOuter, a1, a2);
+                ctx.arc(cx, cy, colorRingInner, a2, a1, true);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Central Siemens star
+            ctx.fillStyle = '#000000';
+            drawSiemensStar(cx, cy, centerRadius * 0.8, 48);
+            
+            // White center circle
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, centerRadius * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Center crosshair
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 20, cy);
+            ctx.lineTo(cx + 20, cy);
+            ctx.moveTo(cx, cy - 20);
+            ctx.lineTo(cx, cy + 20);
+            ctx.stroke();
+            
+            // === SCATTERED SMALL SIEMENS STARS ===
+            const smallStarPositions = [
+                {x: 0.25, y: 0.2}, {x: 0.75, y: 0.2},
+                {x: 0.2, y: 0.5}, {x: 0.8, y: 0.5},
+                {x: 0.25, y: 0.8}, {x: 0.75, y: 0.8},
+                {x: 0.35, y: 0.35}, {x: 0.65, y: 0.35},
+                {x: 0.35, y: 0.65}, {x: 0.65, y: 0.65}
+            ];
+            
+            const smallStarRadius = minDim * 0.03;
+            ctx.fillStyle = '#000000';
+            smallStarPositions.forEach(pos => {
+                drawSiemensStar(canvas.width * pos.x, canvas.height * pos.y, smallStarRadius, 24);
+            });
+            
+            // === HORIZONTAL LINE PAIRS ===
+            const lpY = cy + centerRadius * 1.5;
+            const lpTests = [
+                {lines: 8, label: '400'}, {lines: 12, label: '600'}, 
+                {lines: 16, label: '800'}, {lines: 20, label: '1000'}
+            ];
+            
+            let xPos = cx - 250;
+            ctx.fillStyle = '#000000';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            
+            lpTests.forEach(test => {
+                const boxW = 80;
+                const boxH = 50;
+                const lineH = boxH / (test.lines * 2);
+                
+                for (let i = 0; i < test.lines; i++) {
+                    ctx.fillRect(xPos, lpY + i * lineH * 2, boxW, lineH);
+                }
+                ctx.fillText(`${test.label} TVL`, xPos + boxW / 2, lpY + boxH + 12);
+                xPos += boxW + 15;
+            });
+            
+            // === VERTICAL LINE PAIRS ===
+            let yPos = cy - 120;
+            const vlpX = cx - centerRadius * 1.8;
+            
+            lpTests.forEach(test => {
+                const boxW = 50;
+                const boxH = 80;
+                const lineW = boxW / (test.lines * 2);
+                
+                for (let i = 0; i < test.lines; i++) {
+                    ctx.fillRect(vlpX + i * lineW * 2, yPos, lineW, boxH);
+                }
+                yPos += boxH + 15;
+            });
+            
+            // === RESOLUTION BOXES ===
+            function drawResolutionBox(x, y, label) {
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x, y, 60, 40);
+                
+                // Draw tiny line patterns inside
+                for (let i = 0; i < 8; i++) {
+                    ctx.fillRect(x + 5 + i * 6, y + 5, 3, 30);
+                }
+                
+                ctx.fillStyle = '#000000';
+                ctx.font = '9px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(label, x + 30, y - 5);
+            }
+            
+            // Place resolution boxes
+            drawResolutionBox(cx - 200, cy - 200, '600');
+            drawResolutionBox(cx + 140, cy - 200, '800');
+            drawResolutionBox(cx - 200, cy + 160, '1000');
+            drawResolutionBox(cx + 140, cy + 160, '1200');
+            
+            // === ASPECT RATIO MARKERS ===
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            const aspectMarkers = [
+                {ratio: '16:9', y: cy - 100},
+                {ratio: '1.85:1', y: cy},
+                {ratio: '2.39:1', y: cy + 100}
+            ];
+            
+            aspectMarkers.forEach(marker => {
+                const markerLen = 15;
+                // Left marker
+                ctx.beginPath();
+                ctx.moveTo(50, marker.y);
+                ctx.lineTo(50 + markerLen, marker.y);
+                ctx.stroke();
+                
+                // Right marker
+                ctx.beginPath();
+                ctx.moveTo(canvas.width - 50, marker.y);
+                ctx.lineTo(canvas.width - 50 - markerLen, marker.y);
+                ctx.stroke();
+                
+                ctx.font = '10px monospace';
+                ctx.fillText(marker.ratio, 30, marker.y + 4);
+            });
+            
+            // === CORNER REGISTRATION MARKS ===
+            const regSize = 25;
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            
+            const corners = [
+                [10, 10, 1, 1], [canvas.width - 10, 10, -1, 1],
+                [10, canvas.height - 10, 1, -1], [canvas.width - 10, canvas.height - 10, -1, -1]
+            ];
+            
+            corners.forEach(([x, y, dx, dy]) => {
+                ctx.beginPath();
+                ctx.moveTo(x, y + dy * regSize);
+                ctx.lineTo(x, y);
+                ctx.lineTo(x + dx * regSize, y);
+                ctx.stroke();
+                
+                // Small arrow
+                ctx.beginPath();
+                ctx.moveTo(x + dx * 8, y + dy * 8);
+                ctx.lineTo(x + dx * 15, y + dy * 8);
+                ctx.lineTo(x + dx * 15, y + dy * 15);
+                ctx.stroke();
+            });
+            
+            // === PROJECT INFO BOX ===
+            const infoBoxW = 280;
+            const infoBoxH = 90;
+            const infoX = cx - infoBoxW / 2;
+            const infoY = canvas.height - infoBoxH - 30;
+            
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(infoX, infoY, infoBoxW, infoBoxH);
+            
+            ctx.fillStyle = '#000000';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'left';
+            const infoFields = ['PROJECT:', 'CINEMATOGRAPHER:', 'CAMERA:', 'LENS:', 'DISTANCE:', 'NOTES:'];
+            infoFields.forEach((field, i) => {
+                ctx.fillText(field, infoX + 10, infoY + 15 + i * 13);
+            });
+            
+            // === TOP BRANDING ===
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 18px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('TSG SPHERICAL FOCUS CHART', cx, 30);
+            
+            ctx.font = '9px monospace';
+            ctx.fillText('BROADCAST EDITION v4.5', cx, 45);
+            
+            // === BOTTOM INFO ===
+            ctx.font = '10px monospace';
+            ctx.fillText(`${canvas.width} × ${canvas.height} | 16:9 HD`, cx, canvas.height - 10);
+            
+            // === BLACK BORDER ===
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 8;
+            ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
         }
 
         const patterns = {
@@ -464,16 +774,24 @@
         };
 
         function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            patterns[currentPattern]();
+            const now = performance.now();
             
-            if (animationEnabled) {
-                animationFrame++;
+            // Redraw if: needed, or motion pattern is animating
+            const shouldAnimate = animationEnabled && currentPattern === 'motion';
+            
+            if (needsRedraw || shouldAnimate) {
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                patterns[currentPattern]();
+                needsRedraw = false;
+                
+                if (shouldAnimate) {
+                    animationFrame++;
+                }
             }
 
-            // Calculate FPS
+            // FPS counter
             frameCount++;
-            const now = performance.now();
             if (now - lastFpsUpdate >= 1000) {
                 fps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
                 document.getElementById('fps').textContent = fps;
@@ -492,6 +810,7 @@
                 currentPattern = btn.dataset.pattern;
                 document.getElementById('pattern').textContent = btn.textContent;
                 animationFrame = 0;
+                needsRedraw = true;
             });
         });
 
@@ -506,25 +825,27 @@
         function toggleUI() {
             document.getElementById('controls').classList.toggle('hidden');
             document.querySelector('.stats').classList.toggle('hidden');
-            document.querySelector('.keyboard-hint').classList.toggle('hidden');
+            document.querySelector('.keyboard-hint').classList.toggle('ui-hidden');
         }
 
         function toggleAnimation() {
             animationEnabled = !animationEnabled;
+            needsRedraw = true;
         }
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            const patterns = ['smpte', 'checkerboard', 'gradient', 'crosshatch', 'pluge', 'color', 'motion', 'focus'];
+            const patternList = ['smpte', 'checkerboard', 'gradient', 'crosshatch', 'pluge', 'color', 'motion', 'focus'];
             const key = e.key.toLowerCase();
             
             if (key >= '1' && key <= '8') {
                 const index = parseInt(key) - 1;
-                currentPattern = patterns[index];
+                currentPattern = patternList[index];
                 document.querySelectorAll('.pattern-btn').forEach((btn, i) => {
                     btn.classList.toggle('active', i === index);
                 });
                 document.getElementById('pattern').textContent = document.querySelectorAll('.pattern-btn')[index].textContent;
+                needsRedraw = true;
             } else if (key === 'f') {
                 toggleFullscreen();
             } else if (key === 'h') {
