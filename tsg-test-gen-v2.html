@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Broadcast Test Pattern Generator</title>
+    <title>TSG Broadcast Test Generator</title>
     <style>
         * {
             margin: 0;
@@ -176,30 +176,20 @@
             color: #888;
             z-index: 1000;
             transition: opacity 0.3s, transform 0.3s;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .keyboard-hint.visible {
             opacity: 1;
             pointer-events: auto;
         }
 
-        .keyboard-hint.hidden {
+        .keyboard-hint.ui-hidden {
             opacity: 0;
             transform: translateX(-50%) translateY(20px);
             pointer-events: none;
         }
 
-        .keyboard-hint.ui-hidden {
-            opacity: 0 !important;
-            transform: translateX(-50%) translateY(20px) !important;
-            pointer-events: none !important;
-        }
-
-        body:hover .keyboard-hint:not(.ui-hidden) {
+        .keyboard-hint.ui-hidden.show-temp {
             opacity: 1;
             transform: translateX(-50%) translateY(0);
+            pointer-events: auto;
         }
 
         .keyboard-hint kbd {
@@ -220,7 +210,7 @@
         <div class="subtitle">Professional Pattern Suite</div>
 
         <div class="pattern-grid">
-            <button class="pattern-btn active" data-pattern="smpte">SMPTE Bars</button>
+            <button class="pattern-btn active" data-pattern="ebu">EBU Bars</button>
             <button class="pattern-btn" data-pattern="checkerboard">Checkerboard</button>
             <button class="pattern-btn" data-pattern="gradient">Gradient Ramp</button>
             <button class="pattern-btn" data-pattern="crosshatch">Crosshatch</button>
@@ -228,6 +218,8 @@
             <button class="pattern-btn" data-pattern="color">Color Bars</button>
             <button class="pattern-btn" data-pattern="motion">Motion Test</button>
             <button class="pattern-btn" data-pattern="focus">Focus Chart</button>
+            <button class="pattern-btn" data-pattern="chromamonde">Chroma Monde</button>
+            <button class="pattern-btn" data-pattern="philips">Philips PM5564</button>
         </div>
 
         <div class="control-group">
@@ -249,25 +241,39 @@
         </div>
         <div class="stat-row">
             <span class="stat-label">Pattern:</span>
-            <span class="stat-value" id="pattern">SMPTE</span>
+            <span class="stat-value" id="pattern">EBU Bars</span>
         </div>
     </div>
 
     <div class="keyboard-hint">
-        <kbd>1-8</kbd> Patterns • <kbd>F</kbd> Fullscreen • <kbd>H</kbd> Hide UI • <kbd>Space</kbd> Animate
+        <kbd>1-0</kbd> Patterns • <kbd>F</kbd> Fullscreen • <kbd>H</kbd> Hide UI • <kbd>Space</kbd> Animate
     </div>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
-        let currentPattern = 'smpte';
-        let animationEnabled = true; // Motion test ON by default
+        let currentPattern = 'ebu';
+        let smpteVariant = 0; // 0 = EBU, 1 = 75%, 2 = 100%
+        let animationEnabled = true;
         let animationFrame = 0;
         let needsRedraw = true;
         let resizeTimeout;
         let fps = 0;
         let frameCount = 0;
         let lastFpsUpdate = performance.now();
+        let keyboardHintTimeout;
+
+        // Show keyboard hint on mouse move when UI hidden
+        document.addEventListener('mousemove', () => {
+            const hint = document.querySelector('.keyboard-hint');
+            if (hint.classList.contains('ui-hidden')) {
+                hint.classList.add('show-temp');
+                clearTimeout(keyboardHintTimeout);
+                keyboardHintTimeout = setTimeout(() => {
+                    hint.classList.remove('show-temp');
+                }, 1000);
+            }
+        });
 
         function resizeCanvas() {
             clearTimeout(resizeTimeout);
@@ -282,15 +288,51 @@
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas();
 
-        // SMPTE Color Bars - OPTIMIZED
-        function drawSMPTE() {
+        // EBU Color Bars (100/0/75/0) - EXACT STANDARD COLORS
+        function drawEBU() {
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // EBU bars: White at 100%, colors at 75% chroma
+            const colors = [
+                '#ffffff', // White 100%
+                '#bfbf00', // Yellow 75% (191,191,0)
+                '#00bfbf', // Cyan 75% (0,191,191)
+                '#00bf00', // Green 75% (0,191,0)
+                '#bf00bf', // Magenta 75% (191,0,191)
+                '#bf0000', // Red 75% (191,0,0)
+                '#0000bf'  // Blue 75% (0,0,191)
+            ];
+            
+            const barWidth = w / 7;
+            colors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, 0, barWidth, h);
+            });
+
+            // Label
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(20, 20, 200, 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px monospace';
+            ctx.fillText('EBU 100/0/75/0', 30, 45);
+        }
+
+        // SMPTE 75% Color Bars (75/0/75/0) - EXACT STANDARD COLORS
+        function drawSMPTE75() {
             const w = canvas.width;
             const h = canvas.height;
             const barHeight = h * 0.75;
             
+            // 75% bars - gray at 75%, colors at 75%
             const colors = [
-                '#c0c0c0', '#c0c000', '#00c0c0', '#00c000',
-                '#c000c0', '#c00000', '#0000c0'
+                '#bfbfbf', // Gray 75% (191,191,191)
+                '#bfbf00', // Yellow 75% (191,191,0)
+                '#00bfbf', // Cyan 75% (0,191,191)
+                '#00bf00', // Green 75% (0,191,0)
+                '#bf00bf', // Magenta 75% (191,0,191)
+                '#bf0000', // Red 75% (191,0,0)
+                '#0000bf'  // Blue 75% (0,0,191)
             ];
             
             const barWidth = w / 7;
@@ -299,13 +341,15 @@
                 ctx.fillRect(i * barWidth, 0, barWidth, barHeight);
             });
 
-            const midColors = ['#0000c0', '#000000', '#c000c0', '#000000', '#00c0c0', '#000000', '#c0c0c0'];
+            // Mid section
+            const midColors = ['#0000bf', '#000000', '#bf00bf', '#000000', '#00bfbf', '#000000', '#bfbfbf'];
             const midHeight = h * 0.08;
             midColors.forEach((color, i) => {
                 ctx.fillStyle = color;
                 ctx.fillRect(i * barWidth, barHeight, barWidth, midHeight);
             });
 
+            // PLUGE section
             const plugeY = barHeight + midHeight;
             const plugeHeight = h - plugeY;
             
@@ -317,18 +361,80 @@
             ctx.fillRect(w * 0.5, plugeY, w * 0.25, plugeHeight);
             ctx.fillStyle = '#000000';
             ctx.fillRect(w * 0.75, plugeY, w * 0.25, plugeHeight);
+
+            // Label
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(20, 20, 200, 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px monospace';
+            ctx.fillText('SMPTE 75% (75/0/75/0)', 30, 45);
         }
 
-        // Checkerboard - OPTIMIZED
+        // SMPTE 100% Color Bars (100/0/100/0) - EXACT STANDARD COLORS
+        function drawSMPTE100() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const barHeight = h * 0.75;
+            
+            // 100% bars - all at 100%
+            const colors = [
+                '#ffffff', // White 100% (255,255,255)
+                '#ffff00', // Yellow 100% (255,255,0)
+                '#00ffff', // Cyan 100% (0,255,255)
+                '#00ff00', // Green 100% (0,255,0)
+                '#ff00ff', // Magenta 100% (255,0,255)
+                '#ff0000', // Red 100% (255,0,0)
+                '#0000ff'  // Blue 100% (0,0,255)
+            ];
+            
+            const barWidth = w / 7;
+            colors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, 0, barWidth, barHeight);
+            });
+
+            // Mid section
+            const midColors = ['#0000ff', '#000000', '#ff00ff', '#000000', '#00ffff', '#000000', '#ffffff'];
+            const midHeight = h * 0.08;
+            midColors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(i * barWidth, barHeight, barWidth, midHeight);
+            });
+
+            // PLUGE section
+            const plugeY = barHeight + midHeight;
+            const plugeHeight = h - plugeY;
+            
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(w * 0.25, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#141414';
+            ctx.fillRect(w * 0.5, plugeY, w * 0.25, plugeHeight);
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(w * 0.75, plugeY, w * 0.25, plugeHeight);
+
+            // Label
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(20, 20, 240, 40);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px monospace';
+            ctx.fillText('SMPTE 100% (100/0/100/0)', 30, 45);
+        }
+
+        // Checkerboard
         function drawCheckerboard() {
             const size = Math.max(40, Math.floor(canvas.width / 40));
             const cols = Math.ceil(canvas.width / size);
             const rows = Math.ceil(canvas.height / size);
             
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#ffffff';
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < cols; col++) {
                     if ((row + col) % 2 === 0) {
-                        ctx.fillStyle = '#ffffff';
                         ctx.fillRect(col * size, row * size, size, size);
                     }
                 }
@@ -354,7 +460,7 @@
             }
         }
 
-        // Crosshatch - OPTIMIZED
+        // Crosshatch
         function drawCrosshatch() {
             ctx.fillStyle = '#808080';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -380,12 +486,11 @@
             }
             ctx.stroke();
 
-            // Center crosshair
-            ctx.strokeStyle = '#ff0000';
-            ctx.lineWidth = 3;
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
             
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(cx - 50, cy);
             ctx.lineTo(cx + 50, cy);
@@ -428,355 +533,425 @@
             });
         }
 
-        // Motion Test - PERFECT SEAMLESS SCROLL
+        // Motion Test
         function drawMotion() {
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const barWidth = 100;
             const speed = 5;
-            
-            // Virtual world position (continuous, no modulo!)
             const worldOffset = animationFrame * speed;
-            
-            // Find first visible bar in the virtual world
             const firstBarIndex = Math.floor(worldOffset / barWidth);
-            
-            // Draw enough bars to cover screen
             const numBars = Math.ceil(canvas.width / barWidth) + 1;
             
             for (let i = 0; i < numBars; i++) {
                 const barIndex = firstBarIndex + i;
                 const x = barIndex * barWidth - worldOffset;
-                
-                // Simple alternating pattern based on bar index
                 const isWhite = barIndex % 2 === 0;
                 ctx.fillStyle = isWhite ? '#ffffff' : '#000000';
                 ctx.fillRect(x, 0, barWidth, canvas.height);
             }
 
-            // Speed indicator
             ctx.fillStyle = '#ff0000';
             ctx.font = 'bold 24px monospace';
             ctx.fillText('5px/frame @ 60fps = 300px/sec', 20, 40);
         }
 
-        // DUCLOS-STYLE PROFESSIONAL FOCUS CHART
+        // Focus Chart (same as before)
         function drawFocus() {
-            // White background
-            ctx.fillStyle = '#f5f5f5';
+            ctx.fillStyle = '#f8f8f8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
-            const minDim = Math.min(canvas.width, canvas.height);
+            const scale = Math.min(canvas.width / 1920, canvas.height / 1080);
             
-            ctx.strokeStyle = '#000000';
             ctx.fillStyle = '#000000';
+            ctx.strokeStyle = '#000000';
             
-            // === CORNER SIEMENS STARS (Large) ===
-            const cornerStarRadius = minDim * 0.12;
-            const cornerPositions = [
-                {x: cornerStarRadius * 1.2, y: cornerStarRadius * 1.2},
-                {x: canvas.width - cornerStarRadius * 1.2, y: cornerStarRadius * 1.2},
-                {x: cornerStarRadius * 1.2, y: canvas.height - cornerStarRadius * 1.2},
-                {x: canvas.width - cornerStarRadius * 1.2, y: canvas.height - cornerStarRadius * 1.2}
-            ];
-            
-            function drawSiemensStar(x, y, radius, segments = 36) {
+            function drawSiemens(x, y, radius, segments) {
+                ctx.save();
+                ctx.translate(x, y);
                 ctx.beginPath();
                 for (let i = 0; i < segments; i++) {
                     if (i % 2 === 0) {
                         const a1 = (i / segments) * Math.PI * 2;
                         const a2 = ((i + 1) / segments) * Math.PI * 2;
-                        ctx.moveTo(x, y);
-                        ctx.lineTo(x + Math.cos(a1) * radius, y + Math.sin(a1) * radius);
-                        ctx.lineTo(x + Math.cos(a2) * radius, y + Math.sin(a2) * radius);
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(Math.cos(a1) * radius, Math.sin(a1) * radius);
+                        ctx.lineTo(Math.cos(a2) * radius, Math.sin(a2) * radius);
                     }
                 }
                 ctx.fill();
+                ctx.restore();
             }
             
-            // Draw large corner stars
-            cornerPositions.forEach(pos => {
-                drawSiemensStar(pos.x, pos.y, cornerStarRadius, 48);
-            });
+            const cornerR = 180 * scale;
+            const cornerMargin = cornerR * 1.1;
+            const corners = [
+                [cornerMargin, cornerMargin],
+                [canvas.width - cornerMargin, cornerMargin],
+                [cornerMargin, canvas.height - cornerMargin],
+                [canvas.width - cornerMargin, canvas.height - cornerMargin]
+            ];
             
-            // === CONVERGING WEDGES FROM CORNERS ===
-            function drawCornerWedge(x, y, toX, toY) {
-                const lines = 15;
-                const spread = cornerStarRadius * 0.4;
-                const angle = Math.atan2(toY - y, toX - x);
+            corners.forEach(([x, y]) => drawSiemens(x, y, cornerR, 48));
+            
+            ctx.lineWidth = 1.5 * scale;
+            corners.forEach(([x, y]) => {
+                const angle = Math.atan2(cy - y, cx - x);
+                const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2) * 0.75;
+                const spread = 60 * scale;
+                const lines = 20;
                 
                 ctx.save();
                 ctx.translate(x, y);
                 ctx.rotate(angle);
-                ctx.lineWidth = 1.5;
                 ctx.beginPath();
                 for (let i = 0; i < lines; i++) {
-                    const offset = -spread + (i / lines) * spread * 2;
-                    const dist = Math.sqrt((toX - x) ** 2 + (toY - y) ** 2) * 0.6;
-                    ctx.moveTo(cornerStarRadius, offset);
-                    ctx.lineTo(dist, offset * 0.3);
+                    const offset = -spread + (i / (lines - 1)) * spread * 2;
+                    ctx.moveTo(cornerR, offset);
+                    ctx.lineTo(dist, offset * 0.15);
                 }
                 ctx.stroke();
                 ctx.restore();
-            }
-            
-            cornerPositions.forEach(pos => {
-                drawCornerWedge(pos.x, pos.y, cx, cy);
             });
             
-            // === CURVED ARCS FROM CORNERS ===
-            ctx.strokeStyle = '#666666';
-            ctx.lineWidth = 8;
-            cornerPositions.forEach(pos => {
+            ctx.strokeStyle = '#888888';
+            ctx.lineWidth = 12 * scale;
+            corners.forEach(([x, y]) => {
+                const cpDist = 0.55;
                 ctx.beginPath();
-                ctx.moveTo(pos.x, pos.y);
+                ctx.moveTo(x, y);
                 ctx.quadraticCurveTo(
-                    (pos.x + cx) / 2,
-                    (pos.y + cy) / 2,
-                    cx + (cx - pos.x) * 0.3,
-                    cy + (cy - pos.y) * 0.3
+                    x + (cx - x) * cpDist,
+                    y + (cy - y) * cpDist,
+                    cx + (cx - x) * 0.35,
+                    cy + (cy - y) * 0.35
                 );
                 ctx.stroke();
             });
             
-            // === CONCENTRIC CIRCLES ===
-            ctx.strokeStyle = '#999999';
-            ctx.lineWidth = 2;
-            const circleRadii = [0.18, 0.22, 0.26];
-            circleRadii.forEach(r => {
+            const smallR = 35 * scale;
+            const smallStars = [
+                [0.35, 0.25], [0.65, 0.25],
+                [0.25, 0.5], [0.75, 0.5],
+                [0.35, 0.75], [0.65, 0.75],
+                [0.42, 0.38], [0.58, 0.38],
+                [0.42, 0.62], [0.58, 0.62]
+            ];
+            
+            ctx.fillStyle = '#000000';
+            smallStars.forEach(([rx, ry]) => {
+                drawSiemens(canvas.width * rx, canvas.height * ry, smallR, 24);
+            });
+            
+            ctx.strokeStyle = '#aaaaaa';
+            ctx.lineWidth = 2 * scale;
+            [0.20, 0.24, 0.28].forEach(r => {
                 ctx.beginPath();
-                ctx.arc(cx, cy, minDim * r, 0, Math.PI * 2);
+                ctx.arc(cx, cy, Math.min(canvas.width, canvas.height) * r, 0, Math.PI * 2);
                 ctx.stroke();
             });
             
-            // === CENTRAL SIEMENS STAR WITH COLOR WHEEL ===
-            const centerRadius = minDim * 0.15;
+            const centerR = 140 * scale;
+            const colorInner = centerR * 0.88;
+            const colorOuter = centerR * 1.08;
+            const colors = ['#FF0000', '#FF7700', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#FF00FF'];
             
-            // Color wheel segments
-            const colors = [
-                '#FF0000', '#FF8800', '#FFFF00', '#00FF00', 
-                '#00FFFF', '#0000FF', '#FF00FF', '#FF0000'
-            ];
-            const colorSegments = 8;
-            const colorRingInner = centerRadius * 0.85;
-            const colorRingOuter = centerRadius * 1.05;
-            
-            for (let i = 0; i < colorSegments; i++) {
-                const a1 = (i / colorSegments) * Math.PI * 2 - Math.PI / 2;
-                const a2 = ((i + 1) / colorSegments) * Math.PI * 2 - Math.PI / 2;
-                
-                ctx.fillStyle = colors[i];
+            colors.forEach((color, i) => {
+                const a1 = (i / 7) * Math.PI * 2 - Math.PI / 2;
+                const a2 = ((i + 1) / 7) * Math.PI * 2 - Math.PI / 2;
+                ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(cx, cy, colorRingOuter, a1, a2);
-                ctx.arc(cx, cy, colorRingInner, a2, a1, true);
-                ctx.closePath();
+                ctx.arc(cx, cy, colorOuter, a1, a2);
+                ctx.arc(cx, cy, colorInner, a2, a1, true);
                 ctx.fill();
-            }
+            });
             
-            // Central Siemens star
             ctx.fillStyle = '#000000';
-            drawSiemensStar(cx, cy, centerRadius * 0.8, 48);
+            drawSiemens(cx, cy, centerR * 0.85, 48);
             
-            // White center circle
             ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(cx, cy, centerRadius * 0.15, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 18 * scale, 0, Math.PI * 2);
             ctx.fill();
             
-            // Center crosshair
             ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 * scale;
+            const crossSize = 12 * scale;
             ctx.beginPath();
-            ctx.moveTo(cx - 20, cy);
-            ctx.lineTo(cx + 20, cy);
-            ctx.moveTo(cx, cy - 20);
-            ctx.lineTo(cx, cy + 20);
+            ctx.moveTo(cx - crossSize, cy);
+            ctx.lineTo(cx + crossSize, cy);
+            ctx.moveTo(cx, cy - crossSize);
+            ctx.lineTo(cx, cy + crossSize);
             ctx.stroke();
             
-            // === SCATTERED SMALL SIEMENS STARS ===
-            const smallStarPositions = [
-                {x: 0.25, y: 0.2}, {x: 0.75, y: 0.2},
-                {x: 0.2, y: 0.5}, {x: 0.8, y: 0.5},
-                {x: 0.25, y: 0.8}, {x: 0.75, y: 0.8},
-                {x: 0.35, y: 0.35}, {x: 0.65, y: 0.35},
-                {x: 0.35, y: 0.65}, {x: 0.65, y: 0.65}
-            ];
-            
-            const smallStarRadius = minDim * 0.03;
             ctx.fillStyle = '#000000';
-            smallStarPositions.forEach(pos => {
-                drawSiemensStar(canvas.width * pos.x, canvas.height * pos.y, smallStarRadius, 24);
-            });
-            
-            // === HORIZONTAL LINE PAIRS ===
-            const lpY = cy + centerRadius * 1.5;
-            const lpTests = [
-                {lines: 8, label: '400'}, {lines: 12, label: '600'}, 
-                {lines: 16, label: '800'}, {lines: 20, label: '1000'}
-            ];
-            
-            let xPos = cx - 250;
-            ctx.fillStyle = '#000000';
-            ctx.font = '10px monospace';
+            ctx.font = `bold ${20 * scale}px monospace`;
             ctx.textAlign = 'center';
+            ctx.fillText('TSG SPHERICAL FOCUS CHART', cx, 32 * scale);
             
-            lpTests.forEach(test => {
-                const boxW = 80;
-                const boxH = 50;
-                const lineH = boxH / (test.lines * 2);
-                
-                for (let i = 0; i < test.lines; i++) {
-                    ctx.fillRect(xPos, lpY + i * lineH * 2, boxW, lineH);
-                }
-                ctx.fillText(`${test.label} TVL`, xPos + boxW / 2, lpY + boxH + 12);
-                xPos += boxW + 15;
+            ctx.font = `${10 * scale}px monospace`;
+            ctx.fillText('BROADCAST EDITION v4.5', cx, 50 * scale);
+        }
+
+        // Chroma Monde (renamed from ChromaDuMonde)
+        function drawChromaMonde() {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const baseW = 1280;
+            const baseH = 720;
+            const scale = Math.min(canvas.width / (baseW + 84), canvas.height / (baseH + 84));
+            
+            const w = baseW * scale;
+            const h = baseH * scale;
+            const offsetX = (canvas.width - w - 84 * scale) / 2;
+            const offsetY = (canvas.height - h - 84 * scale) / 2;
+            const border = 42 * scale;
+            
+            ctx.fillStyle = '#2a2a2a';
+            ctx.fillRect(offsetX, offsetY, w + border * 2, h + border * 2);
+            
+            ctx.fillStyle = '#4a4a4a';
+            ctx.fillRect(offsetX + border, offsetY + border, w, h);
+            
+            const px = (x) => offsetX + border + x * scale;
+            const py = (y) => offsetY + border + y * scale;
+            const ps = (s) => s * scale;
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${14 * scale}px Arial`;
+            ctx.textAlign = 'left';
+            ctx.fillText('ColorBar/GrayScale Test Pattern', px(20), py(-8));
+            
+            ctx.font = `bold ${26 * scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Camera Alignment', px(baseW / 2), py(-8));
+            
+            ctx.strokeStyle = '#2a2a2a';
+            ctx.lineWidth = 2 * scale;
+            ctx.setLineDash([5 * scale, 5 * scale]);
+            
+            [50, 116, baseH - 116, baseH - 50].forEach(y => {
+                ctx.beginPath();
+                ctx.moveTo(px(0), py(y));
+                ctx.lineTo(px(baseW), py(y));
+                ctx.stroke();
             });
             
-            // === VERTICAL LINE PAIRS ===
-            let yPos = cy - 120;
-            const vlpX = cx - centerRadius * 1.8;
-            
-            lpTests.forEach(test => {
-                const boxW = 50;
-                const boxH = 80;
-                const lineW = boxW / (test.lines * 2);
-                
-                for (let i = 0; i < test.lines; i++) {
-                    ctx.fillRect(vlpX + i * lineW * 2, yPos, lineW, boxH);
-                }
-                yPos += boxH + 15;
+            [220, baseW - 220].forEach(x => {
+                ctx.beginPath();
+                ctx.moveTo(px(x), py(0));
+                ctx.lineTo(px(x), py(baseH));
+                ctx.stroke();
             });
             
-            // === RESOLUTION BOXES ===
-            function drawResolutionBox(x, y, label) {
-                ctx.strokeStyle = '#000000';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x, y, 60, 40);
-                
-                // Draw tiny line patterns inside
-                for (let i = 0; i < 8; i++) {
-                    ctx.fillRect(x + 5 + i * 6, y + 5, 3, 30);
+            ctx.setLineDash([]);
+            
+            const cornerSize = 15 * scale;
+            ctx.strokeStyle = '#2a2a2a';
+            ctx.lineWidth = 2 * scale;
+            
+            [[5, 5, 1, 1], [baseW - 5, 5, -1, 1], [5, baseH - 5, 1, -1], [baseW - 5, baseH - 5, -1, -1]].forEach(([x, y, dx, dy]) => {
+                ctx.beginPath();
+                ctx.moveTo(px(x), py(y));
+                ctx.lineTo(px(x + dx * cornerSize), py(y));
+                ctx.moveTo(px(x), py(y));
+                ctx.lineTo(px(x), py(y + dy * cornerSize));
+                ctx.stroke();
+            });
+            
+            ctx.fillStyle = '#000000';
+            [[70, 75], [70, baseH - 265], [baseW - 140, 75], [baseW - 140, baseH - 265]].forEach(([x, y]) => {
+                ctx.fillRect(px(x), py(y), ps(70), ps(190));
+            });
+            
+            ctx.fillStyle = '#5a5a5a';
+            ctx.fillRect(px(70), py(baseH - 125), ps(70), ps(50));
+            ctx.fillRect(px(baseW - 140), py(baseH - 125), ps(70), ps(50));
+            
+            const gradientH = 570;
+            const gradientY = 75;
+            
+            const leftGrad = ctx.createLinearGradient(0, py(gradientY), 0, py(gradientY + gradientH));
+            leftGrad.addColorStop(0, '#ffffff');
+            leftGrad.addColorStop(0.5, '#808080');
+            leftGrad.addColorStop(1, '#000000');
+            ctx.fillStyle = leftGrad;
+            ctx.fillRect(px(145), py(gradientY), ps(135), ps(gradientH));
+            
+            const rightGrad = ctx.createLinearGradient(0, py(gradientY), 0, py(gradientY + gradientH));
+            rightGrad.addColorStop(0, '#ffffff');
+            rightGrad.addColorStop(0.5, '#808080');
+            rightGrad.addColorStop(1, '#000000');
+            ctx.fillStyle = rightGrad;
+            ctx.fillRect(px(baseW - 280), py(gradientY), ps(135), ps(gradientH));
+            
+            const topColors = ['#FFFF66', '#FFE566', '#FFBB66', '#FF9966', '#FF6666', '#FF66AA', '#FF66DD', '#DD66FF', '#AA66FF'];
+            const barW = (baseW - 490) / topColors.length;
+            topColors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(px(245 + i * barW), py(28), ps(barW), ps(88));
+            });
+            
+            const bottomColors = ['#66FF66', '#88FF88', '#66FFAA', '#66FFDD', '#66FFFF', '#66DDFF', '#66AAFF', '#6688FF', '#6666FF'];
+            bottomColors.forEach((color, i) => {
+                ctx.fillStyle = color;
+                ctx.fillRect(px(245 + i * barW), py(baseH - 116), ps(barW), ps(88));
+            });
+            
+            ctx.fillStyle = '#7a7a7a';
+            ctx.fillRect(px(245), py(116), ps(baseW - 490), ps(440));
+            
+            ctx.fillStyle = '#2a2a2a';
+            ctx.font = `bold ${22 * scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('DSC Labs - SW - CDM 24 - v15.2 A3', px(baseW / 2), py(145));
+        }
+
+        // Philips PM5564 Test Pattern
+        function drawPhilips() {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const scale = Math.min(canvas.width / 1920, canvas.height / 1080);
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Gray grid background
+            ctx.fillStyle = '#808080';
+            const gridSize = 10 * scale;
+            for (let y = 0; y < canvas.height; y += gridSize * 2) {
+                for (let x = 0; x < canvas.width; x += gridSize * 2) {
+                    if ((x / gridSize + y / gridSize) % 2 === 0) {
+                        ctx.fillRect(x, y, gridSize, gridSize);
+                    }
                 }
-                
-                ctx.fillStyle = '#000000';
-                ctx.font = '9px monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(label, x + 30, y - 5);
             }
             
-            // Place resolution boxes
-            drawResolutionBox(cx - 200, cy - 200, '600');
-            drawResolutionBox(cx + 140, cy - 200, '800');
-            drawResolutionBox(cx - 200, cy + 160, '1000');
-            drawResolutionBox(cx + 140, cy + 160, '1200');
+            // Center circle mask area
+            const circleR = 480 * scale;
             
-            // === ASPECT RATIO MARKERS ===
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            const aspectMarkers = [
-                {ratio: '16:9', y: cy - 100},
-                {ratio: '1.85:1', y: cy},
-                {ratio: '2.39:1', y: cy + 100}
+            // Top color bars (outside circle)
+            const barColors = ['#bfbf00', '#00bfbf', '#00bf00', '#bf00bf', '#bf0000', '#0000bf'];
+            const barW = canvas.width / 12;
+            const barH = 60 * scale;
+            
+            for (let i = 0; i < 6; i++) {
+                ctx.fillStyle = barColors[i];
+                ctx.fillRect(canvas.width / 2 - barW * 3 + i * barW, cy - circleR - barH - 20 * scale, barW, barH);
+            }
+            
+            // Center circle with gradient bars
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+            ctx.clip();
+            
+            // Vertical gradient bars in center
+            const centerBarColors = [
+                '#ffff00', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#0000ff'
             ];
             
-            aspectMarkers.forEach(marker => {
-                const markerLen = 15;
-                // Left marker
-                ctx.beginPath();
-                ctx.moveTo(50, marker.y);
-                ctx.lineTo(50 + markerLen, marker.y);
-                ctx.stroke();
-                
-                // Right marker
-                ctx.beginPath();
-                ctx.moveTo(canvas.width - 50, marker.y);
-                ctx.lineTo(canvas.width - 50 - markerLen, marker.y);
-                ctx.stroke();
-                
-                ctx.font = '10px monospace';
-                ctx.fillText(marker.ratio, 30, marker.y + 4);
+            const centerBarW = circleR * 2 / 6;
+            centerBarColors.forEach((color, i) => {
+                const grad = ctx.createLinearGradient(0, cy - circleR, 0, cy + circleR);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.5, color);
+                grad.addColorStop(1, '#000000');
+                ctx.fillStyle = grad;
+                ctx.fillRect(cx - circleR + i * centerBarW, cy - circleR, centerBarW, circleR * 2);
             });
             
-            // === CORNER REGISTRATION MARKS ===
-            const regSize = 25;
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
+            ctx.restore();
             
-            const corners = [
-                [10, 10, 1, 1], [canvas.width - 10, 10, -1, 1],
-                [10, canvas.height - 10, 1, -1], [canvas.width - 10, canvas.height - 10, -1, -1]
+            // Circle border
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 3 * scale;
+            ctx.beginPath();
+            ctx.arc(cx, cy, circleR, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Center crosshair
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2 * scale;
+            const crossSize = 30 * scale;
+            ctx.beginPath();
+            ctx.moveTo(cx - crossSize, cy);
+            ctx.lineTo(cx + crossSize, cy);
+            ctx.moveTo(cx, cy - crossSize);
+            ctx.lineTo(cx, cy + crossSize);
+            ctx.stroke();
+            
+            // Corner radials
+            const radialR = 100 * scale;
+            const radialPositions = [
+                [radialR, radialR],
+                [canvas.width - radialR, radialR],
+                [radialR, canvas.height - radialR],
+                [canvas.width - radialR, canvas.height - radialR]
             ];
             
-            corners.forEach(([x, y, dx, dy]) => {
-                ctx.beginPath();
-                ctx.moveTo(x, y + dy * regSize);
-                ctx.lineTo(x, y);
-                ctx.lineTo(x + dx * regSize, y);
-                ctx.stroke();
+            radialPositions.forEach(([x, y]) => {
+                // Radial lines
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1 * scale;
+                for (let angle = 0; angle < 360; angle += 6) {
+                    if (angle % 12 === 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        const rad = angle * Math.PI / 180;
+                        ctx.lineTo(x + Math.cos(rad) * radialR * 0.8, y + Math.sin(rad) * radialR * 0.8);
+                        ctx.stroke();
+                    }
+                }
                 
-                // Small arrow
+                // Center circle
+                ctx.fillStyle = '#000000';
                 ctx.beginPath();
-                ctx.moveTo(x + dx * 8, y + dy * 8);
-                ctx.lineTo(x + dx * 15, y + dy * 8);
-                ctx.lineTo(x + dx * 15, y + dy * 15);
+                ctx.arc(x, y, 15 * scale, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1 * scale;
                 ctx.stroke();
             });
             
-            // === PROJECT INFO BOX ===
-            const infoBoxW = 280;
-            const infoBoxH = 90;
-            const infoX = cx - infoBoxW / 2;
-            const infoY = canvas.height - infoBoxH - 30;
-            
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(infoX, infoY, infoBoxW, infoBoxH);
-            
+            // PM5564 label
             ctx.fillStyle = '#000000';
-            ctx.font = '11px monospace';
-            ctx.textAlign = 'left';
-            const infoFields = ['PROJECT:', 'CINEMATOGRAPHER:', 'CAMERA:', 'LENS:', 'DISTANCE:', 'NOTES:'];
-            infoFields.forEach((field, i) => {
-                ctx.fillText(field, infoX + 10, infoY + 15 + i * 13);
-            });
-            
-            // === TOP BRANDING ===
-            ctx.fillStyle = '#000000';
-            ctx.font = 'bold 18px monospace';
+            ctx.font = `bold ${24 * scale}px monospace`;
             ctx.textAlign = 'center';
-            ctx.fillText('TSG SPHERICAL FOCUS CHART', cx, 30);
+            ctx.fillText('PHILIPS PM5564', cx, cy - circleR - 100 * scale);
             
-            ctx.font = '9px monospace';
-            ctx.fillText('BROADCAST EDITION v4.5', cx, 45);
+            // Bottom info bars
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, canvas.height - 80 * scale, canvas.width, 80 * scale);
             
-            // === BOTTOM INFO ===
-            ctx.font = '10px monospace';
-            ctx.fillText(`${canvas.width} × ${canvas.height} | 16:9 HD`, cx, canvas.height - 10);
-            
-            // === BLACK BORDER ===
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 8;
-            ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `${16 * scale}px monospace`;
+            ctx.fillText(`${canvas.width} × ${canvas.height}`, cx, canvas.height - 40 * scale);
         }
 
         const patterns = {
-            smpte: drawSMPTE,
+            ebu: () => {
+                if (smpteVariant === 0) drawEBU();
+                else if (smpteVariant === 1) drawSMPTE75();
+                else drawSMPTE100();
+            },
             checkerboard: drawCheckerboard,
             gradient: drawGradient,
             crosshatch: drawCrosshatch,
             pluge: drawPluge,
             color: drawColorBars,
             motion: drawMotion,
-            focus: drawFocus
+            focus: drawFocus,
+            chromamonde: drawChromaMonde,
+            philips: drawPhilips
         };
 
         function draw() {
             const now = performance.now();
-            
-            // Redraw if: needed, or motion pattern is animating
             const shouldAnimate = animationEnabled && currentPattern === 'motion';
             
             if (needsRedraw || shouldAnimate) {
@@ -790,7 +965,6 @@
                 }
             }
 
-            // FPS counter
             frameCount++;
             if (now - lastFpsUpdate >= 1000) {
                 fps = Math.round(frameCount * 1000 / (now - lastFpsUpdate));
@@ -802,13 +976,20 @@
             requestAnimationFrame(draw);
         }
 
-        // Pattern selection
         document.querySelectorAll('.pattern-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.pattern-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentPattern = btn.dataset.pattern;
-                document.getElementById('pattern').textContent = btn.textContent;
+                if (btn.dataset.pattern === 'ebu') {
+                    // Toggle between EBU, 75%, 100%
+                    smpteVariant = (smpteVariant + 1) % 3;
+                    const variantNames = ['EBU Bars', 'SMPTE 75%', 'SMPTE 100%'];
+                    document.getElementById('pattern').textContent = variantNames[smpteVariant];
+                } else {
+                    smpteVariant = 0;
+                    document.querySelectorAll('.pattern-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentPattern = btn.dataset.pattern;
+                    document.getElementById('pattern').textContent = btn.textContent;
+                }
                 animationFrame = 0;
                 needsRedraw = true;
             });
@@ -833,18 +1014,32 @@
             needsRedraw = true;
         }
 
-        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            const patternList = ['smpte', 'checkerboard', 'gradient', 'crosshatch', 'pluge', 'color', 'motion', 'focus'];
+            const patternList = ['ebu', 'checkerboard', 'gradient', 'crosshatch', 'pluge', 'color', 'motion', 'focus', 'chromamonde', 'philips'];
             const key = e.key.toLowerCase();
             
-            if (key >= '1' && key <= '8') {
+            if (key >= '1' && key <= '9') {
                 const index = parseInt(key) - 1;
-                currentPattern = patternList[index];
+                if (index < patternList.length) {
+                    currentPattern = patternList[index];
+                    if (currentPattern === 'ebu') {
+                        smpteVariant = (smpteVariant + 1) % 3;
+                    } else {
+                        smpteVariant = 0;
+                    }
+                    document.querySelectorAll('.pattern-btn').forEach((btn, i) => {
+                        btn.classList.toggle('active', i === index);
+                    });
+                    document.getElementById('pattern').textContent = document.querySelectorAll('.pattern-btn')[index].textContent;
+                    needsRedraw = true;
+                }
+            } else if (key === '0') {
+                currentPattern = 'philips';
+                smpteVariant = 0;
                 document.querySelectorAll('.pattern-btn').forEach((btn, i) => {
-                    btn.classList.toggle('active', i === index);
+                    btn.classList.toggle('active', i === 9);
                 });
-                document.getElementById('pattern').textContent = document.querySelectorAll('.pattern-btn')[index].textContent;
+                document.getElementById('pattern').textContent = 'Philips PM5564';
                 needsRedraw = true;
             } else if (key === 'f') {
                 toggleFullscreen();
