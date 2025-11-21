@@ -352,19 +352,7 @@
         gap: 12px;
       }
     }
-    
-    /* Ta bort container query som gör att .xyGrid slår om till en kolumn vid smal bredd */
-      .xySquare {
-        grid-row: 1;
-      }
-      
-      .corrWrap {
-        grid-row: 2;
-        aspect-ratio: 3/1;
-        max-height: 60px;
-      }
-    }
-    
+
     .xySquare {
       position: relative;
       aspect-ratio: 1;
@@ -518,16 +506,8 @@
     /* Drag & Drop Responsive Panels */
     .meter {
       cursor: grab;
-      .corrWrap {
-        position: relative;
-        flex: 1 1 0;
-        aspect-ratio: 1;
-        height: 100%;
-        min-height: 0;
-        min-width: 100px;
-      }
     }
-    
+
     .meter.dragging {
       cursor: grabbing;
         transition: var(--drag-transition);
