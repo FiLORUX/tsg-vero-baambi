@@ -582,24 +582,6 @@
         0% { box-shadow: 0 0 16px rgba(147, 197, 253, 0.3); }
         100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
       }
-      z-index: -1;
-      filter: blur(8px);
-    }
-    
-    .meter.drag-over {
-      border: 2px dashed rgba(147, 197, 253, 0.6);
-      background: rgba(147, 197, 253, 0.05);
-      animation: pulse-glow 1s ease-in-out infinite alternate;
-    }
-    
-    .meter.transitioning {
-      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-    
-    @keyframes pulse-glow {
-      0% { box-shadow: 0 0 16px rgba(147, 197, 253, 0.3); }
-      100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
-    }
   </style>
 </head>
 <body>
