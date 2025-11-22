@@ -659,12 +659,12 @@
             <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b> dBTP</span>
           </div>
         </div>
-        <div class="meter" id="vuCard">
-          <header><label>VU Nordic Scale</label><span class="badge">300 ms · 0 VU = −18 dBFS</span></header>
+        <div class="meter" id="ppmCard">
+          <header><label>Nordic PPM</label><span class="badge">IEC Type I · TEST = 0 dBu = −18 dBFS</span></header>
           <div class="hMeter">
-            <canvas id="vuCanvas" height="160"></canvas>
-            <div class="hScale" id="vuScale"></div>
-            <span class="hLabel" id="vuLabel">L: <b id="vuLVal">—</b> · R: <b id="vuRVal">—</b> VU</span>
+            <canvas id="ppmCanvas" height="160"></canvas>
+            <div class="hScale" id="ppmScale"></div>
+            <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">—</b> · R: <b id="ppmRVal">—</b> dB</span>
           </div>
         </div>
       </div>
@@ -961,10 +961,10 @@
 
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
-  const vuCanvas = document.getElementById('vuCanvas');
-  const vuScale = document.getElementById('vuScale');
-  const vuLVal = document.getElementById('vuLVal');
-  const vuRVal = document.getElementById('vuRVal');
+  const ppmCanvas = document.getElementById('ppmCanvas');
+  const ppmScale = document.getElementById('ppmScale');
+  const ppmLVal = document.getElementById('ppmLVal');
+  const ppmRVal = document.getElementById('ppmRVal');
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
@@ -1043,22 +1043,77 @@
 
   function connectStereoToMix(node){ const split = ac.createChannelSplitter(2); node.connect(split); split.connect(mixL,0); split.connect(mixR,1); split.connect(kHP_L,0); split.connect(kHP_R,1); return split; }
 
-  // ------- VU (300 ms) – Nordic Scale: -20 VU till +6 VU, 0 VU = -18 dBFS -------
-  let vuRmsL = 0, vuRmsR = 0, lastTsVU = performance.now();
-  function updateVU(){
-    const now = performance.now(); const dt = Math.max(0.001, (now - lastTsVU)/1000); lastTsVU = now; const tau = 0.3, a = 1 - Math.exp(-dt/tau);
-    analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    let sL=0,sR=0; for(let i=0;i<bufL.length;i++){ sL+=bufL[i]*bufL[i]; sR+=bufR[i]*bufR[i] }
-    const rmsL = Math.sqrt(sL/bufL.length), rmsR = Math.sqrt(sR/bufR.length); vuRmsL += a*(rmsL - vuRmsL); vuRmsR += a*(rmsR - vuRmsR);
-    const dBfsL = 20*Math.log10(vuRmsL + 1e-12); const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
-    const vuL = Math.max(-20, Math.min(6, dBfsL - (-18))); // -18 dBFS = 0 VU
-    const vuR = Math.max(-20, Math.min(6, dBfsR - (-18)));
-    // Rita horisontella bars på canvas
-    drawHBar_VU(vuCanvas, vuL, vuR);
-    // Uppdatera labels
-    const fmtVU = (v) => (v > 0 ? '+' : '') + v.toFixed(1);
-    vuLVal.textContent = fmtVU(vuL);
-    vuRVal.textContent = fmtVU(vuR);
+  // ------- Nordic PPM (IEC 60268-10 Type I) -------
+  // Skala: -36 till +9 dBu, TEST = 0 dBu = -18 dBFS, PML = +9 dBu = -9 dBFS
+  // Ballistik: 5 ms attack (quasi-peak), linjär decay 20 dB / 1.7 s
+  let ppmHoldL = -60, ppmHoldR = -60, lastTsPPM = performance.now();
+  const PPM_ATTACK_MS = 5;          // 5 ms integration (IEC Type I)
+  const PPM_DECAY_DB_PER_S = 20/1.7; // 20 dB på 1.7 s ≈ 11.76 dB/s (linjär)
+  const PPM_MIN_DB = -54;           // -36 dBu = -54 dBFS
+  const PPM_MAX_DB = -9;            // +9 dBu = -9 dBFS
+
+  function quasiPeakDb(buf, sampleRate){
+    // Quasi-peak: hitta max amplitude med ~5ms integration
+    // Vid 48kHz = 240 samples per 5ms fönster
+    const windowSamples = Math.max(1, Math.round(sampleRate * PPM_ATTACK_MS / 1000));
+    let maxPeak = 0;
+    for(let i = 0; i < buf.length; i += windowSamples){
+      let windowMax = 0;
+      const end = Math.min(i + windowSamples, buf.length);
+      for(let j = i; j < end; j++){
+        const abs = Math.abs(buf[j]);
+        if(abs > windowMax) windowMax = abs;
+      }
+      if(windowMax > maxPeak) maxPeak = windowMax;
+    }
+    return 20 * Math.log10(maxPeak + 1e-12);
+  }
+
+  function updatePPM(){
+    const now = performance.now();
+    const dt = Math.max(0.001, (now - lastTsPPM) / 1000);
+    lastTsPPM = now;
+
+    // Hämta samples
+    analyserL.getFloatTimeDomainData(bufL);
+    analyserR.getFloatTimeDomainData(bufR);
+
+    // Quasi-peak mätning (dBFS)
+    const peakDbL = quasiPeakDb(bufL, ac.sampleRate);
+    const peakDbR = quasiPeakDb(bufR, ac.sampleRate);
+
+    // Nordic PPM ballistik:
+    // Attack: omedelbart till nytt peak (inom 5ms integration redan i quasiPeakDb)
+    // Decay: linjär 20 dB / 1.7 s
+    const decayDb = PPM_DECAY_DB_PER_S * dt;
+
+    // L kanal
+    if(peakDbL > ppmHoldL){
+      ppmHoldL = peakDbL; // Snabb attack
+    } else {
+      ppmHoldL = Math.max(PPM_MIN_DB, ppmHoldL - decayDb); // Linjär decay
+    }
+
+    // R kanal
+    if(peakDbR > ppmHoldR){
+      ppmHoldR = peakDbR;
+    } else {
+      ppmHoldR = Math.max(PPM_MIN_DB, ppmHoldR - decayDb);
+    }
+
+    // Clamp till skalan
+    const dispL = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldL));
+    const dispR = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldR));
+
+    // Rita
+    drawHBar_PPM(ppmCanvas, dispL, dispR);
+
+    // Visa i dBu (0 dBu = -18 dBFS)
+    const dBuL = dispL + 18; // -18 dBFS → 0 dBu
+    const dBuR = dispR + 18;
+    const fmtdBu = (v) => (v > 0 ? '+' : '') + v.toFixed(0);
+    ppmLVal.textContent = fmtdBu(dBuL);
+    ppmRVal.textContent = fmtdBu(dBuR);
   }
 
   // ------- XY + Correlation -------
@@ -1260,26 +1315,29 @@
     el.appendChild(tag);
   }
 
-  // VU Nordic Scale – horisontell skala: -20 VU till +6 VU
-  const vuMarks = [-20,-9,-6,-3,0,3,6];
-  function layoutVUScale(el){
+  // Nordic PPM – horisontell skala: -36 dBu till +9 dBu (dBFS: -54 till -9)
+  // Skalmarkeringar i dBu (traditionell Nordic)
+  const ppmMarks_dBu = [-36, -30, -24, -18, -12, -6, 0, 6, 9]; // dBu
+  function layoutPPMScale(el){
     el.innerHTML='';
-    const vuMin=-20, vuMax=6, vuSpan=vuMax-vuMin; // 26
-    vuMarks.forEach(m=>{
-      const x = ((m-vuMin)/vuSpan)*100;
+    const dbMin=-54, dbMax=-9, dbSpan=dbMax-dbMin; // 45 dB i dBFS
+    ppmMarks_dBu.forEach(dBu=>{
+      const dBFS = dBu - 18; // Konvertera dBu till dBFS
+      const x = ((dBFS-dbMin)/dbSpan)*100;
       const t=document.createElement('div');
       t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='1px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
-      lab.textContent = (m>0?'+':'')+m + ' VU';
-      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 24px)`; lab.style.top='6px'; lab.style.width='48px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
+      // Visa dBu-värde (traditionell Nordic-visning)
+      lab.textContent = (dBu>0?'+':'') + dBu;
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 20px)`; lab.style.top='6px'; lab.style.width='40px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // TEST 0 VU = -18 dBFS (cyan line)
-    const xRef = ((0-vuMin)/vuSpan)*100; // 0 VU position
+    // TEST = 0 dBu = -18 dBFS (cyan linje)
+    const xTest = ((-18-dbMin)/dbSpan)*100; // 0 dBu = -18 dBFS
     const ref=document.createElement('div');
     ref.style.position='absolute';
-    ref.style.left=`calc(${xRef}% - 1px)`;
+    ref.style.left=`calc(${xTest}% - 1px)`;
     ref.style.top='25%';
     ref.style.height='50%';
     ref.style.width='2px';
@@ -1287,11 +1345,11 @@
     ref.style.opacity='0.95';
     el.appendChild(ref);
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>0 VU = -18 dBFS</div>';
+    tag.innerHTML='<div>TEST</div><div>0 dBu</div>';
     tag.style.position='absolute';
-    tag.style.left=`calc(${xRef}% - 48px)`;
+    tag.style.left=`calc(${xTest}% - 32px)`;
     tag.style.bottom='8px';
-    tag.style.width='96px';
+    tag.style.width='64px';
     tag.style.textAlign='center';
     tag.style.fontSize='10px';
     tag.style.color=getCss('--cyan');
@@ -1301,6 +1359,32 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
+    // PML = +9 dBu = -9 dBFS (röd markering)
+    const xPML = ((-9-dbMin)/dbSpan)*100; // +9 dBu = -9 dBFS
+    const pmlLine=document.createElement('div');
+    pmlLine.style.position='absolute';
+    pmlLine.style.left=`calc(${xPML}% - 1px)`;
+    pmlLine.style.top='25%';
+    pmlLine.style.height='50%';
+    pmlLine.style.width='2px';
+    pmlLine.style.background=getCss('--hot');
+    pmlLine.style.opacity='0.95';
+    el.appendChild(pmlLine);
+    const pmlTag=document.createElement('div');
+    pmlTag.innerHTML='<div>PML</div><div>+9 dBu</div>';
+    pmlTag.style.position='absolute';
+    pmlTag.style.left=`calc(${xPML}% - 32px)`;
+    pmlTag.style.bottom='8px';
+    pmlTag.style.width='64px';
+    pmlTag.style.textAlign='center';
+    pmlTag.style.fontSize='10px';
+    pmlTag.style.color=getCss('--hot');
+    pmlTag.style.fontWeight='bold';
+    pmlTag.style.lineHeight='1.2';
+    pmlTag.style.background='none';
+    pmlTag.style.borderRadius='0';
+    pmlTag.style.padding='0';
+    el.appendChild(pmlTag);
   }
 
   function drawHBar_DBFS(canvas, valueL, valueR){
@@ -1341,28 +1425,47 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBTP fence (visual)
   }
 
-  // VU Nordic Scale – horisontell canvas
-  // Range: -20 VU till +6 VU (26 VU span), 0 VU = -18 dBFS
-  function drawHBar_VU(canvas, vuL, vuR){
+  // Nordic PPM – horisontell canvas
+  // Range: -54 dBFS till -9 dBFS (45 dB span) = -36 dBu till +9 dBu
+  // TEST = 0 dBu = -18 dBFS, PML = +9 dBu = -9 dBFS
+  function drawHBar_PPM(canvas, dBfsL, dBfsR){
     const dpr=window.devicePixelRatio||1;
     const rect = canvas.getBoundingClientRect();
     const w=Math.floor(rect.width*dpr), h=Math.floor(rect.height*dpr);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
     const ctx = canvas.getContext('2d');
-    const vuMin=-20, vuMax=6, vuSpan=vuMax-vuMin; // 26
-    function xFromVU(vu){ const c=Math.max(vuMin,Math.min(vuMax,vu)); return Math.round((c-vuMin)/vuSpan*w) }
+    const dbMin=-54, dbMax=-9, dbSpan=dbMax-dbMin; // 45 dB
+    function xFromDb(db){ const c=Math.max(dbMin,Math.min(dbMax,db)); return Math.round((c-dbMin)/dbSpan*w) }
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=1;
+    // Färgzoner för Nordic PPM (baserat på dBu-nivåer)
+    function segColor(db){
+      // db är i dBFS, konvertera till dBu: dBu = dBFS + 18
+      const dBu = db + 18;
+      if(dBu >= 6) return getCss('--hot');      // +6 dBu och över = rött (nära PML)
+      if(dBu >= 0) return getCss('--warn');     // 0 till +6 dBu = orange (över TEST)
+      return getCss('--ok');                     // Under TEST = grönt
+    }
     function drawChannel(yTop, val){
       // Bakgrund (dimmat)
-      for(let v=vuMin; v<vuMax; v+=step){ const x0=xFromVU(v), x1=xFromVU(v+step); ctx.globalAlpha=.14; ctx.fillStyle=getCss('--warn'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      for(let d=dbMin; d<dbMax; d+=step){
+        const x0=xFromDb(d), x1=xFromDb(d+step);
+        ctx.globalAlpha=.14;
+        ctx.fillStyle=segColor(d+step/2);
+        ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
+      }
       // Aktiv bar
-      const tEnd = Math.min(vuMax, val);
-      for(let v=vuMin; v<tEnd; v+=step){ const x0=xFromVU(v), x1=xFromVU(Math.min(v+step,tEnd)); ctx.globalAlpha=.9; ctx.fillStyle=getCss('--warn'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      const tEnd = Math.min(dbMax, val);
+      for(let d=dbMin; d<tEnd; d+=step){
+        const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd));
+        ctx.globalAlpha=.9;
+        ctx.fillStyle=segColor(d+step/2);
+        ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
+      }
     }
-    drawChannel(h*0.35, vuL); drawChannel(h*0.55, vuR);
-    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // +6 VU fence
+    drawChannel(h*0.35, dBfsL); drawChannel(h*0.55, dBfsR);
+    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // +9 dBu fence
   }
 
   let rmsHoldL=0, rmsHoldR=0; let lastTsDB=performance.now();
@@ -1377,7 +1480,7 @@
     drawHBar_DBFS(dbfs, dBL, dBR);
   }
   layoutDBFSScale(dbfsScale);
-  layoutVUScale(vuScale);
+  layoutPPMScale(ppmScale);
 
   function hermite(p0,p1,p2,p3,t){ const a= (-0.5*p0)+(1.5*p1)+(-1.5*p2)+(0.5*p3); const b=(p0*(-1))+ (2.5*p1)+(-2*p2)+ (0.5*p3); const c=(-0.5*p0)+(0.5*p2); const d=p1; return ((a*t+b)*t+c)*t+d; }
   function truePeakDb(buf){
@@ -1925,7 +2028,7 @@
       const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0;
       if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
     }
-    layoutXY(); updateVU(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
+    layoutXY(); updatePPM(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
     // Pass momentary LUFS to radar for live value
     let mVal = parseFloat(lufsM && lufsM.dataset.v);
     drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
