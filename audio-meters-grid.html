@@ -233,20 +233,14 @@
     .meters{display:grid;grid-template-columns:7fr 3fr;grid-template-rows:1fr;height:100%;gap:12px;min-height:0;overflow:hidden}
     .stack-left{
       display: grid;
-      grid-template-rows: 2fr 1fr 1fr 1fr;  /* Loudness 2fr, RMS/TP/VU 1fr vardera */
+      grid-template-rows: 2fr 1fr 1fr;  /* Ge goniometern dubbel höjd */
       gap: 12px;
       min-height: 0;
       align-items: stretch;
       grid-auto-rows: 1fr;
       height: 100%;
     }
-    .stack-right{
-      display: grid;
-      grid-template-rows: 1fr;  /* Endast vectorscope, full höjd */
-      gap: 12px;
-      min-height: 0;
-      height: 100%;
-    }
+    .stack-right{display:grid;grid-template-rows:2fr 1fr;gap:12px;min-height:0}
     .meter{
       background: #111416;
       border: 1px solid var(--outline);
@@ -273,15 +267,14 @@
 
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
-/* XY + Corr (vertical layout: goniometer above, correlation below) */
+/* XY + Corr */
 .xyGrid {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  gap: 16px;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   width: 100%;
-  height: 100%;
 }
 
 .xySquare, .corrWrap {
@@ -291,25 +284,27 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
+  height: 100%;
 }
 
-/* Goniometer: square, takes most vertical space */
+/* EN regel för .xySquare */
 .xySquare {
-  flex: 3 1 0;
+  flex: 1 1 0;
   aspect-ratio: 1;
-  width: 100%;
-  max-width: 100%;
-  min-height: 160px;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   margin: 0 auto;
+  min-width: 160px;
 }
 
-/* Correlation: horizontal bar below goniometer */
+/* EN regel för .corrWrap */
 .corrWrap {
   flex: 1 1 0;
-  width: 100%;
-  min-height: 80px;
-  max-height: 120px;
-  aspect-ratio: auto;
+  aspect-ratio: 1;
+  height: 100%;
+  min-height: 0;
+  min-width: 100px;
 }
 
 .corrWrap .canvasPad {
@@ -382,7 +377,66 @@
       box-sizing: border-box;
     }
 
-    /* Horisontella stapel-metrar (RMS, True Peak, VU Nordic) */
+    /* VU (Nordic) */
+    .vu{
+      position:relative;
+      height:100%;
+      background:#0c0f12;
+      border:1px solid var(--outline);
+      border-radius:12px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+    .vu-scale-container {
+      position:relative;
+      flex:1;
+      margin:8px;
+      min-height:0;
+    }
+    .bar{
+      position:absolute;
+      bottom:0;
+      width:16%;
+      left:24%;
+      height:0;
+      opacity:.95;
+      border-radius:6px;
+      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
+    }
+    .bar.r{
+      left:auto;
+      right:24%;
+      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
+    }
+    .vu-scale-container::before{
+      content:"";
+      position:absolute;
+      left:24%;
+      width:16%;
+      top:0;
+      bottom:0;
+      border-radius:8px;
+      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
+    }
+    .vu-scale-container::after{
+      content:"";
+      position:absolute;
+      right:24%;
+      width:16%;
+      top:0;
+      bottom:0;
+      border-radius:8px;
+      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
+    }
+    .ticks{position:absolute;inset:0;pointer-events:none}
+    .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
+    .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
+    .tick::before{content:attr(data-lab);position:absolute;left:6px;top:-7px;font-size:10px;color:#88a3bf}
+    .testline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.95;pointer-events:none}
+    .testlabel{position:absolute;font-size:10px;color:var(--cyan);pointer-events:none;width:100%;text-align:center}
+
+    /* Horisontella stapel-metrar */
     .hMeter{position:relative;height:160px;margin-bottom: var(--meter-gap);}
     .hScale{position:absolute;inset:0;pointer-events:none}
     .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
@@ -664,16 +718,24 @@
             <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b> dBTP</span>
           </div>
         </div>
-        <div class="meter" id="vuCard">
-          <header><label>VU Nordic Scale</label><span class="badge">300 ms · 0 VU = −18 dBFS</span></header>
-          <div class="hMeter">
-            <canvas id="vu" height="160"></canvas>
-            <div class="hScale" id="vuScale"></div>
-            <span class="hLabel" id="vuLabel">L: <b id="vuL">—</b> · R: <b id="vuR">—</b> VU</span>
-          </div>
-        </div>
       </div>
       <div class="stack-right">
+        <div class="meter" id="vuCard">
+          <header><label>VU Nordic Scale</label><span class="badge">300 ms</span></header>
+          <div class="vu">
+            <div class="vu-scale-container">
+              <div class="testlabel" id="vuTestLabel">
+                <div>TEST</div>
+                <div>0 VU NORDIC</div>
+                <div>-18 dBFS</div>
+              </div>
+              <div class="testline" id="vuTest"></div>
+              <div class="bar l" id="barL"></div>
+              <div class="bar r" id="barR"></div>
+              <div class="ticks" id="ticks"></div>
+            </div>
+          </div>
+        </div>
         <div class="meter" id="xyCard">
           <header><label>Stereo Vectorscope (Goniometer + Phase Correlation)</label></header>
           <div class="xyModule">
@@ -966,12 +1028,10 @@
 
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
-  // VU Nordic (canvas-based horizontal)
-  const vuCanvas = document.getElementById('vu');
-  const vuScale = document.getElementById('vuScale');
-  const vuLabelEl = document.getElementById('vuLabel');
-  const vuLEl = document.getElementById('vuL');
-  const vuREl = document.getElementById('vuR');
+  const barL = document.getElementById('barL'), barR = document.getElementById('barR');
+  const ticks = document.getElementById('ticks');
+  const vuTest = document.getElementById('vuTest');
+  const vuTestLabel = document.getElementById('vuTestLabel');
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
@@ -992,41 +1052,18 @@
       console.debug('layoutXY: Skipped due to active drag operation');
       return;
     }
-
+    
     const dpr = window.devicePixelRatio || 1;
     const header = xyCard.querySelector('header');
-    const xyModule = xyCard.querySelector('.xyModule');
-    if (!xyModule) return;
-
-    const moduleH = xyModule.clientHeight;
-    const moduleW = xyModule.clientWidth;
-    const corrH = 100; // Fixed height for correlation bar
-    const gap = 12;
-
-    // Goniometer: square, fits in available space above correlation
-    const availableH = moduleH - corrH - gap;
-    const side = Math.max(160, Math.min(availableH, moduleW));
-
+    const cardH = xyCard.clientHeight - (header?header.offsetHeight:0) - 16; // padding
+    const possible = Math.min(cardH, xyWrap.clientWidth);
+    const side = Math.max(160, possible);
     xyWrap.style.width = side + 'px';
     xyWrap.style.height = side + 'px';
-
     const w = Math.floor(side * dpr), h = Math.floor(side * dpr);
-    if (xy.width !== w || xy.height !== h) {
-      xy.width = w;
-      xy.height = h;
-    }
-
-    // Correlation: full width, fixed height
-    const corrWrapEl = document.querySelector('.corrWrap');
-    if (corrWrapEl) {
-      corrWrapEl.style.height = corrH + 'px';
-      corrWrapEl.style.width = '100%';
-    }
-    const cw = Math.floor(moduleW * dpr), ch = Math.floor(corrH * dpr);
-    if (corr.width !== cw || corr.height !== ch) {
-      corr.width = cw;
-      corr.height = ch;
-    }
+    if (xy.width!==w || xy.height!==h) { xy.width=w; xy.height=h; }
+    const corrWrapEl = corr.parentElement; if (corrWrapEl) { corrWrapEl.style.height = side + 'px'; }
+    const cw = Math.floor(220 * dpr), ch = h; if (corr.width!==cw || corr.height!==ch) { corr.width=cw; corr.height=ch; }
   }
 
   // ------- Audio graph -------
@@ -1051,46 +1088,55 @@
 
   function connectStereoToMix(node){ const split = ac.createChannelSplitter(2); node.connect(split); split.connect(mixL,0); split.connect(mixR,1); split.connect(kHP_L,0); split.connect(kHP_R,1); return split; }
 
-  // ------- VU Nordic (300 ms, canvas-based horizontal) -------
-  // Nordic VU skala: -20 VU till +6 VU (26 VU totalt)
-  // -20 VU = -38 dBFS, 0 VU = -18 dBFS (referenspunkt), +6 VU = -12 dBFS
-  layoutVUScale(vuScale);
+  // ------- VU (300 ms) -------
+  function buildTicks(){
+    ticks.innerHTML='';
+    
+    // Nordic VU skala: -20 VU till +6 VU (26 VU totalt)
+    // -20 VU = -38 dBFS
+    //   0 VU = -18 dBFS (referenspunkt)
+    //  +6 VU = -12 dBFS
+    const vuMarks = [-20,-9,-6,-3,0,3,6];
+    const scale = vuMarks.length - 1;  // Antal steg i skalan
+    
+    // Beräkna position för varje markering, där 0 VU är exakt på -18 dBFS
+    for(const vu of vuMarks){
+      // Normalisera VU till 0-1 skala där 0 VU är på 0.77 (20/26)
+      const normalizedPos = (vu + 20) / 26;  // +20 för att få -20 VU till 0
+      // Invertera för top position (0 är toppen, 1 är botten)
+      const y = (1 - normalizedPos) * 100;
+      
+      const d = document.createElement('div');
+      d.className = 'tick';
+      d.dataset.lab = `${vu>0?"+"+vu:vu} VU`;
+      d.style.top = `${y}%`;
+      ticks.appendChild(d);
+    }
+    
+    // Placera 0 VU (-18 dBFS) referenslinjen exakt
+    const zeroVUPos = (20 / 26);  // 0 VU position som fraktion
+    const y0 = (1 - zeroVUPos) * 100;
+    vuTest.style.top = `${y0}%`;
+    vuTestLabel.style.top = `${y0 - 8}%`;  // Text strax ovanför linjen med mindre marginal
+    vuTestLabel.style.left = '0';  // Nollställ left position
+    vuTestLabel.style.right = '0';  // Sätt right till 0 för centrering
+    vuTestLabel.style.textAlign = 'center';  // Centrera texten
+  }
+  buildTicks();
 
   let vuRmsL = 0, vuRmsR = 0, lastTsVU = performance.now();
   function updateVU(){
-    const now = performance.now();
-    const dt = Math.max(0.001, (now - lastTsVU) / 1000);
-    lastTsVU = now;
-    const tau = 0.3, a = 1 - Math.exp(-dt / tau); // 300 ms time constant
-
-    analyserL.getFloatTimeDomainData(bufL);
-    analyserR.getFloatTimeDomainData(bufR);
-
-    let sL = 0, sR = 0;
-    for (let i = 0; i < bufL.length; i++) {
-      sL += bufL[i] * bufL[i];
-      sR += bufR[i] * bufR[i];
-    }
-
-    const rmsL = Math.sqrt(sL / bufL.length);
-    const rmsR = Math.sqrt(sR / bufR.length);
-    vuRmsL += a * (rmsL - vuRmsL);
-    vuRmsR += a * (rmsR - vuRmsR);
-
-    const dBfsL = 20 * Math.log10(vuRmsL + 1e-12);
-    const dBfsR = 20 * Math.log10(vuRmsR + 1e-12);
-
-    // Convert dBFS to VU: 0 VU = -18 dBFS
-    const vuL = Math.max(-20, Math.min(6, dBfsL + 18));
-    const vuR = Math.max(-20, Math.min(6, dBfsR + 18));
-
-    // Draw horizontal VU bars (canvas)
-    drawHBar_VU(vuCanvas, vuL, vuR);
-
-    // Update label
-    const fmtVU = (v) => (v > 0 ? '+' : '') + v.toFixed(1);
-    vuLEl.textContent = fmtVU(vuL);
-    vuREl.textContent = fmtVU(vuR);
+    const now = performance.now(); const dt = Math.max(0.001, (now - lastTsVU)/1000); lastTsVU = now; const tau = 0.3, a = 1 - Math.exp(-dt/tau);
+    analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
+    let sL=0,sR=0; for(let i=0;i<bufL.length;i++){ sL+=bufL[i]*bufL[i]; sR+=bufR[i]*bufR[i] }
+    const rmsL = Math.sqrt(sL/bufL.length), rmsR = Math.sqrt(sR/bufR.length); vuRmsL += a*(rmsL - vuRmsL); vuRmsR += a*(rmsR - vuRmsR);
+    const dBfsL = 20*Math.log10(vuRmsL + 1e-12); const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
+    const vuL = Math.max(-20, Math.min(6, dBfsL - (-18))); // -18 dBFS = 0 VU
+    const vuR = Math.max(-20, Math.min(6, dBfsR - (-18)));
+    // Beräkna höjd så 0 VU hamnar exakt på referenslinjen
+    const pct = (v) => ((v + 20) / 26) * 100; // Normalisera -20 till +6 VU till 0-100%
+    barL.style.height = `${pct(vuL)}%`;
+    barR.style.height = `${pct(vuR)}%`;
   }
 
   // ------- XY + Correlation -------
@@ -1290,113 +1336,6 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
-  }
-
-  // ------- VU Nordic Scale (horizontal canvas version) -------
-  // Nordic VU: -20 VU to +6 VU (26 VU span), 0 VU = -18 dBFS
-  const vuMarks = [-20, -9, -6, -3, 0, 3, 6];
-  function layoutVUScale(el){
-    el.innerHTML='';
-    // VU range: -20 to +6 (26 total)
-    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin; // 26
-
-    vuMarks.forEach(m=>{
-      const x = ((m - vuMin) / vuSpan) * 100;
-      const t=document.createElement('div');
-      t.style.position='absolute';
-      t.style.left=`calc(${x}% - 0.5px)`;
-      t.style.top='25%';
-      t.style.height='50%';
-      t.style.width='1px';
-      t.style.background='#2a3642';
-      el.appendChild(t);
-      const lab=document.createElement('div');
-      lab.textContent = (m > 0 ? '+' : '') + m + ' VU';
-      lab.style.position='absolute';
-      lab.style.left=`calc(${x}% - 28px)`;
-      lab.style.top='6px';
-      lab.style.width='56px';
-      lab.style.textAlign='center';
-      lab.style.fontSize='10px';
-      lab.style.color='#88a3bf';
-      el.appendChild(lab);
-    });
-
-    // TEST 0 VU = -18 dBFS (cyan reference line)
-    const xRef = ((0 - vuMin) / vuSpan) * 100; // 0 VU position
-    const ref=document.createElement('div');
-    ref.style.position='absolute';
-    ref.style.left=`calc(${xRef}% - 1px)`;
-    ref.style.top='25%';
-    ref.style.height='50%';
-    ref.style.width='2px';
-    ref.style.background=getCss('--cyan');
-    ref.style.opacity='0.95';
-    el.appendChild(ref);
-
-    // TEST label below cyan line
-    const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>0 VU</div><div>-18 dBFS</div>';
-    tag.style.position='absolute';
-    tag.style.left=`calc(${xRef}% - 32px)`;
-    tag.style.bottom='4px';
-    tag.style.width='64px';
-    tag.style.textAlign='center';
-    tag.style.fontSize='9px';
-    tag.style.color=getCss('--cyan');
-    tag.style.fontWeight='bold';
-    tag.style.lineHeight='1.15';
-    tag.style.background='none';
-    tag.style.borderRadius='0';
-    tag.style.padding='0';
-    el.appendChild(tag);
-  }
-
-  // VU horizontal bar rendering (same style as dBFS/TP)
-  function drawHBar_VU(canvas, vuL, vuR){
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.height);
-    if(canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
-    const ctx = canvas.getContext('2d');
-
-    // VU range: -20 to +6 (26 span)
-    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin;
-    function xFromVU(vu){
-      const c = Math.max(vuMin, Math.min(vuMax, vu));
-      return Math.round((c - vuMin) / vuSpan * w);
-    }
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0e151a';
-    ctx.fillRect(0, 0, w, h);
-
-    const step = 1; // 1 VU per segment
-
-    function drawChannel(yTop, val){
-      // Background segments (dim)
-      for(let v = vuMin; v < vuMax; v += step){
-        const x0 = xFromVU(v), x1 = xFromVU(v + step);
-        ctx.globalAlpha = 0.14;
-        ctx.fillStyle = getCss('--warn'); // VU uses warn (yellow/amber) color
-        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
-      }
-      // Active segments (bright)
-      const tEnd = Math.max(vuMin, Math.min(vuMax, val));
-      for(let v = vuMin; v < tEnd; v += step){
-        const x0 = xFromVU(v), x1 = xFromVU(Math.min(v + step, tEnd));
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = getCss('--warn');
-        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
-      }
-    }
-
-    drawChannel(h * 0.35, vuL);
-    drawChannel(h * 0.55, vuR);
-
-    // +6 VU fence (right edge)
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#2a3642';
-    ctx.fillRect(w - 2, 0, 2, h);
   }
 
   function drawHBar_DBFS(canvas, valueL, valueR){
