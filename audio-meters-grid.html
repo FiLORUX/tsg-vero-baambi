@@ -644,7 +644,7 @@
           </div>
         </div>
         <div class="meter" id="dbfsCard">
-          <header><label>RMS (dBFS)</label><span class="badge">Ref TEST −18 dBFS</span></header>
+          <header><label>RMS (dBFS)</label><span class="badge">TEST −21 RMS = −18 peak (0 dBu)</span></header>
           <div class="hMeter">
             <canvas id="dbfs" height="160"></canvas>
             <div class="hScale" id="dbfsScale"></div>
@@ -1213,8 +1213,8 @@
       lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='8px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // TEST -18 dBFS (blue line, same as gray tick marks)
-    const x = ((-18+60)/60)*100;
+    // TEST -21 dBFS RMS (= 0 dBu = -18 dBFS peak för sinus)
+    const x = ((-21+60)/60)*100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${x}% - 0.5px)`;
@@ -1225,16 +1225,16 @@
     ref.style.opacity='0.95';
     el.appendChild(ref);
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
+    tag.innerHTML='<div>TEST</div><div>−21 dBFS RMS</div><div>−18 dBFS peak</div>';
     tag.style.position='absolute';
-    tag.style.left=`calc(${x}% - 32px)`;
-    tag.style.bottom='8px';  // Samma spacing som top labels
-    tag.style.width='64px';
+    tag.style.left=`calc(${x}% - 40px)`;
+    tag.style.bottom='4px';
+    tag.style.width='80px';
     tag.style.textAlign='center';
-    tag.style.fontSize='10px';
+    tag.style.fontSize='9px';
     tag.style.color=getCss('--cyan');
     tag.style.fontWeight='bold';
-    tag.style.lineHeight='1.2';
+    tag.style.lineHeight='1.15';
     tag.style.background='none';
     tag.style.borderRadius='0';
     tag.style.padding='0';
