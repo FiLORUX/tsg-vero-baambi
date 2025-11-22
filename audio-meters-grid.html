@@ -1299,13 +1299,13 @@
     el.appendChild(ref);
     // TEST label below blue line
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>-18 dBTP</div>';
+    tag.innerHTML='<div>TEST</div><div>−18 dBTP</div><div>−18 dBFS peak</div>';
     tag.style.position='absolute';
-    tag.style.left=`calc(${xRef}% - 32px)`;
-    tag.style.bottom='8px';  // Samma spacing som top labels
-    tag.style.width='64px';
+    tag.style.left=`calc(${xRef}% - 40px)`;
+    tag.style.bottom='4px';
+    tag.style.width='80px';
     tag.style.textAlign='center';
-    tag.style.fontSize='10px';
+    tag.style.fontSize='9px';
     tag.style.color=getCss('--cyan');
     tag.style.fontWeight='bold';
     tag.style.lineHeight='1.2';
@@ -1345,16 +1345,16 @@
     ref.style.opacity='0.95';
     el.appendChild(ref);
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>0 dBu</div>';
+    tag.innerHTML='<div>TEST</div><div>0 dBu (0 PPM)</div><div>−18 dBFS peak</div>';
     tag.style.position='absolute';
-    tag.style.left=`calc(${xTest}% - 32px)`;
-    tag.style.bottom='8px';
-    tag.style.width='64px';
+    tag.style.left=`calc(${xTest}% - 44px)`;
+    tag.style.bottom='4px';
+    tag.style.width='88px';
     tag.style.textAlign='center';
-    tag.style.fontSize='10px';
+    tag.style.fontSize='9px';
     tag.style.color=getCss('--cyan');
     tag.style.fontWeight='bold';
-    tag.style.lineHeight='1.2';
+    tag.style.lineHeight='1.15';
     tag.style.background='none';
     tag.style.borderRadius='0';
     tag.style.padding='0';
