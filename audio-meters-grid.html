@@ -718,18 +718,22 @@
           </div>
         </div>
         <div class="meter" id="vuCard">
-          <header><label>VU Nordic Scale</label><span class="badge">300 ms</span></header>
-          <div class="vu">
-            <div class="vu-scale-container">
-              <div class="testlabel" id="vuTestLabel">
-                <div>TEST</div>
-                <div>0 VU NORDIC</div>
-                <div>-18 dBFS</div>
+          <header><label>VU Nordic Scale</label><span class="badge">300 ms · 0 VU = −18 dBFS</span></header>
+          <div class="hMeter">
+            <canvas id="vuCanvas" height="160"></canvas>
+            <div class="hScale" id="vuScale"></div>
+            <span class="hLabel" id="vuLabel">L: <b id="vuLVal">—</b> · R: <b id="vuRVal">—</b> VU</span>
+          </div>
+          <!-- Gamla element behålls dolda för bakåtkompatibilitet -->
+          <div style="display:none">
+            <div class="vu">
+              <div class="vu-scale-container">
+                <div class="testlabel" id="vuTestLabel"><div>TEST</div></div>
+                <div class="testline" id="vuTest"></div>
+                <div class="bar l" id="barL"></div>
+                <div class="bar r" id="barR"></div>
+                <div class="ticks" id="ticks"></div>
               </div>
-              <div class="testline" id="vuTest"></div>
-              <div class="bar l" id="barL"></div>
-              <div class="bar r" id="barR"></div>
-              <div class="ticks" id="ticks"></div>
             </div>
           </div>
         </div>
@@ -1027,10 +1031,18 @@
 
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
+  // VU gamla element (behålls för bakåtkompatibilitet, dolda)
   const barL = document.getElementById('barL'), barR = document.getElementById('barR');
   const ticks = document.getElementById('ticks');
   const vuTest = document.getElementById('vuTest');
   const vuTestLabel = document.getElementById('vuTestLabel');
+
+  // VU nya canvas-element
+  const vuCanvas = document.getElementById('vuCanvas');
+  const vuScaleEl = document.getElementById('vuScale');
+  const vuLVal = document.getElementById('vuLVal');
+  const vuRVal = document.getElementById('vuRVal');
+
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
@@ -1143,7 +1155,7 @@
     vuTestLabel.style.right = '0';  // Sätt right till 0 för centrering
     vuTestLabel.style.textAlign = 'center';  // Centrera texten
   }
-  buildTicks();
+  layoutVUScale(vuScaleEl);
 
   let vuRmsL = 0, vuRmsR = 0, lastTsVU = performance.now();
   function updateVU(){
@@ -1154,10 +1166,12 @@
     const dBfsL = 20*Math.log10(vuRmsL + 1e-12); const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
     const vuL = Math.max(-20, Math.min(6, dBfsL - (-18))); // -18 dBFS = 0 VU
     const vuR = Math.max(-20, Math.min(6, dBfsR - (-18)));
-    // Beräkna höjd så 0 VU hamnar exakt på referenslinjen
-    const pct = (v) => ((v + 20) / 26) * 100; // Normalisera -20 till +6 VU till 0-100%
-    barL.style.height = `${pct(vuL)}%`;
-    barR.style.height = `${pct(vuR)}%`;
+    // Rita horisontella VU-bars på canvas
+    drawHBar_VU(vuCanvas, vuL, vuR);
+    // Uppdatera värde-labels
+    const fmtVU = (v) => (v > 0 ? '+' : '') + v.toFixed(1);
+    vuLVal.textContent = fmtVU(vuL);
+    vuRVal.textContent = fmtVU(vuR);
   }
 
   // ------- XY + Correlation -------
@@ -1357,6 +1371,103 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
+  }
+
+  // ------- VU Nordic Scale (horisontell canvas) -------
+  // Nordic VU: -20 VU till +6 VU (26 VU span), 0 VU = -18 dBFS
+  const vuMarksH = [-20, -9, -6, -3, 0, 3, 6];
+  function layoutVUScale(el){
+    el.innerHTML='';
+    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin; // 26
+
+    vuMarksH.forEach(m=>{
+      const x = ((m - vuMin) / vuSpan) * 100;
+      const t=document.createElement('div');
+      t.style.position='absolute';
+      t.style.left=`calc(${x}% - 0.5px)`;
+      t.style.top='25%';
+      t.style.height='50%';
+      t.style.width='1px';
+      t.style.background='#2a3642';
+      el.appendChild(t);
+      const lab=document.createElement('div');
+      lab.textContent = (m > 0 ? '+' : '') + m + ' VU';
+      lab.style.position='absolute';
+      lab.style.left=`calc(${x}% - 24px)`;
+      lab.style.top='6px';
+      lab.style.width='48px';
+      lab.style.textAlign='center';
+      lab.style.fontSize='10px';
+      lab.style.color='#88a3bf';
+      el.appendChild(lab);
+    });
+
+    // TEST 0 VU = -18 dBFS (cyan referenslinje)
+    const xRef = ((0 - vuMin) / vuSpan) * 100;
+    const ref=document.createElement('div');
+    ref.style.position='absolute';
+    ref.style.left=`calc(${xRef}% - 1px)`;
+    ref.style.top='25%';
+    ref.style.height='50%';
+    ref.style.width='2px';
+    ref.style.background=getCss('--cyan');
+    ref.style.opacity='0.95';
+    el.appendChild(ref);
+
+    const tag=document.createElement('div');
+    tag.innerHTML='<div>TEST</div><div>0 VU</div><div>-18 dBFS</div>';
+    tag.style.position='absolute';
+    tag.style.left=`calc(${xRef}% - 28px)`;
+    tag.style.bottom='4px';
+    tag.style.width='56px';
+    tag.style.textAlign='center';
+    tag.style.fontSize='9px';
+    tag.style.color=getCss('--cyan');
+    tag.style.fontWeight='bold';
+    tag.style.lineHeight='1.15';
+    el.appendChild(tag);
+  }
+
+  function drawHBar_VU(canvas, vuL, vuR){
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.height);
+    if(canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+    const ctx = canvas.getContext('2d');
+
+    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin;
+    function xFromVU(vu){
+      const c = Math.max(vuMin, Math.min(vuMax, vu));
+      return Math.round((c - vuMin) / vuSpan * w);
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0e151a';
+    ctx.fillRect(0, 0, w, h);
+
+    const step = 1;
+
+    function drawChannel(yTop, val){
+      for(let v = vuMin; v < vuMax; v += step){
+        const x0 = xFromVU(v), x1 = xFromVU(v + step);
+        ctx.globalAlpha = 0.14;
+        ctx.fillStyle = getCss('--warn');
+        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
+      }
+      const tEnd = Math.max(vuMin, Math.min(vuMax, val));
+      for(let v = vuMin; v < tEnd; v += step){
+        const x0 = xFromVU(v), x1 = xFromVU(Math.min(v + step, tEnd));
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = getCss('--warn');
+        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
+      }
+    }
+
+    drawChannel(h * 0.35, vuL);
+    drawChannel(h * 0.55, vuR);
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#2a3642';
+    ctx.fillRect(w - 2, 0, 2, h);
   }
 
   function drawHBar_DBFS(canvas, valueL, valueR){
