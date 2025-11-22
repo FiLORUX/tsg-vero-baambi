@@ -377,7 +377,8 @@
     }
 
     /* Horisontella stapel-metrar */
-    .hMeter{position:relative;height:160px;margin-bottom: var(--meter-gap);}
+    .hMeter{position:relative;height:100%;min-height:80px;margin-bottom: var(--meter-gap);}
+    .hMeter canvas{position:absolute;inset:0;width:100%;height:100%}
     .hScale{position:absolute;inset:0;pointer-events:none}
     .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
 
@@ -1344,7 +1345,8 @@
   // Range: -20 VU till +6 VU (26 VU span), 0 VU = -18 dBFS
   function drawHBar_VU(canvas, vuL, vuR){
     const dpr=window.devicePixelRatio||1;
-    const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
+    const rect = canvas.getBoundingClientRect();
+    const w=Math.floor(rect.width*dpr), h=Math.floor(rect.height*dpr);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
     const ctx = canvas.getContext('2d');
     const vuMin=-20, vuMax=6, vuSpan=vuMax-vuMin; // 26
