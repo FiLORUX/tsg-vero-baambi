@@ -268,6 +268,7 @@
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
 /* XY + Corr (vertikal layout: goniometer ovan, correlation under) */
+/* Båda ska ALLTID vara kvadratiska */
 .xyGrid {
   display: flex;
   flex-direction: column;
@@ -285,39 +286,45 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
+  aspect-ratio: 1;  /* ALLTID kvadratisk */
 }
 
-/* Goniometer: kvadratisk, tar mesta utrymmet */
+/* Goniometer: ALLTID kvadratisk, storlek sätts av JS */
 .xySquare {
-  flex: 3 1 0;
-  aspect-ratio: 1;
-  width: 100%;
-  max-width: 100%;
-  min-height: 160px;
+  flex: 0 0 auto;
+  min-width: 120px;
+  min-height: 120px;
   margin: 0 auto;
 }
 
-/* Correlation: horisontell bar under goniometern */
+/* Correlation: ALLTID kvadratisk, storlek sätts av JS */
 .corrWrap {
-  flex: 1 1 0;
-  width: 100%;
-  min-height: 80px;
-  max-height: 120px;
-  aspect-ratio: auto;
+  flex: 0 0 auto;
+  min-width: 60px;
+  min-height: 60px;
+  margin: 0 auto;
 }
 
 .corrWrap .canvasPad {
   height: 100%;
   width: 100%;
   display: flex;
-  align-items: stretch;
-  justify-content: stretch;
+  align-items: center;
+  justify-content: center;
+}
+
+#xy {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  aspect-ratio: 1;
 }
 
 #corr {
-  height: 100% !important;
   width: 100% !important;
+  height: 100% !important;
   display: block;
+  aspect-ratio: 1;
 }
 
 .xySquare .overlay {
@@ -992,32 +999,39 @@
 
     const moduleH = xyModule.clientHeight;
     const moduleW = xyModule.clientWidth;
-    const corrH = 100; // Fast höjd för correlation
     const gap = 12;
 
-    // Goniometer: kvadratisk, anpassas till tillgängligt utrymme
-    const availableH = moduleH - corrH - gap;
-    const side = Math.max(160, Math.min(availableH, moduleW));
+    // Båda ska vara KVADRATISKA
+    // Goniometer: 70% av tillgängligt utrymme, Correlation: 30%
+    const totalH = moduleH - gap;
+    const gonioRatio = 0.7;
+    const corrRatio = 0.28;
 
-    xyWrap.style.width = side + 'px';
-    xyWrap.style.height = side + 'px';
+    // Goniometer: kvadratisk
+    const gonioMaxH = totalH * gonioRatio;
+    const gonioSide = Math.max(120, Math.min(gonioMaxH, moduleW));
+    xyWrap.style.width = gonioSide + 'px';
+    xyWrap.style.height = gonioSide + 'px';
 
-    const w = Math.floor(side * dpr), h = Math.floor(side * dpr);
+    const w = Math.floor(gonioSide * dpr), h = Math.floor(gonioSide * dpr);
     if (xy.width !== w || xy.height !== h) {
       xy.width = w;
       xy.height = h;
     }
 
-    // Correlation: full bredd, fast höjd
+    // Correlation: KVADRATISK (proportionell till goniometer)
     const corrWrapEl = document.querySelector('.corrWrap');
     if (corrWrapEl) {
-      corrWrapEl.style.height = corrH + 'px';
-      corrWrapEl.style.width = '100%';
-    }
-    const cw = Math.floor(moduleW * dpr), ch = Math.floor(corrH * dpr);
-    if (corr.width !== cw || corr.height !== ch) {
-      corr.width = cw;
-      corr.height = ch;
+      // Korrelationsmätaren ska vara proportionell - ca 35% av goniometerns storlek
+      const corrSide = Math.max(60, Math.floor(gonioSide * 0.35));
+      corrWrapEl.style.width = corrSide + 'px';
+      corrWrapEl.style.height = corrSide + 'px';
+
+      const cw = Math.floor(corrSide * dpr), ch = Math.floor(corrSide * dpr);
+      if (corr.width !== cw || corr.height !== ch) {
+        corr.width = cw;
+        corr.height = ch;
+      }
     }
   }
 
