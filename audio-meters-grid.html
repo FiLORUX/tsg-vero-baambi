@@ -652,7 +652,7 @@
           </div>
         </div>
         <div class="meter" id="tpCard">
-          <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · TEST −15 dBTP</span></header>
+          <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · TEST −18 dBTP</span></header>
           <div class="hMeter">
             <canvas id="tp" height="160"></canvas>
             <div class="hScale" id="tpScale"></div>
@@ -1241,7 +1241,7 @@
     el.appendChild(tag);
   }
 
-  // TRUE PEAK scale in dBTP + TEST -15 dBTP
+  // TRUE PEAK scale in dBTP + TEST -18 dBTP (broadcast alignment)
   function layoutTPScale(el){
     el.innerHTML='';
     const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
@@ -1286,8 +1286,8 @@
       tag.style.padding='0';
       el.appendChild(tag);
     }
-    // TEST -15 dBTP (blue line, same as gray tick marks)
-    const xRef = ((-15+60)/60)*100;
+    // TEST -18 dBTP = -18 dBFS peak (broadcast alignment)
+    const xRef = ((-18+60)/60)*100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xRef}% - 1px)`;
@@ -1299,7 +1299,7 @@
     el.appendChild(ref);
     // TEST label below blue line
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>-18 dBFS</div>';
+    tag.innerHTML='<div>TEST</div><div>-18 dBTP</div>';
     tag.style.position='absolute';
     tag.style.left=`calc(${xRef}% - 32px)`;
     tag.style.bottom='8px';  // Samma spacing som top labels
@@ -1588,8 +1588,10 @@
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
   // ------- Generator -------
-  // Exakt -18.00 dBFS RMS för sinus ⇒ A = √2 * 10^(-18/20) ≈ 0.177827941
-  const SINE_A_FOR_MINUS18 = Math.SQRT2 * Math.pow(10, -18/20);
+  // Broadcast-alignment: −18 dBFS betyder PEAK/quasi-peak nivå (EBU R68)
+  // För sinus: Amplitude = 10^(-18/20) ≈ 0.126 → Peak = -18 dBFS
+  // RMS blir då -21 dBFS (3 dB lägre pga crest factor √2)
+  const SINE_A_FOR_MINUS18_PEAK = Math.pow(10, -18/20); // ≈ 0.126
   let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null; let monitorMuted=false;
 
   async function startGenerator(){
@@ -1597,7 +1599,7 @@
     if(genOsc) return;
 
     genOsc = ac.createOscillator(); genOsc.type='sine'; genOsc.frequency.value=440;
-    genGain = ac.createGain(); genGain.gain.value=SINE_A_FOR_MINUS18; // exakt -18 dBFS RMS
+    genGain = ac.createGain(); genGain.gain.value=SINE_A_FOR_MINUS18_PEAK; // Peak vid -18 dBFS (0 dBu)
     leftGain = ac.createGain(); rightGain = ac.createGain(); leftGain.gain.value=1; rightGain.gain.value=1;
     merger = ac.createChannelMerger(2);
     genOsc.connect(genGain); genGain.connect(leftGain); genGain.connect(rightGain);
