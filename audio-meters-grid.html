@@ -644,7 +644,7 @@
           </div>
         </div>
         <div class="meter" id="dbfsCard">
-          <header><label>RMS (dBFS)</label><span class="badge">TEST −21 RMS = −18 peak (0 dBu)</span></header>
+          <header><label>Digital RMS (dBFS)</label><span class="badge">Average digital level · 0 dBFS = full-scale sine</span></header>
           <div class="hMeter">
             <canvas id="dbfs" height="160"></canvas>
             <div class="hScale" id="dbfsScale"></div>
@@ -652,7 +652,7 @@
           </div>
         </div>
         <div class="meter" id="tpCard">
-          <header><label>True Peak (dBTP)</label><span class="badge">4× oversample · TEST −18 dBTP</span></header>
+          <header><label>True Peak (dBTP)</label><span class="badge">4× oversampling · 0 dBTP = full scale</span></header>
           <div class="hMeter">
             <canvas id="tp" height="160"></canvas>
             <div class="hScale" id="tpScale"></div>
@@ -660,7 +660,7 @@
           </div>
         </div>
         <div class="meter" id="ppmCard">
-          <header><label>Nordic PPM</label><span class="badge">IEC Type I · TEST = 0 dBu = −18 dBFS</span></header>
+          <header><label>Nordic PPM</label><span class="badge">IEC Type I · 0 PPM = 0 dBu (−18 dBFS peak)</span></header>
           <div class="hMeter">
             <canvas id="ppmCanvas" height="160"></canvas>
             <div class="hScale" id="ppmScale"></div>
@@ -1043,8 +1043,8 @@
 
   function connectStereoToMix(node){ const split = ac.createChannelSplitter(2); node.connect(split); split.connect(mixL,0); split.connect(mixR,1); split.connect(kHP_L,0); split.connect(kHP_R,1); return split; }
 
-  // ------- Nordic PPM (IEC 60268-10 Type I) -------
-  // Skala: -36 till +9 dBu, TEST = 0 dBu = -18 dBFS, PML = +9 dBu = -9 dBFS
+  // ------- Nordic PPM – IEC Type I, 0 PPM = 0 dBu (−18 dBFS peak) -------
+  // Skala: -36 till +9 dBu (dBFS: -54 till -9), PML = +9 dBu = -9 dBFS
   // Ballistik: 5 ms attack (quasi-peak), linjär decay 20 dB / 1.7 s
   let ppmHoldL = -60, ppmHoldR = -60, lastTsPPM = performance.now();
   const PPM_ATTACK_MS = 5;          // 5 ms integration (IEC Type I)
@@ -1199,7 +1199,7 @@
     corrVal.textContent = corrHold.toFixed(2);
   }
 
-  // ------- dBFS (RMS) -------
+  // ------- Digital RMS (dBFS) – Average digital level, 0 dBFS = full-scale sine -------
   const dbfsMarks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
   function layoutDBFSScale(el){
     el.innerHTML='';
@@ -1241,7 +1241,7 @@
     el.appendChild(tag);
   }
 
-  // TRUE PEAK scale in dBTP + TEST -18 dBTP (broadcast alignment)
+  // ------- True Peak (dBTP) – 4× oversampling, 0 dBTP = full scale -------
   function layoutTPScale(el){
     el.innerHTML='';
     const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
@@ -1405,7 +1405,7 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBFS fence
   }
 
-  // TRUE PEAK – diode style
+  // True Peak (dBTP) – diode style rendering
   function drawDiodeBar_TP(canvas, valueL, valueR){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
@@ -1425,9 +1425,9 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBTP fence (visual)
   }
 
-  // Nordic PPM – horisontell canvas
+  // Nordic PPM – horisontell canvas rendering
   // Range: -54 dBFS till -9 dBFS (45 dB span) = -36 dBu till +9 dBu
-  // TEST = 0 dBu = -18 dBFS, PML = +9 dBu = -9 dBFS
+  // 0 PPM = 0 dBu = -18 dBFS peak, PML = +9 dBu = -9 dBFS
   function drawHBar_PPM(canvas, dBfsL, dBfsR){
     const dpr=window.devicePixelRatio||1;
     const rect = canvas.getBoundingClientRect();
