@@ -376,65 +376,6 @@
       box-sizing: border-box;
     }
 
-    /* VU (Nordic) */
-    .vu{
-      position:relative;
-      height:100%;
-      background:#0c0f12;
-      border:1px solid var(--outline);
-      border-radius:12px;
-      overflow:hidden;
-      display:flex;
-      flex-direction:column;
-    }
-    .vu-scale-container {
-      position:relative;
-      flex:1;
-      margin:8px;
-      min-height:0;
-    }
-    .bar{
-      position:absolute;
-      bottom:0;
-      width:16%;
-      left:24%;
-      height:0;
-      opacity:.95;
-      border-radius:6px;
-      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
-    }
-    .bar.r{
-      left:auto;
-      right:24%;
-      background:repeating-linear-gradient(to top, var(--warn) 0 8px, transparent 8px 12px)
-    }
-    .vu-scale-container::before{
-      content:"";
-      position:absolute;
-      left:24%;
-      width:16%;
-      top:0;
-      bottom:0;
-      border-radius:8px;
-      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
-    }
-    .vu-scale-container::after{
-      content:"";
-      position:absolute;
-      right:24%;
-      width:16%;
-      top:0;
-      bottom:0;
-      border-radius:8px;
-      background:repeating-linear-gradient(to top, rgba(109,160,190,.18) 0 8px, transparent 8px 12px)
-    }
-    .ticks{position:absolute;inset:0;pointer-events:none}
-    .tick{position:absolute;left:0;right:0;height:1px;background:#202831;opacity:.9}
-    .tick::after{content:attr(data-lab);position:absolute;right:6px;top:-7px;font-size:10px;color:#88a3bf}
-    .tick::before{content:attr(data-lab);position:absolute;left:6px;top:-7px;font-size:10px;color:#88a3bf}
-    .testline{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.95;pointer-events:none}
-    .testlabel{position:absolute;font-size:10px;color:var(--cyan);pointer-events:none;width:100%;text-align:center}
-
     /* Horisontella stapel-metrar */
     .hMeter{position:relative;height:160px;margin-bottom: var(--meter-gap);}
     .hScale{position:absolute;inset:0;pointer-events:none}
@@ -723,18 +664,6 @@
             <canvas id="vuCanvas" height="160"></canvas>
             <div class="hScale" id="vuScale"></div>
             <span class="hLabel" id="vuLabel">L: <b id="vuLVal">—</b> · R: <b id="vuRVal">—</b> VU</span>
-          </div>
-          <!-- Gamla element behålls dolda för bakåtkompatibilitet -->
-          <div style="display:none">
-            <div class="vu">
-              <div class="vu-scale-container">
-                <div class="testlabel" id="vuTestLabel"><div>TEST</div></div>
-                <div class="testline" id="vuTest"></div>
-                <div class="bar l" id="barL"></div>
-                <div class="bar r" id="barR"></div>
-                <div class="ticks" id="ticks"></div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1031,18 +960,10 @@
 
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
-  // VU gamla element (behålls för bakåtkompatibilitet, dolda)
-  const barL = document.getElementById('barL'), barR = document.getElementById('barR');
-  const ticks = document.getElementById('ticks');
-  const vuTest = document.getElementById('vuTest');
-  const vuTestLabel = document.getElementById('vuTestLabel');
-
-  // VU nya canvas-element
   const vuCanvas = document.getElementById('vuCanvas');
-  const vuScaleEl = document.getElementById('vuScale');
+  const vuScale = document.getElementById('vuScale');
   const vuLVal = document.getElementById('vuLVal');
   const vuRVal = document.getElementById('vuRVal');
-
   const ctxState = document.getElementById('ctxState');
   const dbgGen   = document.getElementById('dbgGen');
   const dbgTab   = document.getElementById('dbgTab');
@@ -1121,42 +1042,7 @@
 
   function connectStereoToMix(node){ const split = ac.createChannelSplitter(2); node.connect(split); split.connect(mixL,0); split.connect(mixR,1); split.connect(kHP_L,0); split.connect(kHP_R,1); return split; }
 
-  // ------- VU (300 ms) -------
-  function buildTicks(){
-    ticks.innerHTML='';
-    
-    // Nordic VU skala: -20 VU till +6 VU (26 VU totalt)
-    // -20 VU = -38 dBFS
-    //   0 VU = -18 dBFS (referenspunkt)
-    //  +6 VU = -12 dBFS
-    const vuMarks = [-20,-9,-6,-3,0,3,6];
-    const scale = vuMarks.length - 1;  // Antal steg i skalan
-    
-    // Beräkna position för varje markering, där 0 VU är exakt på -18 dBFS
-    for(const vu of vuMarks){
-      // Normalisera VU till 0-1 skala där 0 VU är på 0.77 (20/26)
-      const normalizedPos = (vu + 20) / 26;  // +20 för att få -20 VU till 0
-      // Invertera för top position (0 är toppen, 1 är botten)
-      const y = (1 - normalizedPos) * 100;
-      
-      const d = document.createElement('div');
-      d.className = 'tick';
-      d.dataset.lab = `${vu>0?"+"+vu:vu} VU`;
-      d.style.top = `${y}%`;
-      ticks.appendChild(d);
-    }
-    
-    // Placera 0 VU (-18 dBFS) referenslinjen exakt
-    const zeroVUPos = (20 / 26);  // 0 VU position som fraktion
-    const y0 = (1 - zeroVUPos) * 100;
-    vuTest.style.top = `${y0}%`;
-    vuTestLabel.style.top = `${y0 - 8}%`;  // Text strax ovanför linjen med mindre marginal
-    vuTestLabel.style.left = '0';  // Nollställ left position
-    vuTestLabel.style.right = '0';  // Sätt right till 0 för centrering
-    vuTestLabel.style.textAlign = 'center';  // Centrera texten
-  }
-  layoutVUScale(vuScaleEl);
-
+  // ------- VU (300 ms) – Nordic Scale: -20 VU till +6 VU, 0 VU = -18 dBFS -------
   let vuRmsL = 0, vuRmsR = 0, lastTsVU = performance.now();
   function updateVU(){
     const now = performance.now(); const dt = Math.max(0.001, (now - lastTsVU)/1000); lastTsVU = now; const tau = 0.3, a = 1 - Math.exp(-dt/tau);
@@ -1166,9 +1052,9 @@
     const dBfsL = 20*Math.log10(vuRmsL + 1e-12); const dBfsR = 20*Math.log10(vuRmsR + 1e-12);
     const vuL = Math.max(-20, Math.min(6, dBfsL - (-18))); // -18 dBFS = 0 VU
     const vuR = Math.max(-20, Math.min(6, dBfsR - (-18)));
-    // Rita horisontella VU-bars på canvas
+    // Rita horisontella bars på canvas
     drawHBar_VU(vuCanvas, vuL, vuR);
-    // Uppdatera värde-labels
+    // Uppdatera labels
     const fmtVU = (v) => (v > 0 ? '+' : '') + v.toFixed(1);
     vuLVal.textContent = fmtVU(vuL);
     vuRVal.textContent = fmtVU(vuR);
@@ -1373,37 +1259,23 @@
     el.appendChild(tag);
   }
 
-  // ------- VU Nordic Scale (horisontell canvas) -------
-  // Nordic VU: -20 VU till +6 VU (26 VU span), 0 VU = -18 dBFS
-  const vuMarksH = [-20, -9, -6, -3, 0, 3, 6];
+  // VU Nordic Scale – horisontell skala: -20 VU till +6 VU
+  const vuMarks = [-20,-9,-6,-3,0,3,6];
   function layoutVUScale(el){
     el.innerHTML='';
-    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin; // 26
-
-    vuMarksH.forEach(m=>{
-      const x = ((m - vuMin) / vuSpan) * 100;
+    const vuMin=-20, vuMax=6, vuSpan=vuMax-vuMin; // 26
+    vuMarks.forEach(m=>{
+      const x = ((m-vuMin)/vuSpan)*100;
       const t=document.createElement('div');
-      t.style.position='absolute';
-      t.style.left=`calc(${x}% - 0.5px)`;
-      t.style.top='25%';
-      t.style.height='50%';
-      t.style.width='1px';
-      t.style.background='#2a3642';
+      t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='1px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
-      lab.textContent = (m > 0 ? '+' : '') + m + ' VU';
-      lab.style.position='absolute';
-      lab.style.left=`calc(${x}% - 24px)`;
-      lab.style.top='6px';
-      lab.style.width='48px';
-      lab.style.textAlign='center';
-      lab.style.fontSize='10px';
-      lab.style.color='#88a3bf';
+      lab.textContent = (m>0?'+':'')+m + ' VU';
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 24px)`; lab.style.top='6px'; lab.style.width='48px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-
-    // TEST 0 VU = -18 dBFS (cyan referenslinje)
-    const xRef = ((0 - vuMin) / vuSpan) * 100;
+    // TEST 0 VU = -18 dBFS (cyan line)
+    const xRef = ((0-vuMin)/vuSpan)*100; // 0 VU position
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xRef}% - 1px)`;
@@ -1413,61 +1285,21 @@
     ref.style.background=getCss('--cyan');
     ref.style.opacity='0.95';
     el.appendChild(ref);
-
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>0 VU</div><div>-18 dBFS</div>';
+    tag.innerHTML='<div>TEST</div><div>0 VU = -18 dBFS</div>';
     tag.style.position='absolute';
-    tag.style.left=`calc(${xRef}% - 28px)`;
-    tag.style.bottom='4px';
-    tag.style.width='56px';
+    tag.style.left=`calc(${xRef}% - 48px)`;
+    tag.style.bottom='8px';
+    tag.style.width='96px';
     tag.style.textAlign='center';
-    tag.style.fontSize='9px';
+    tag.style.fontSize='10px';
     tag.style.color=getCss('--cyan');
     tag.style.fontWeight='bold';
-    tag.style.lineHeight='1.15';
+    tag.style.lineHeight='1.2';
+    tag.style.background='none';
+    tag.style.borderRadius='0';
+    tag.style.padding='0';
     el.appendChild(tag);
-  }
-
-  function drawHBar_VU(canvas, vuL, vuR){
-    const dpr = window.devicePixelRatio || 1;
-    const w = Math.floor(canvas.clientWidth * dpr), h = Math.floor(canvas.height);
-    if(canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
-    const ctx = canvas.getContext('2d');
-
-    const vuMin = -20, vuMax = 6, vuSpan = vuMax - vuMin;
-    function xFromVU(vu){
-      const c = Math.max(vuMin, Math.min(vuMax, vu));
-      return Math.round((c - vuMin) / vuSpan * w);
-    }
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0e151a';
-    ctx.fillRect(0, 0, w, h);
-
-    const step = 1;
-
-    function drawChannel(yTop, val){
-      for(let v = vuMin; v < vuMax; v += step){
-        const x0 = xFromVU(v), x1 = xFromVU(v + step);
-        ctx.globalAlpha = 0.14;
-        ctx.fillStyle = getCss('--warn');
-        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
-      }
-      const tEnd = Math.max(vuMin, Math.min(vuMax, val));
-      for(let v = vuMin; v < tEnd; v += step){
-        const x0 = xFromVU(v), x1 = xFromVU(Math.min(v + step, tEnd));
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = getCss('--warn');
-        ctx.fillRect(x0, yTop, (x1 - x0) - 1, h * 0.12);
-      }
-    }
-
-    drawChannel(h * 0.35, vuL);
-    drawChannel(h * 0.55, vuR);
-
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#2a3642';
-    ctx.fillRect(w - 2, 0, 2, h);
   }
 
   function drawHBar_DBFS(canvas, valueL, valueR){
@@ -1508,6 +1340,29 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBTP fence (visual)
   }
 
+  // VU Nordic Scale – horisontell canvas
+  // Range: -20 VU till +6 VU (26 VU span), 0 VU = -18 dBFS
+  function drawHBar_VU(canvas, vuL, vuR){
+    const dpr=window.devicePixelRatio||1;
+    const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
+    const ctx = canvas.getContext('2d');
+    const vuMin=-20, vuMax=6, vuSpan=vuMax-vuMin; // 26
+    function xFromVU(vu){ const c=Math.max(vuMin,Math.min(vuMax,vu)); return Math.round((c-vuMin)/vuSpan*w) }
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
+    const step=1;
+    function drawChannel(yTop, val){
+      // Bakgrund (dimmat)
+      for(let v=vuMin; v<vuMax; v+=step){ const x0=xFromVU(v), x1=xFromVU(v+step); ctx.globalAlpha=.14; ctx.fillStyle=getCss('--warn'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      // Aktiv bar
+      const tEnd = Math.min(vuMax, val);
+      for(let v=vuMin; v<tEnd; v+=step){ const x0=xFromVU(v), x1=xFromVU(Math.min(v+step,tEnd)); ctx.globalAlpha=.9; ctx.fillStyle=getCss('--warn'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+    }
+    drawChannel(h*0.35, vuL); drawChannel(h*0.55, vuR);
+    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // +6 VU fence
+  }
+
   let rmsHoldL=0, rmsHoldR=0; let lastTsDB=performance.now();
   function drawDBFS(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
@@ -1520,6 +1375,7 @@
     drawHBar_DBFS(dbfs, dBL, dBR);
   }
   layoutDBFSScale(dbfsScale);
+  layoutVUScale(vuScale);
 
   function hermite(p0,p1,p2,p3,t){ const a= (-0.5*p0)+(1.5*p1)+(-1.5*p2)+(0.5*p3); const b=(p0*(-1))+ (2.5*p1)+(-2*p2)+ (0.5*p3); const c=(-0.5*p0)+(0.5*p2); const d=p1; return ((a*t+b)*t+c)*t+d; }
   function truePeakDb(buf){
