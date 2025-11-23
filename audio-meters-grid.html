@@ -361,6 +361,36 @@
   pointer-events: none;
 }
 
+/* Monospace för alla rörliga siffror - inga "hoppande" värden */
+.mono-num, .big, .hLabel b, .overlay b, #r128Time, #corrVal, #monoDevVal {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Mono Deviation meter */
+.monoDevWrap {
+  width: 100%;
+  max-width: 200px;
+  margin: 0 auto;
+  padding: 8px 0;
+}
+.monoDevWrap .canvasPad {
+  height: 32px;
+  width: 100%;
+}
+.monoDevWrap canvas {
+  border-radius: 6px !important;
+}
+.monoDevWrap .overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
 /* Canvas-pad gemensamma regler */
 .canvasPad {
   width: 100%;
@@ -626,12 +656,12 @@
             <div class="r128-subpanel">
               <header><label>Loudness (EBU R128)</label><span class="badge">M/S/I + LRA + TP</span></header>
               <div class="r128">
-                <div class="row"><small>M</small><span class="big" id="lufsM">—</span></div>
-                <div class="row"><small>S</small><span class="big" id="lufsS">—</span></div>
-                <div class="row"><small>I</small><span class="big" id="lufsI">—</span></div>
-                <div class="row"><small>LRA</small><span class="big" id="lra">—</span></div>
-                <div class="row"><small>TP</small><span class="big" id="r128TpMax">—</span></div>
-                <div class="row"><small>time</small><span class="big" id="r128Time">00:00:00</span></div>
+                <div class="row"><small>M</small><span class="big" id="lufsM">--.- LUFS</span></div>
+                <div class="row"><small>S</small><span class="big" id="lufsS">--.- LUFS</span></div>
+                <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
+                <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
+                <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
+                <div class="row"><small>time</small><span class="big" id="r128Time">--:--:--</span></div>
                 <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
               </div>
             </div>
@@ -642,7 +672,7 @@
           <div class="hMeter">
             <canvas id="dbfs" height="160"></canvas>
             <div class="hScale" id="dbfsScale"></div>
-            <span class="hLabel" id="dbfsLabel">L: <b id="dbL">—</b> · R: <b id="dbR">—</b> dBFS</span>
+            <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
           </div>
         </div>
         <div class="meter" id="tpCard">
@@ -650,7 +680,7 @@
           <div class="hMeter">
             <canvas id="tp" height="160"></canvas>
             <div class="hScale" id="tpScale"></div>
-            <span class="hLabel" id="tpLabel">L: <b id="tpL">—</b> · R: <b id="tpR">—</b> dBTP</span>
+            <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> · R: <b id="tpR">--.-</b> dBTP</span>
           </div>
         </div>
         <div class="meter" id="ppmCard">
@@ -658,7 +688,7 @@
           <div class="hMeter">
             <canvas id="ppmCanvas" height="160"></canvas>
             <div class="hScale" id="ppmScale"></div>
-            <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">—</b> · R: <b id="ppmRVal">—</b> dB</span>
+            <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">--.-</b> · R: <b id="ppmRVal">--.-</b> PPM</span>
           </div>
         </div>
       </div>
@@ -673,7 +703,11 @@
               </div>
               <div class="corrWrap">
                 <div class="canvasPad"><canvas id="corr"></canvas></div>
-                <div class="overlay">ρ = <b id="corrVal">0.00</b></div>
+                <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
+              </div>
+              <div class="monoDevWrap">
+                <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
               </div>
             </div>
           </div>
@@ -989,24 +1023,53 @@
   const dbToGain = dB => Math.pow(10, dB/20);
   const clamp = (v,min,max)=>Math.max(min,Math.min(max, v));
 
-  // ------- dB Formatters (konsekvent visning) -------
-  // formatDb: Enkel dB-formattering (RMS, TP)
-  function formatDb(value, decimals = 1) {
-    if (!isFinite(value)) return '—';
-    return value.toFixed(decimals);
+  // ------- dB Formatters (fixed-width, monospace-vänliga) -------
+  // Alla formatterare ger konsekvent bredd så siffror inte "hoppar"
+
+  // formatDb: Fixed-width dB (t.ex. "-23.4", " -3.4", "  0.0")
+  // width = totalt antal tecken inklusive tecken och decimal
+  function formatDb(value, decimals = 1, width = 5) {
+    if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
+    const str = value.toFixed(decimals);
+    return str.padStart(width);
   }
-  // formatDbu: Med snap-to-zero för PPM (undviker jitter runt 0 dBu)
-  function formatDbu(value, decimals = 1, snapWindow = 0.25) {
-    if (!isFinite(value)) return '—';
+
+  // formatDbu: Med snap-to-zero för PPM, alltid med +/- tecken
+  function formatDbu(value, decimals = 1, snapWindow = 0.25, width = 5) {
+    if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
     const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
-    const sign = snapped > 0 ? '+' : '';
-    return sign + snapped.toFixed(decimals);
+    const sign = snapped >= 0 ? '+' : '';
+    return (sign + snapped.toFixed(decimals)).padStart(width);
   }
-  // formatDbSigned: Alltid med +/− tecken
-  function formatDbSigned(value, decimals = 1) {
-    if (!isFinite(value)) return '—';
-    const sign = value > 0 ? '+' : '';
-    return sign + value.toFixed(decimals);
+
+  // formatDbSigned: Alltid med +/− tecken, fixed-width
+  function formatDbSigned(value, decimals = 1, width = 5) {
+    if (!isFinite(value) || Math.abs(value) > 99) return '--.-'.padStart(width);
+    const sign = value >= 0 ? '+' : '';
+    return (sign + value.toFixed(decimals)).padStart(width);
+  }
+
+  // formatLufs: För LUFS-värden (t.ex. "-23.4 LUFS")
+  function formatLufs(value, decimals = 1) {
+    if (!isFinite(value) || value < -99) return '--.- LUFS';
+    return value.toFixed(decimals).padStart(5) + ' LUFS';
+  }
+
+  // formatCorr: Korrelation (-1.00 till +1.00)
+  function formatCorr(value) {
+    if (!isFinite(value)) return '+-.--';
+    const sign = value >= 0 ? '+' : '';
+    return sign + value.toFixed(2);
+  }
+
+  // formatTime: Elapsed time (hh:mm:ss) - fixed width
+  function formatTime(ms) {
+    if (!isFinite(ms) || ms < 0) return '--:--:--';
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
   }
 
   // ------- Layout -------
@@ -1255,7 +1318,109 @@
     if (yc < y0) { ctx.fillRect(box.x+2, yc, box.w-4, (y0 - yc)); }
     else { ctx.fillRect(box.x+2, y0, box.w-4, (yc - y0)); }
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(box.x+1, y0, box.w-2, 1);
-    corrVal.textContent = corrHold.toFixed(2);
+    corrVal.textContent = formatCorr(corrHold);
+  }
+
+  // ------- Mono Deviation (L/R Balance) -------
+  const monoDevCanvas = document.getElementById('monoDev');
+  const monoDevCtx = monoDevCanvas.getContext('2d');
+  const monoDevVal = document.getElementById('monoDevVal');
+  let monoDevHold = 0;
+
+  function drawMonoDev() {
+    analyserL.getFloatTimeDomainData(bufL);
+    analyserR.getFloatTimeDomainData(bufR);
+
+    // Beräkna RMS för L och R
+    let sumL = 0, sumR = 0;
+    for (let i = 0; i < bufL.length; i++) {
+      sumL += bufL[i] * bufL[i];
+      sumR += bufR[i] * bufR[i];
+    }
+    const rmsL = Math.sqrt(sumL / bufL.length);
+    const rmsR = Math.sqrt(sumR / bufR.length);
+
+    // L/R balance i dB (positiv = L högre, negativ = R högre)
+    const balanceDb = 20 * Math.log10((rmsL + 1e-12) / (rmsR + 1e-12));
+    const clampedBalance = Math.max(-12, Math.min(12, balanceDb));
+
+    // Smooth
+    const a = 0.15;
+    monoDevHold = isFinite(clampedBalance) ? monoDevHold + a * (clampedBalance - monoDevHold) : 0;
+
+    // Canvas setup med HiDPI
+    const dpr = window.devicePixelRatio || 1;
+    const rect = monoDevCanvas.getBoundingClientRect();
+    const w = Math.floor(rect.width * dpr);
+    const h = Math.floor(rect.height * dpr);
+
+    if (monoDevCanvas.width !== w || monoDevCanvas.height !== h) {
+      monoDevCanvas.width = w;
+      monoDevCanvas.height = h;
+    }
+
+    const ctx = monoDevCtx;
+    ctx.clearRect(0, 0, w, h);
+
+    // Rita bakgrund
+    const pad = Math.round(8 * dpr);
+    const barY = Math.round(h * 0.35);
+    const barH = Math.round(h * 0.3);
+    const barX = pad;
+    const barW = w - 2 * pad;
+
+    ctx.fillStyle = '#0f1214';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.strokeStyle = '#3a4855';
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    // Mittstrecket (0 dB)
+    const centerX = barX + barW / 2;
+    ctx.fillStyle = '#5a6a7a';
+    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+
+    // Tick marks vid ±3, ±6, ±12 dB
+    const ticks = [-12, -6, -3, 3, 6, 12];
+    ctx.fillStyle = '#3a4855';
+    ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    for (const t of ticks) {
+      const xPos = centerX + (t / 12) * (barW / 2);
+      ctx.fillRect(xPos - 0.5, barY - 2 * dpr, 1, barH + 4 * dpr);
+    }
+
+    // Rita balance-bar
+    const devX = centerX + (monoDevHold / 12) * (barW / 2);
+    const devW = Math.abs(devX - centerX);
+
+    // Färg baserat på deviation
+    let col;
+    const absDev = Math.abs(monoDevHold);
+    if (absDev < 1.5) col = getCss('--ok');       // Grön: bra balans
+    else if (absDev < 3) col = getCss('--cyan');  // Cyan: lätt deviation
+    else if (absDev < 6) col = getCss('--warn');  // Amber: märkbar
+    else col = getCss('--hot');                    // Röd: stark obalans
+
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = col;
+    if (monoDevHold >= 0) {
+      ctx.fillRect(centerX, barY + 2, devW, barH - 4);
+    } else {
+      ctx.fillRect(centerX - devW, barY + 2, devW, barH - 4);
+    }
+    ctx.globalAlpha = 1;
+
+    // L och R labels
+    ctx.fillStyle = '#6b7280';
+    ctx.font = `${Math.round(9 * dpr)}px ui-sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText('L', barX + 2 * dpr, barY + barH + 3 * dpr);
+    ctx.textAlign = 'right';
+    ctx.fillText('R', barX + barW - 2 * dpr, barY + barH + 3 * dpr);
+
+    // Uppdatera display
+    monoDevVal.textContent = formatDbSigned(monoDevHold, 1, 5);
   }
 
   // ------- Digital RMS (dBFS) – Average digital level, 0 dBFS = full-scale sine -------
@@ -1629,14 +1794,6 @@
   const r128TimeEl = document.getElementById('r128Time');
   const r128ResetBtn = document.getElementById('r128Reset');
 
-  function formatElapsed(ms) {
-    const totalSec = Math.floor(ms / 1000);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-  }
-
   function resetR128() {
     // Reset integrated loudness
     intEnergy = 0; intCount = 0;
@@ -1649,11 +1806,11 @@
     r128StartTime = performance.now();
     // Reset radar
     radarHistory.length = 0;
-    // Update display
-    lufsM.textContent = '—'; lufsS.textContent = '—'; lufsI.textContent = '—';
-    lraEl.textContent = '—';
-    r128TpMaxEl.textContent = '—';
-    r128TimeEl.textContent = '00:00:00';
+    // Update display (fixed-width placeholders)
+    lufsM.textContent = '--.- LUFS'; lufsS.textContent = '--.- LUFS'; lufsI.textContent = '--.- LUFS';
+    lraEl.textContent = '--.- LU';
+    r128TpMaxEl.textContent = '--.- dBTP';
+    r128TimeEl.textContent = '--:--:--';
   }
   r128ResetBtn.addEventListener('click', resetR128);
 
@@ -1682,10 +1839,10 @@
     if(sLUFS>=gate){ intEnergy+=e; intCount++; }
     const iLUFS=(intCount>0)? lufsFromEnergy(intEnergy/intCount): -Infinity;
     const stVals=stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v>(iLUFS-20));
-    let LRA='—'; if(stVals.length>5){
+    let LRA='--.- LU'; if(stVals.length>5){
       const sorted=[...stVals].sort((a,b)=>a-b);
       const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)];
-      LRA=(p95-p10).toFixed(1)+' LU';
+      LRA = (p95-p10).toFixed(1).padStart(4) + ' LU';
     }
     const now=performance.now(); if(now-lastText>100){
       const a=.35;
@@ -1693,37 +1850,37 @@
       const mDisp=isFinite(prevM)? prevM + a*(mLUFS-prevM): mLUFS; const sDisp=isFinite(prevS)? prevS + a*(sLUFS-prevS): sLUFS; const iDisp=isFinite(prevI)? prevI + a*(iLUFS-prevI): iLUFS;
       lufsM.dataset.v=mDisp; lufsS.dataset.v=sDisp; lufsI.dataset.v=iDisp;
       // Momentary
-      lufsM.textContent=isFinite(mDisp)? mDisp.toFixed(1)+' LUFS':'—';
+      lufsM.textContent = formatLufs(mDisp);
       lufsM.style.color = loudnessColor(mDisp);
       // Short-term
-      lufsS.textContent=isFinite(sDisp)? sDisp.toFixed(1)+' LUFS':'—';
+      lufsS.textContent = formatLufs(sDisp);
       lufsS.style.color = loudnessColor(sDisp);
       // Integrated med offset från target
       if (isFinite(iDisp)) {
         const offsetLU = iDisp - LOUDNESS_TARGET;
-        const offsetStr = (offsetLU >= 0 ? '+' : '') + offsetLU.toFixed(1) + ' LU';
-        lufsI.innerHTML = `${iDisp.toFixed(1)} LUFS <span style="opacity:0.7;font-size:0.85em">(${offsetStr})</span>`;
+        const offsetStr = formatDbSigned(offsetLU, 1, 5) + ' LU';
+        lufsI.innerHTML = `${formatLufs(iDisp)} <span style="opacity:0.7;font-size:0.85em">(${offsetStr})</span>`;
         lufsI.style.color = loudnessColor(iDisp);
       } else {
-        lufsI.textContent = '—';
+        lufsI.textContent = '--.- LUFS';
         lufsI.style.color = '';
       }
-      lraEl.textContent=LRA; lastText=now;
+      lraEl.textContent = LRA; lastText=now;
 
       // --- TPmax: spåra max true peak sedan reset ---
       const currentTpMax = Math.max(tpPeakHoldL, tpPeakHoldR);
       if (currentTpMax > r128TpMax) r128TpMax = currentTpMax;
       if (isFinite(r128TpMax) && r128TpMax > -60) {
-        r128TpMaxEl.textContent = formatDb(r128TpMax) + ' dBTP';
+        r128TpMaxEl.textContent = formatDb(r128TpMax, 1, 5) + ' dBTP';
         r128TpMaxEl.style.color = r128TpMax >= -1.0 ? getCss('--hot') : getCss('--ok');
       } else {
-        r128TpMaxEl.textContent = '—';
+        r128TpMaxEl.textContent = '--.- dBTP';
         r128TpMaxEl.style.color = '';
       }
 
       // --- Elapsed time ---
       const elapsed = now - r128StartTime;
-      r128TimeEl.textContent = formatElapsed(elapsed);
+      r128TimeEl.textContent = formatTime(elapsed);
 
       // --- Update radar buffer with short-term loudness ---
       pushRadarLoudness(sDisp);
@@ -2248,7 +2405,7 @@
       const target = on ? 1 : 0;
       if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
     }
-    layoutXY(); updatePPM(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
+    layoutXY(); updatePPM(); drawXY(); drawCorr(); drawMonoDev(); drawDBFS(); drawTruePeak(); updateR128();
     // Pass momentary LUFS to radar for live value
     let mVal = parseFloat(lufsM && lufsM.dataset.v);
     drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
