@@ -1680,6 +1680,9 @@
   window.resetPPMPeak = function(){ ppmPeakHoldL = -60; ppmPeakHoldR = -60; };
 
   // ------- XY + Correlation -------
+  // Visual gain for vectorscope amplitude (RTW/DK standard: -18 dBFS mono ≈ 65-75% radius)
+  const VECTORSCOPE_GAIN = 3.5;
+
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
     const fade = 0.10; xyCtx.fillStyle = `rgba(13,15,17,${fade})`; xyCtx.fillRect(0,0,w,h);
@@ -1688,10 +1691,10 @@
     xyCtx.globalAlpha=0.85; xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.85)'; const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
     let prevX=null, prevY=null;
     for(let i=0;i<n;i+=2){
-      const L=bufL[i]-mL, R=bufR[i]-mR;
-      // Centrera och skala korrekt för -18 dBFS
-      const x = (L * w/2) + w/2;  // Skala -1..1 till 0..w
-      const y = h - ((R * h/2) + h/2);  // Skala -1..1 till 0..h, invertera för y
+      const L=(bufL[i]-mL) * VECTORSCOPE_GAIN, R=(bufR[i]-mR) * VECTORSCOPE_GAIN;
+      // Centrera och skala: -1..1 till canvas-koordinater
+      const x = (L * w/2) + w/2;
+      const y = h - ((R * h/2) + h/2);
       if(prevX!==null){ xyCtx.globalAlpha=.35; xyCtx.strokeStyle='rgba(105,191,255,.35)'; xyCtx.beginPath(); xyCtx.moveTo(prevX,prevY); xyCtx.lineTo(x,y); xyCtx.stroke(); }
       xyCtx.globalAlpha=.85; xyCtx.fillRect(x,y,px,px); prevX=x; prevY=y;
     }
