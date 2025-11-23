@@ -478,7 +478,6 @@
     .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
 
     .overlay{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36;text-align:left}
-    .gonio-overlay{left:auto;right:10px}
 
     /* R128 – sifferpanel (huvudregler finns ovan) */
     .r128{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
@@ -771,7 +770,7 @@
             <div class="xyGrid">
               <div class="xySquare" id="xyWrap">
                 <div class="canvasPad"><canvas id="xy"></canvas></div>
-                <div class="overlay gonio-overlay">Mono = 45°</div>
+                <div class="overlay">Mono = 45°</div>
               </div>
               <div class="corrWrap">
                 <div class="canvasPad"><canvas id="corr"></canvas></div>
@@ -1849,13 +1848,18 @@
     if (maxPeak >= -1.0) tpOverFlag = true;
 
     // Label med peak-hold max och OVER-indikator
-    const overHtml = tpOverFlag ? '<span style="color:var(--hot);font-weight:bold;margin-left:8px">OVER</span>' : '';
+    // Alltid samma bredd för att undvika "hopp" - använder visibility istället för att ta bort
+    const overVisible = tpOverFlag;
+    const overHtml = `<span style="color:var(--hot);font-weight:bold;margin-left:8px;visibility:${overVisible ? 'visible' : 'hidden'}">OVER</span>`;
     const peakMaxVal = Math.max(tpPeakHoldL, tpPeakHoldR);
-    const peakMaxStr = peakMaxVal > -59 ? `Max: <b>${formatDb(peakMaxVal)}</b> dBTP` : '';
+    // Alltid visa Max med fixed-width placeholder
+    const peakMaxStr = peakMaxVal > -59
+      ? `Max: <b>${formatDb(peakMaxVal)}</b>`
+      : `Max: <b style="opacity:0.3">--.-</b>`;
     // Visa "--.-" om signalen är under botten av skalan (-60 dBTP)
     const tpLStr = (tpSmoothL <= -59) ? '--.-' : formatDb(tpSmoothL);
     const tpRStr = (tpSmoothR <= -59) ? '--.-' : formatDb(tpSmoothR);
-    document.getElementById('tpLabel').innerHTML = `L: <b>${tpLStr}</b> · R: <b>${tpRStr}</b> dBTP · ${peakMaxStr}${overHtml}`;
+    document.getElementById('tpLabel').innerHTML = `L: <b>${tpLStr}</b> · R: <b>${tpRStr}</b> dBTP · ${peakMaxStr} dBTP${overHtml}`;
 
     drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
