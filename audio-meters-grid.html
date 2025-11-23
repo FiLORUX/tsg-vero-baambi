@@ -1715,54 +1715,70 @@
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const cRaw = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
     corrHold = cRaw>corrHold ? corrHold + corrUp*(cRaw-corrHold) : corrHold + corrDn*(cRaw-corrHold);
-    
+
     // Uppdatera canvas-storlek baserat på faktisk elementstorlek
     const dpr = window.devicePixelRatio || 1;
     const rect = corr.getBoundingClientRect();
     const w = Math.floor(rect.width * dpr);
     const h = Math.floor(rect.height * dpr);
-    
+
+    if (w < 10 || h < 10) return; // Skip if too small
+
     if (corr.width !== w || corr.height !== h) {
       corr.width = w;
       corr.height = h;
-      // Sätt CSS-storlek för att matcha element
       corr.style.width = `${rect.width}px`;
       corr.style.height = `${rect.height}px`;
     }
-    
+
     const ctx = corrCtx;
     ctx.clearRect(0,0,w,h);
-    const box = { x: Math.floor(w*0.18), y: Math.floor(16*dpr), w: Math.floor(w*0.64), h: h-(32*dpr) };
-    const yFromV = v => Math.round(box.y + (1 - (v+1)/2) * box.h);
-    ctx.strokeStyle='#3a4855'; ctx.strokeRect(box.x, box.y, box.w, box.h);
-    ctx.fillStyle='#88a3bf'; const ticksV=[-1,-0.5,0,0.5,1];
-    
-    // Anpassa font och streck för HiDPI
-    const tickWidth = Math.ceil(6 * dpr);
-    const tickHeight = Math.ceil(1 * dpr);
-    ctx.font = `${Math.round(10*dpr)}px ui-sans-serif`;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    
-    for(const tv of ticksV){
-      const y = yFromV(tv);
-      // Rita skalstreck med rätt DPR-storlek
-      ctx.fillRect(box.x-tickWidth, y, tickWidth, tickHeight);
-      ctx.fillRect(box.x+box.w, y, tickWidth, tickHeight);
-      // Rita text
-      ctx.fillText(tv.toString(), box.x+box.w+Math.round(8*dpr), y);
-    }
-    const y0 = yFromV(0); const yc = yFromV(corrHold);
+
+    // Horizontal correlation bar layout
+    const padding = 8 * dpr;
+    const barH = Math.max(12 * dpr, h * 0.4);
+    const barY = (h - barH) / 2;
+    const barX = padding;
+    const barW = w - padding * 2;
+
+    // Background track
+    ctx.fillStyle = '#0f1214';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.strokeStyle = '#3a4855';
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    // Center line (0 position)
+    const centerX = barX + barW / 2;
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+
     // RTW-style färgzoner för correlation
-    // Grönt (≥+0.3): stabil stereo, bra mono-kompatibilitet
-    // Amber (−0.3 till +0.3): gränsland, reverb eller smal stereo
-    // Rött (<−0.3): risk för kansellering i mono
     const col = (corrHold < -0.3) ? getCss('--hot') : (corrHold >= 0.3 ? getCss('--ok') : getCss('--warn'));
-    ctx.globalAlpha=.18; ctx.fillStyle='#0f1214'; ctx.fillRect(box.x, box.y, box.w, box.h);
-    ctx.globalAlpha=.85; ctx.fillStyle=col;
-    if (yc < y0) { ctx.fillRect(box.x+2, yc, box.w-4, (y0 - yc)); }
-    else { ctx.fillRect(box.x+2, y0, box.w-4, (yc - y0)); }
-    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(box.x+1, y0, box.w-2, 1);
+
+    // Fill from center based on correlation value
+    // -1 = full left, 0 = center, +1 = full right
+    const fillX = centerX + (corrHold * barW / 2);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.85;
+    if (corrHold >= 0) {
+      ctx.fillRect(centerX, barY + 2, fillX - centerX, barH - 4);
+    } else {
+      ctx.fillRect(fillX, barY + 2, centerX - fillX, barH - 4);
+    }
+    ctx.globalAlpha = 1;
+
+    // Scale labels
+    ctx.font = `${Math.round(9 * dpr)}px ui-sans-serif`;
+    ctx.fillStyle = '#88a3bf';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+
+    // -1, 0, +1 labels
+    const labelY = barY + barH + 10 * dpr;
+    ctx.fillText('-1', barX + 10 * dpr, labelY);
+    ctx.fillText('0', centerX, labelY);
+    ctx.fillText('+1', barX + barW - 10 * dpr, labelY);
+
     corrVal.textContent = formatCorr(corrHold);
   }
 
