@@ -315,11 +315,68 @@
     }
     .stack-left{
       display: grid;
-      grid-template-rows: 1.5fr 1fr 1fr 1fr;  /* Gonio 1.5fr, RMS/TP/VU 1fr vardera */
+      grid-template-rows: 2fr 1fr;  /* Vectorscope 2/3, aktiv mätare 1/3 */
       gap: 12px;
       min-height: 0;
       align-items: stretch;
       height: 100%;
+    }
+
+    /* Meter mode switch */
+    .meter-switcher {
+      background: #111416;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .meter-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--outline);
+      flex-shrink: 0;
+    }
+    .meter-tab {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border: 1px solid var(--outline);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .meter-tab:hover {
+      background: #1a2030;
+      color: var(--ink);
+    }
+    .meter-tab.active {
+      background: var(--btn);
+      color: white;
+      border-color: var(--btn);
+    }
+    .meter-panels {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+    .meter-panel {
+      position: absolute;
+      inset: 0;
+      padding: 8px 12px;
+      display: none;
+    }
+    .meter-panel.active {
+      display: flex;
+      flex-direction: column;
+    }
+    .meter-panel .hMeter {
+      flex: 1;
+      min-height: 0;
     }
     .stack-right{display:grid;grid-template-rows:1fr;gap:12px;min-height:0}
     .meter{
@@ -689,28 +746,35 @@
             </div>
           </div>
         </div>
-        <div class="meter" id="dbfsCard">
-          <header><label>Digital RMS (dBFS)</label><span class="badge">Average digital level · 0 dBFS = full-scale sine</span></header>
-          <div class="hMeter">
-            <canvas id="dbfs" height="160"></canvas>
-            <div class="hScale" id="dbfsScale"></div>
-            <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
+        <!-- Meter switcher: RMS / True Peak / PPM -->
+        <div class="meter-switcher" id="meterSwitcher">
+          <div class="meter-tabs">
+            <button class="meter-tab active" data-meter="rms">RMS</button>
+            <button class="meter-tab" data-meter="tp">True Peak</button>
+            <button class="meter-tab" data-meter="ppm">PPM</button>
           </div>
-        </div>
-        <div class="meter" id="tpCard">
-          <header><label>True Peak (dBTP)</label><span class="badge">4× oversampling · 0 dBTP = full scale</span></header>
-          <div class="hMeter">
-            <canvas id="tp" height="160"></canvas>
-            <div class="hScale" id="tpScale"></div>
-            <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> · R: <b id="tpR">--.-</b> dBTP</span>
-          </div>
-        </div>
-        <div class="meter" id="ppmCard">
-          <header><label>Nordic PPM</label><span class="badge">IEC Type I · 0 PPM = 0 dBu (−18 dBFS peak)</span></header>
-          <div class="hMeter">
-            <canvas id="ppmCanvas" height="160"></canvas>
-            <div class="hScale" id="ppmScale"></div>
-            <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">--.-</b> · R: <b id="ppmRVal">--.-</b> PPM</span>
+          <div class="meter-panels">
+            <div class="meter-panel active" id="dbfsCard" data-meter="rms">
+              <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
+              <div class="hMeter">
+                <canvas id="dbfs" height="160"></canvas>
+                <div class="hScale" id="dbfsScale"></div>
+              </div>
+            </div>
+            <div class="meter-panel" id="tpCard" data-meter="tp">
+              <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> · R: <b id="tpR">--.-</b> dBTP</span>
+              <div class="hMeter">
+                <canvas id="tp" height="160"></canvas>
+                <div class="hScale" id="tpScale"></div>
+              </div>
+            </div>
+            <div class="meter-panel" id="ppmCard" data-meter="ppm">
+              <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">--.-</b> · R: <b id="ppmRVal">--.-</b> PPM</span>
+              <div class="hMeter">
+                <canvas id="ppmCanvas" height="160"></canvas>
+                <div class="hScale" id="ppmScale"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2089,6 +2153,41 @@
   }
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
+  // ------- Meter Mode Switcher -------
+  const METER_MODE_KEY = 'tsg-meter-mode';
+
+  function initMeterSwitcher() {
+    const switcher = document.getElementById('meterSwitcher');
+    if (!switcher) return;
+
+    const tabs = switcher.querySelectorAll('.meter-tab');
+    const panels = switcher.querySelectorAll('.meter-panel');
+
+    // Återställ sparad mode
+    const savedMode = localStorage.getItem(METER_MODE_KEY) || 'rms';
+    setMeterMode(savedMode);
+
+    // Tab click handlers
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const mode = tab.dataset.meter;
+        setMeterMode(mode);
+        localStorage.setItem(METER_MODE_KEY, mode);
+      });
+    });
+
+    function setMeterMode(mode) {
+      // Uppdatera tabs
+      tabs.forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.meter === mode);
+      });
+      // Uppdatera panels
+      panels.forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.meter === mode);
+      });
+    }
+  }
+
   // ------- Sidebar Collapse System -------
   const SIDEBAR_STATE_KEY = 'tsg-sidebar-collapsed';
 
@@ -2577,6 +2676,7 @@
   // Initialize systems
   initSidebarToggle();
   initDragAndDrop();
+  initMeterSwitcher();
   
   // **BEST PRACTICE 2025: Cleanup Functions for Memory Management**
   // Proper cleanup prevents memory leaks in long-running applications
