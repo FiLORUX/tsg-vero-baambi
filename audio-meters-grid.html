@@ -1333,11 +1333,9 @@
 
   // Nordic PPM – RTW-style skala i PPM-steg
   // PPM-skala: -36 till +9 där 0 PPM = 0 dBu = -18 dBFS peak
-  // RTW-operators standard: −∞, −3, 0, +3, +6, +9 PPM
+  // RTW-operators standard axis-labels: −∞, −3, 0, +3, +6, +9 PPM
   const ppmMarks = [
-    {ppm: -36, label: '−36'},
-    {ppm: -18, label: '−18'},
-    {ppm: -9, label: '−9'},
+    {ppm: -36, label: '−∞'},    // Längst till vänster, visar −∞ för "floor"
     {ppm: -3, label: '−3'},
     {ppm: 0, label: '0'},
     {ppm: 3, label: '+3'},
