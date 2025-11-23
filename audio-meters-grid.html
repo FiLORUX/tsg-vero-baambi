@@ -3054,34 +3054,91 @@
     }, 400);
   }
 
-  // ------- Loop -------
-  let startTs=performance.now(); let leftMuteTimer=0;
-  function loop(){
-    // EBU Stereo-ID (ITU-R BR.1385 / EBU R49):
-    // Standard broadcast line-up tone med stereo-identifikation:
-    // - Höger kanal: kontinuerlig ton
-    // - Vänster kanal: 250 ms avbrott ("pulse") var 3:e sekund
-    // Källa: EBU R49, ITU-R BR.1385, Grass Valley 12G test pattern spec
-    if (muteLeft.checked && leftGain){
-      leftMuteTimer += 16.7;
-      const EBU_PERIOD_MS = 3000;  // 3 sekunder mellan pulser
-      const EBU_MUTE_MS = 250;     // 250 ms mute/avbrott på vänster
+  // ------- SEPARATED MEASUREMENT & RENDERING LOOPS -------
+  // Best Practice 2025: Measurement runs on setInterval (not throttled by Chrome)
+  // Rendering runs on requestAnimationFrame (GPU-efficient, pauses when hidden)
+
+  let startTs = performance.now();
+  let leftMuteTimer = 0;
+  let lastMeasureTime = 0;
+  const MEASURE_INTERVAL_MS = 50; // 20 Hz measurement rate (sufficient for 400ms LUFS window)
+
+  /**
+   * Sample analysers into shared buffers
+   * Called by measureLoop to ensure fresh data for DSP calculations
+   */
+  function sampleAnalysers() {
+    analyserL.getFloatTimeDomainData(bufL);
+    analyserR.getFloatTimeDomainData(bufR);
+  }
+
+  /**
+   * Measurement Loop - Runs via setInterval, NOT throttled by Chrome in background tabs
+   * Critical for: LUFS accumulation, radar history, stereo analysis
+   */
+  function measureLoop() {
+    const now = performance.now();
+    const dt = now - lastMeasureTime;
+    lastMeasureTime = now;
+
+    // EBU Stereo-ID pulse timing (needs accurate timing even in background)
+    if (muteLeft.checked && leftGain) {
+      leftMuteTimer += dt;
+      const EBU_PERIOD_MS = 3000;
+      const EBU_MUTE_MS = 250;
       const on = (leftMuteTimer % EBU_PERIOD_MS) >= EBU_MUTE_MS;
       const target = on ? 1 : 0;
-      if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
+      if (leftGain.gain.value !== target) {
+        leftGain.gain.setValueAtTime(target, ac.currentTime);
+      }
     }
-    layoutXY(); layoutLoudness(); updatePPM(); drawXY(); drawCorr(); drawMonoDev(); drawDBFS(); drawTruePeak(); updateR128();
-    // Stereo Analysis: analyze same buffers used by drawCorr
-    StereoAnalysisEngine.analyze(bufL, bufR);
-    updateStereoAnalysis();
-    // Pass momentary LUFS to radar for live value
-    let mVal = parseFloat(lufsM && lufsM.dataset.v);
-    drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
-    uptimeEl.textContent = ((performance.now()-startTs)/1000).toFixed(1);
-    requestAnimationFrame(loop);
+
+    // Sample analysers for measurement
+    sampleAnalysers();
+
+    // Critical measurements that must run continuously:
+    updateR128();  // LUFS accumulation, LRA, radar history (pushRadarLoudness called inside)
+    StereoAnalysisEngine.analyze(bufL, bufR);  // Stereo width, M/S, rotation
   }
-  requestAnimationFrame(loop);
-  
+
+  /**
+   * Render Loop - Runs via requestAnimationFrame, pauses in background (saves GPU)
+   * Handles all visual updates and layout calculations
+   */
+  function renderLoop() {
+    // Layout calculations (only when visible)
+    layoutXY();
+    layoutLoudness();
+
+    // Re-sample for rendering (may have fresher data than measureLoop)
+    sampleAnalysers();
+
+    // Visual meter updates
+    updatePPM();
+    drawXY();
+    drawCorr();
+    drawMonoDev();
+    drawDBFS();
+    drawTruePeak();
+
+    // Stereo analysis visualization (uses cached values from measureLoop)
+    updateStereoAnalysis();
+
+    // Loudness radar visualization
+    const mVal = parseFloat(lufsM && lufsM.dataset.v);
+    drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
+
+    // Uptime display
+    uptimeEl.textContent = ((performance.now() - startTs) / 1000).toFixed(1);
+
+    requestAnimationFrame(renderLoop);
+  }
+
+  // Start both loops
+  lastMeasureTime = performance.now();
+  setInterval(measureLoop, MEASURE_INTERVAL_MS);  // Measurement: 20 Hz, runs in background
+  requestAnimationFrame(renderLoop);               // Rendering: 60 Hz, pauses in background
+
   // **BEST PRACTICE 2025: Modern ResizeObserver Implementation**
   // Replaces multiple observers with debounced, scheduled updates to prevent cascade resize events
   
