@@ -39,7 +39,7 @@
     .loudnessRadarModule .canvasPad {
       flex: 1 1 180px;
       min-width: 100px;
-      max-width: min(50%, 340px);
+      max-width: 50%;
       aspect-ratio: 1/1;
       margin: 0;
       background: none;
@@ -66,7 +66,7 @@
     .r128-subpanel {
       flex: 1 1 180px;
       min-width: 140px;
-      max-width: 320px;
+      max-width: 50%;
       background: rgba(20,22,24,0.92);
       border-radius: 10px;
       border: 1px solid var(--outline);
@@ -164,9 +164,9 @@
                   opacity 0.25s ease-out;
     }
 
-    /* Collapsed state */
+    /* Collapsed state - 0px så mätarna får full bredd */
     .wrap.sidebar-collapsed {
-      grid-template-columns: 48px 1fr;
+      grid-template-columns: 0px 1fr;
     }
 
     .sidebar-collapsed .sidebar-content {
@@ -177,7 +177,7 @@
 
     /* Initial collapsed state (ingen animation vid page load) */
     .sidebar-start-collapsed .wrap {
-      grid-template-columns: 48px 1fr;
+      grid-template-columns: 0px 1fr;
     }
 
     .sidebar-start-collapsed .sidebar-content {
@@ -329,9 +329,10 @@
   flex-direction: column;
   gap: 12px;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   width: 100%;
   height: 100%;
+  padding: 8px 0;
 }
 
 .xySquare, .corrWrap {
@@ -341,22 +342,25 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  aspect-ratio: 1;  /* ALLTID kvadratisk */
+  aspect-ratio: 1;
 }
 
-/* Goniometer: ALLTID kvadratisk, storlek sätts av JS */
+/* Goniometer: tar upp tillgängligt utrymme */
 .xySquare {
-  flex: 0 0 auto;
-  min-width: 120px;
-  min-height: 120px;
+  flex: 1 1 auto;
+  min-width: 100px;
+  min-height: 100px;
+  max-width: 100%;
+  max-height: 60%;
   margin: 0 auto;
 }
 
-/* Correlation: ALLTID kvadratisk, storlek sätts av JS */
+/* Correlation: mindre, under goniometern */
 .corrWrap {
   flex: 0 0 auto;
   min-width: 60px;
   min-height: 60px;
+  max-height: 25%;
   margin: 0 auto;
 }
 
@@ -442,7 +446,7 @@
 /* Mono Deviation meter */
 .monoDevWrap {
   width: 100%;
-  max-width: 200px;
+  max-width: 280px;
   margin: 0 auto;
   padding: 8px 0;
 }
