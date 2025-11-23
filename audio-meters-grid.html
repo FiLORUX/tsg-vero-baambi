@@ -136,13 +136,11 @@
       grid-template-columns: var(--sidebar-width, 360px) 1fr;
       grid-template-rows: 1fr;
       height:calc(100dvh - 56px);
-      /* Ingen transition på grid - omedelbar resize för att undvika "scrambling" */
     }
 
     /*
-     * Sidebar Collapse System - GPU-only animation
-     * Använder ENDAST transform + opacity (GPU-accelererad)
-     * Grid ändras omedelbart (ingen animation) - meters snap till ny storlek
+     * Sidebar Collapse System
+     * Synkroniserad animation för sidebar + grid
      */
     .sidebar-container {
       position: relative;
@@ -154,14 +152,16 @@
       gap: 16px;
       grid-template-rows: 2fr 1fr 1fr;
       height: 100%;
-      /* GPU-only properties */
-      will-change: transform, opacity;
     }
 
     /* Animerade transitions - läggs till efter page load */
+    .sidebar-ready .wrap {
+      transition: grid-template-columns 0.35s ease-out;
+    }
+
     .sidebar-ready .sidebar-content {
-      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                  opacity 0.3s ease;
+      transition: transform 0.35s ease-out,
+                  opacity 0.25s ease-out;
     }
 
     /* Collapsed state */
@@ -285,10 +285,6 @@
       gap:12px;
       min-height:0;
       overflow:hidden;
-      /* Centrera och begränsa maxbredd för responsivitet */
-      max-width: 1400px;
-      margin-left: auto;
-      margin-right: auto;
     }
     .stack-left{
       display: grid;
