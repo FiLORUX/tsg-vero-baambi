@@ -1263,80 +1263,36 @@
   // =====================================================
   // STEREO ANALYSIS ENGINE
   // =====================================================
-  // TransitionGuard - Audio-aware blanking during signal transitions
-  // Prevents visual artifacts in goniometer during EBU pulse edges
+  // TransitionGuard - Blanking during EBU pulse transitions ONLY
+  // Prevents visual artifacts from gain-change transients
   //
-  // ROOT CAUSE: Web Audio processes in 128-sample blocks. When oscillator
-  // starts/stops, the analyser buffer contains a mix of old/new samples
-  // for ~2-4 blocks (5-10ms at 48kHz). This causes L/R to be temporally
-  // misaligned → goniometer shows brief oval instead of line.
-  //
-  // SOLUTION: Time-based blanking that covers the audio pipeline latency.
-  // Uses performance.now() for precision, not frame counting (which varies
-  // with display refresh rate).
+  // NOTE: Automatic edge detection was REMOVED because RMS jitter
+  // caused false triggers → random blanking artifacts.
+  // Now only triggers explicitly from EBU pulse logic.
   // =====================================================
   const TransitionGuard = (function() {
     'use strict';
 
     let blankUntil = 0;
-    // Blanking duration: ~100ms covers analyser buffer (2048 samples @ 48kHz = 42.7ms)
-    // plus rendering pipeline latency and safety margin
-    const BLANK_DURATION_MS = 100;
-
-    // Edge detection: RMS threshold for detecting signal presence
-    const SILENCE_THRESHOLD = 0.001; // ~-60 dBFS
-    let prevHadSignalL = false;
-    let prevHadSignalR = false;
+    // Blanking: 60ms covers analyser buffer flush + 1 render frame
+    const BLANK_DURATION_MS = 60;
 
     return {
-      // Call when signal state changes (EBU pulse on/off)
+      // Call when EBU pulse state changes
       trigger() {
         blankUntil = performance.now() + BLANK_DURATION_MS;
       },
 
-      // Check if rendering should proceed (time-based, not frame-based)
       shouldRender() {
         return performance.now() >= blankUntil;
       },
 
-      // Edge detection: Check if signal just appeared/disappeared
-      // This catches transitions that weren't explicitly triggered
-      checkEdge(bufL, bufR) {
-        if (!bufL || !bufR || bufL.length === 0) return;
-
-        // Quick RMS calculation on subset of samples
-        let sumL = 0, sumR = 0;
-        const step = 16; // Sample every 16th sample for speed
-        const n = Math.min(bufL.length, bufR.length);
-        for (let i = 0; i < n; i += step) {
-          sumL += bufL[i] * bufL[i];
-          sumR += bufR[i] * bufR[i];
-        }
-        const rmsL = Math.sqrt(sumL / (n / step));
-        const rmsR = Math.sqrt(sumR / (n / step));
-
-        const hasSignalL = rmsL > SILENCE_THRESHOLD;
-        const hasSignalR = rmsR > SILENCE_THRESHOLD;
-
-        // Detect L or R signal edge (appearance or disappearance)
-        if (hasSignalL !== prevHadSignalL || hasSignalR !== prevHadSignalR) {
-          this.trigger();
-        }
-
-        prevHadSignalL = hasSignalL;
-        prevHadSignalR = hasSignalR;
-      },
-
-      // Check if currently blanking (for debug/status)
       isBlanking() {
         return performance.now() < blankUntil;
       },
 
-      // Reset blanking (e.g., when stopping generator)
       reset() {
         blankUntil = 0;
-        prevHadSignalL = false;
-        prevHadSignalR = false;
       }
     };
   })();
@@ -3340,10 +3296,6 @@
     // CRITICAL: Sample analysers ONCE per frame into shared buffers
     // L and R are read back-to-back with NO intervening code → sample-synced
     sampleAnalysers();
-
-    // Edge detection: Automatically trigger blanking if L/R signal suddenly changes
-    // This catches transitions not explicitly triggered by EBU pulse logic
-    TransitionGuard.checkEdge(bufL, bufR);
 
     // Visual meter updates - all use shared bufL/bufR, no redundant reads
     updatePPM();
