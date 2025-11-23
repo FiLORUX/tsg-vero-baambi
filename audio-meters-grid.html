@@ -22,24 +22,97 @@
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
-    /* Loudness Radar Panel - Grid layout för korrekt responsivitet */
-    .loudnessRadarModule {
+    /* ===== NY LAYOUT: Goniometer + Correlation (vänster topp) ===== */
+    .gonioModule {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
       height: 100%;
       min-height: 0;
-      align-items: start;
+      align-items: center;
     }
 
-    /* Radar wrapper - behåller aspect-ratio */
-    .loudnessRadarModule .canvasPad {
+    /* Goniometer - kvadratisk, bestämmer storleken */
+    .gonioSquare {
       position: relative;
       width: 100%;
       aspect-ratio: 1;
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+
+    .gonioSquare .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .gonioSquare .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 8px;
+      transform: translateX(-50%);
+      z-index: 2;
+      pointer-events: none;
+      background: rgba(0,0,0,.4);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    /* Correlation-stack - två mätare i höjd, samma bredd som goniometer */
+    .corrStack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+      justify-content: center;
+    }
+
+    .corrStack .corrWrap,
+    .corrStack .monoDevWrap {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .corrStack .corrWrap .canvasPad,
+    .corrStack .monoDevWrap .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .corrStack .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      transform: translateX(-50%);
+      z-index: 2;
+      pointer-events: none;
+      background: rgba(0,0,0,.4);
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 10px;
+    }
+
+    /* ===== NY LAYOUT: Loudness (höger kolumn) ===== */
+    .loudnessModule {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Radar wrapper - kvadratisk överst */
+    .radarWrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      flex-shrink: 0;
     }
 
     #loudnessRadar {
@@ -52,45 +125,24 @@
       display: block;
     }
 
-    .r128-subpanel {
-      background: rgba(20,22,24,0.92);
-      border-radius: 10px;
-      border: 1px solid var(--outline);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-      padding: 10px 12px 8px 12px;
-      font-size: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      justify-content: flex-start;
-      overflow-y: auto;
-      max-height: 100%;
-    }
-    .r128-subpanel header {
-      font-size: 13px;
-      color: var(--muted);
-      margin-bottom: 4px;
-      font-weight: 700;
-      letter-spacing: .2px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* LUFS value overlay i radar center */
-    .loudnessRadarModule .canvasPad .radar-lufs-value {
+    .radar-lufs-value {
       position: absolute;
       left: 0; right: 0; top: 0; bottom: 0;
       display: flex;
       align-items: center;
       justify-content: center;
       pointer-events: none;
-      font-size: clamp(1.2rem, 4vw, 2.5rem);
+      font-size: clamp(1rem, 3vw, 1.8rem);
       font-weight: 800;
       color: var(--cyan);
       text-shadow: 0 2px 12px #000, 0 0 2px #69bfff;
-      letter-spacing: 0.5px;
-      z-index: 2;
+    }
+
+    /* R128 värde-panel under radar */
+    .r128-panel {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
     }
 
     /* R128 värden - responsiva */
@@ -303,82 +355,12 @@
 
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
-/* XY + Corr (vertikal layout: goniometer ovan, correlation under) */
-/* ALLA tre mätare ska ha SAMMA bredd (bestäms av goniometer) */
-.xyGrid {
-  --gonio-size: min(100%, 280px); /* CSS variable för gemensam bredd */
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  height: 100%;
-  padding: 8px 0;
-}
-
-.xySquare, .corrWrap {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  width: var(--gonio-size);
-}
-
-/* Goniometer: kvadratisk */
-.xySquare {
-  aspect-ratio: 1;
-  min-width: 80px;
-  min-height: 80px;
-}
-
-/* Correlation: kvadratisk, mindre höjd */
-.corrWrap {
-  aspect-ratio: 1;
-  max-height: 100px;
-}
-
-.corrWrap .canvasPad {
-  height: 100%;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#xy {
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-  aspect-ratio: 1;
-}
-
-#corr {
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-  aspect-ratio: 1;
-}
-
-.xySquare .overlay {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
-  z-index: 2;
-  pointer-events: none;
-}
-
-.corrWrap .overlay {
-  position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
-  z-index: 2;
-  pointer-events: none;
-}
+    /* Canvas för goniometer och correlation */
+    #xy, #corr, #monoDev {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
 
 /*
  * Tabular Numbers - Framtidssäker implementation
@@ -489,15 +471,6 @@
       margin: 0 0 var(--meter-gap) 0;
       width: 100%;
       background: none;
-    }
-    /* Modul styles */
-    .xyModule {
-      height: 100%;
-      display: flex;
-      align-items: center;
-      background: none;
-      min-height: 0;
-      padding: var(--meter-gap);
     }
     .hMeter {
       position: relative;
@@ -702,25 +675,24 @@
     <h2>Meters</h2>
     <div class="meters" id="meters">
       <div class="stack-left">
-        <div class="meter" id="loudnessRadarCard">
-<header><label>Loudness</label><span class="badge">Radar + EBU R128</span></header>
-          <div class="loudnessRadarModule">
-            <!-- Radar canvas will be implemented here -->
-            <div class="canvasPad">
-              <canvas id="loudnessRadar"></canvas>
-              <div class="radar-lufs-value" id="radarLufsValue">—</div>
+        <!-- NY: Goniometer + Correlation (tidigare vectorscope) -->
+        <div class="meter" id="xyCard">
+          <header><label>Stereo Image</label><span class="badge">Goniometer + Phase Correlation</span></header>
+          <div class="gonioModule">
+            <!-- Goniometer till vänster -->
+            <div class="gonioSquare" id="xyWrap">
+              <div class="canvasPad"><canvas id="xy"></canvas></div>
+              <div class="overlay">Mono = 45°</div>
             </div>
-            <!-- Sub-panel: existing R128 loudness panel -->
-            <div class="r128-subpanel">
-              <header><label>Loudness (EBU R128)</label><span class="badge">M/S/I + LRA + TP</span></header>
-              <div class="r128">
-                <div class="row"><small>M</small><span class="big" id="lufsM">--.- LUFS</span></div>
-                <div class="row"><small>S</small><span class="big" id="lufsS">--.- LUFS</span></div>
-                <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
-                <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
-                <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
-                <div class="row"><small title="Time since start or reset">Elapsed</small><span class="big" id="r128Time">--:--:--</span></div>
-                <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
+            <!-- Två correlation-mätare staplade till höger -->
+            <div class="corrStack">
+              <div class="corrWrap">
+                <div class="canvasPad"><canvas id="corr"></canvas></div>
+                <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
+              </div>
+              <div class="monoDevWrap">
+                <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
               </div>
             </div>
           </div>
@@ -751,21 +723,23 @@
         </div>
       </div>
       <div class="stack-right">
-        <div class="meter" id="xyCard">
-          <header><label>Stereo Vectorscope (Goniometer + Phase Correlation)</label></header>
-          <div class="xyModule">
-            <div class="xyGrid">
-              <div class="xySquare" id="xyWrap">
-                <div class="canvasPad"><canvas id="xy"></canvas></div>
-                <div class="overlay">Mono = 45°</div>
-              </div>
-              <div class="corrWrap">
-                <div class="canvasPad"><canvas id="corr"></canvas></div>
-                <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
-              </div>
-              <div class="monoDevWrap">
-                <div class="canvasPad"><canvas id="monoDev"></canvas></div>
-                <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
+        <!-- NY: Loudness (radar överst, siffror under) -->
+        <div class="meter" id="loudnessCard">
+          <header><label>Loudness</label><span class="badge">Radar + EBU R128</span></header>
+          <div class="loudnessModule">
+            <div class="radarWrap">
+              <canvas id="loudnessRadar"></canvas>
+              <div class="radar-lufs-value" id="radarLufsValue">—</div>
+            </div>
+            <div class="r128-panel">
+              <div class="r128">
+                <div class="row"><small>M</small><span class="big" id="lufsM">--.- LUFS</span></div>
+                <div class="row"><small>S</small><span class="big" id="lufsS">--.- LUFS</span></div>
+                <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
+                <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
+                <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
+                <div class="row"><small title="Time since start or reset">Elapsed</small><span class="big" id="r128Time">--:--:--</span></div>
+                <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
               </div>
             </div>
           </div>
@@ -1142,45 +1116,40 @@
     }
 
     const dpr = window.devicePixelRatio || 1;
-    const xyModule = xyCard.querySelector('.xyModule');
-    if (!xyModule) return;
+    const gonioModule = xyCard.querySelector('.gonioModule');
+    if (!gonioModule) return;
 
-    const moduleH = xyModule.clientHeight;
-    const moduleW = xyModule.clientWidth;
-    const gap = 12;
-
-    // Båda ska vara KVADRATISKA och staplad vertikalt
-    // Layout: goniometer överst (större), korrelation under (mindre men inte för liten)
-    const totalH = moduleH;
-
-    // Goniometer: tar ca 72% av höjden, men är kvadratisk (begränsas av bredd)
-    const gonioTargetH = totalH * 0.72;
-    const gonioSide = Math.max(120, Math.min(gonioTargetH, moduleW));
-    xyWrap.style.width = gonioSide + 'px';
-    xyWrap.style.height = gonioSide + 'px';
-
-    const w = Math.floor(gonioSide * dpr), h = Math.floor(gonioSide * dpr);
-    if (xy.width !== w || xy.height !== h) {
-      xy.width = w;
-      xy.height = h;
+    // Goniometer: CSS aspect-ratio: 1 håller den kvadratisk
+    // Vi behöver bara sätta canvas-storlek baserat på containerns storlek
+    const gonioSquare = xyCard.querySelector('.gonioSquare');
+    if (gonioSquare) {
+      const gonioSize = Math.min(gonioSquare.clientWidth, gonioSquare.clientHeight);
+      const w = Math.floor(gonioSize * dpr), h = Math.floor(gonioSize * dpr);
+      if (xy.width !== w || xy.height !== h) {
+        xy.width = w;
+        xy.height = h;
+      }
     }
 
-    // Correlation: KVADRATISK, använder KVARVARANDE utrymme efter goniometer
-    const corrWrapEl = document.querySelector('.corrWrap');
+    // Correlation-mätare: två stycken staplade i .corrStack
+    const corrWrapEl = xyCard.querySelector('.corrWrap');
     if (corrWrapEl) {
-      // Tillgängligt utrymme under goniometern
-      const remainingH = totalH - gonioSide - gap;
-      // Korrelationsmätaren ska vara kvadratisk: begränsas av min(remaining height, width)
-      // Men ska inte bli för liten - minst 80px, och inte större än 50% av goniometern
-      const corrMaxBySpace = Math.min(remainingH, moduleW * 0.6);
-      const corrSide = Math.max(80, Math.min(corrMaxBySpace, gonioSide * 0.5));
-      corrWrapEl.style.width = corrSide + 'px';
-      corrWrapEl.style.height = corrSide + 'px';
-
-      const cw = Math.floor(corrSide * dpr), ch = Math.floor(corrSide * dpr);
+      const corrSize = Math.min(corrWrapEl.clientWidth, corrWrapEl.clientHeight);
+      const cw = Math.floor(corrSize * dpr), ch = Math.floor(corrSize * dpr);
       if (corr.width !== cw || corr.height !== ch) {
         corr.width = cw;
         corr.height = ch;
+      }
+    }
+
+    // MonoDev-mätare
+    const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
+    if (monoDevWrapEl && monoDev) {
+      const mdSize = Math.min(monoDevWrapEl.clientWidth, monoDevWrapEl.clientHeight);
+      const mdw = Math.floor(mdSize * dpr), mdh = Math.floor(mdSize * dpr);
+      if (monoDev.width !== mdw || monoDev.height !== mdh) {
+        monoDev.width = mdw;
+        monoDev.height = mdh;
       }
     }
   }
