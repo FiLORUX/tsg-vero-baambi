@@ -361,11 +361,43 @@
   pointer-events: none;
 }
 
-/* Monospace för alla rörliga siffror - inga "hoppande" värden */
-.mono-num, .big, .hLabel b, .overlay b, #r128Time, #corrVal, #monoDevVal {
-  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
+/*
+ * Tabular Numbers - Framtidssäker implementation
+ *
+ * font-variant-numeric: tabular-nums gör att ALLA siffror får samma bredd
+ * oavsett vilken font som används (så länge fonten stöder OpenType tnum).
+ *
+ * Detta är den moderna standarden (CSS Fonts Module Level 4) och tillåter
+ * fritt byte av typsnitt utan att siffror "hoppar".
+ *
+ * Fallback: font-feature-settings för äldre browsers.
+ * Monospace-fallback endast om fonten saknar tnum-stöd.
+ */
+.tabular-nums,
+.mono-num,
+.big,
+.hLabel b,
+.overlay b,
+#r128Time,
+#corrVal,
+#monoDevVal,
+#lufsM,
+#lufsS,
+#lufsI,
+#lra,
+#r128TpMax {
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  font-feature-settings: "tnum" 1; /* Fallback för äldre browsers */
+}
+
+/*
+ * För element som KRÄVER absolut fixed-width (t.ex. timers, counters)
+ * kan man lägga till monospace som extra säkerhet:
+ */
+.mono-num-strict {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
 }
 
 /* Mono Deviation meter */
@@ -661,7 +693,7 @@
                 <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
                 <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
                 <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
-                <div class="row"><small>time</small><span class="big" id="r128Time">--:--:--</span></div>
+                <div class="row"><small title="Time since start or reset">Elapsed</small><span class="big" id="r128Time">--:--:--</span></div>
                 <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
               </div>
             </div>
@@ -1867,7 +1899,7 @@
       // Integrated med offset från target
       if (isFinite(iDisp)) {
         const offsetLU = iDisp - LOUDNESS_TARGET;
-        const offsetStr = formatDbSigned(offsetLU, 1, 5) + ' LU';
+        const offsetStr = formatDbSigned(offsetLU, 1, 5);
         lufsI.innerHTML = `${formatLufs(iDisp)} <span style="opacity:0.7;font-size:0.85em">(${offsetStr})</span>`;
         lufsI.style.color = loudnessColor(iDisp);
       } else {
