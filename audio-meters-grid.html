@@ -1729,29 +1729,23 @@
   /**
    * drawXY - Goniometer/Vectorscope rendering
    *
-   * CRITICAL ORDER for artifact-free display:
-   * 1. ALWAYS apply fade/clear first (prevents frozen oval artifacts)
-   * 2. THEN check TransitionGuard before drawing new samples
-   * 3. Use SHARED buffers (bufL/bufR) - no redundant getFloatTimeDomainData
+   * CRITICAL: No DC offset removal - caused frame-to-frame jitter because
+   * buffer doesn't contain exact number of wave cycles (2048 samples at
+   * 400Hz/48kHz = 17.07 cycles). The mean varies → points "wander" → oval.
    *
-   * This ensures: during blanking, old content fades out naturally
-   * instead of freezing the last (potentially corrupt) frame.
+   * Generator signal is AC-coupled (sine centered at 0), so no DC removal needed.
    */
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
 
-    // STEP 1: ALWAYS fade/clear first - prevents frozen artifacts during blanking
+    // STEP 1: ALWAYS fade first - prevents frozen artifacts during blanking
     const fade = 0.10;
     xyCtx.fillStyle = `rgba(13,15,17,${fade})`;
     xyCtx.fillRect(0,0,w,h);
 
     // STEP 2: Only draw NEW samples if TransitionGuard allows
-    // Uses shared bufL/bufR already populated by sampleAnalysers() in renderLoop
-    // NO redundant getFloatTimeDomainData here - prevents L/R desync
     if (TransitionGuard.shouldRender()) {
-      let n=Math.min(bufL.length,bufR.length), mL=0,mR=0;
-      for(let i=0;i<n;i++){ mL+=bufL[i]; mR+=bufR[i]; }
-      mL/=n; mR/=n;
+      const n = Math.min(bufL.length, bufR.length);
 
       xyCtx.globalAlpha=0.85;
       xyCtx.globalCompositeOperation='lighter';
@@ -1760,7 +1754,9 @@
 
       let prevX=null, prevY=null;
       for(let i=0;i<n;i+=2){
-        const L=(bufL[i]-mL) * VECTORSCOPE_GAIN, R=(bufR[i]-mR) * VECTORSCOPE_GAIN;
+        // No DC offset removal - signal is already AC-coupled
+        const L = bufL[i] * VECTORSCOPE_GAIN;
+        const R = bufR[i] * VECTORSCOPE_GAIN;
         const x = (L * w/2) + w/2;
         const y = h - ((R * h/2) + h/2);
         if(prevX!==null){
@@ -3272,12 +3268,12 @@
       }
     }
 
-    // Sample analysers for measurement
-    sampleAnalysers();
-
     // Critical measurements that must run continuously:
-    updateR128();  // LUFS accumulation, LRA, radar history (pushRadarLoudness called inside)
-    StereoAnalysisEngine.analyze(bufL, bufR);  // Stereo width, M/S, rotation
+    // NOTE: bufL/bufR are sampled by renderLoop. StereoAnalysisEngine uses
+    // slightly stale data when in background, which is acceptable for slow
+    // statistics like width/M/S/rotation.
+    updateR128();  // Uses separate K-weighted buffers (kBufL/kBufR)
+    StereoAnalysisEngine.analyze(bufL, bufR);  // Uses renderLoop's buffers
   }
 
   /**
