@@ -966,6 +966,26 @@
   const dbToGain = dB => Math.pow(10, dB/20);
   const clamp = (v,min,max)=>Math.max(min,Math.min(max, v));
 
+  // ------- dB Formatters (konsekvent visning) -------
+  // formatDb: Enkel dB-formattering (RMS, TP)
+  function formatDb(value, decimals = 1) {
+    if (!isFinite(value)) return '—';
+    return value.toFixed(decimals);
+  }
+  // formatDbu: Med snap-to-zero för PPM (undviker jitter runt 0 dBu)
+  function formatDbu(value, decimals = 1, snapWindow = 0.25) {
+    if (!isFinite(value)) return '—';
+    const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
+    const sign = snapped > 0 ? '+' : '';
+    return sign + snapped.toFixed(decimals);
+  }
+  // formatDbSigned: Alltid med +/− tecken
+  function formatDbSigned(value, decimals = 1) {
+    if (!isFinite(value)) return '—';
+    const sign = value > 0 ? '+' : '';
+    return sign + value.toFixed(decimals);
+  }
+
   // ------- Layout -------
   function sizeWrap(){ const headerH = document.querySelector('header').offsetHeight; wrap.style.height = `calc(100dvh - ${headerH}px)`; }
   sizeWrap(); window.addEventListener('resize', sizeWrap);
@@ -1122,8 +1142,8 @@
     // Visa i PPM (= dBu), RTW-style: L: +2.0 PPM
     const ppmL = dispL + 18; // dBFS -> PPM/dBu
     const ppmR = dispR + 18;
-    const fmtPPM = (v) => (v > 0 ? '+' : '') + v.toFixed(1) + ' PPM';
-    document.getElementById('ppmLabel').innerHTML = `L: <b>${fmtPPM(ppmL)}</b> · R: <b>${fmtPPM(ppmR)}</b>`;
+    // formatDbu har snap-to-zero för stabil visning vid 0 dBu/PPM
+    document.getElementById('ppmLabel').innerHTML = `L: <b>${formatDbu(ppmL)} PPM</b> · R: <b>${formatDbu(ppmR)} PPM</b>`;
   }
   // Reset-funktion för PPM peak-hold
   window.resetPPMPeak = function(){ ppmPeakHoldL = -60; ppmPeakHoldR = -60; };
@@ -1522,7 +1542,7 @@
     const now=performance.now(); const dt=Math.max(0.001,(now-lastTsDB)/1000); lastTsDB=now; const tau=.3, a=1-Math.exp(-dt/tau);
     rmsHoldL += a*(rmsL - rmsHoldL); rmsHoldR += a*(rmsR - rmsHoldR);
     const dBL = 20*Math.log10(rmsHoldL+1e-12); const dBR = 20*Math.log10(rmsHoldR+1e-12);
-    document.getElementById('dbfsLabel').innerHTML = `L: <b>${dBL.toFixed(1)}</b> · R: <b>${dBR.toFixed(1)}</b> dBFS`;
+    document.getElementById('dbfsLabel').innerHTML = `L: <b>${formatDb(dBL)}</b> · R: <b>${formatDb(dBR)}</b> dBFS`;
     drawHBar_DBFS(dbfs, dBL, dBR);
   }
   layoutDBFSScale(dbfsScale);
@@ -1565,8 +1585,8 @@
     // Label med peak-hold max och OVER-indikator
     const overHtml = tpOverFlag ? '<span style="color:var(--hot);font-weight:bold;margin-left:8px">OVER</span>' : '';
     const peakMaxVal = Math.max(tpPeakHoldL, tpPeakHoldR);
-    const peakMaxStr = peakMaxVal > -60 ? `Max: <b>${peakMaxVal.toFixed(1)}</b> dBTP` : '';
-    document.getElementById('tpLabel').innerHTML = `L: <b>${tpSmoothL.toFixed(1)}</b> · R: <b>${tpSmoothR.toFixed(1)}</b> dBTP · ${peakMaxStr}${overHtml}`;
+    const peakMaxStr = peakMaxVal > -60 ? `Max: <b>${formatDb(peakMaxVal)}</b> dBTP` : '';
+    document.getElementById('tpLabel').innerHTML = `L: <b>${formatDb(tpSmoothL)}</b> · R: <b>${formatDb(tpSmoothR)}</b> dBTP · ${peakMaxStr}${overHtml}`;
 
     drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
