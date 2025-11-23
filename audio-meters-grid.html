@@ -1224,6 +1224,12 @@
   
   function drawLoudnessRadar(momentaryLufs) {
     LoudnessRadar.render(loudnessRadar, loudnessRadarCtx, radarHistory, momentaryLufs, radarMaxSeconds);
+
+    // Update DOM overlay for accessibility and readability
+    const radarLufsValue = document.getElementById('radarLufsValue');
+    if (radarLufsValue) {
+      radarLufsValue.textContent = isFinite(momentaryLufs) ? formatLufs(momentaryLufs) : '—';
+    }
   }
 
   // ------- DOM -------
@@ -1490,15 +1496,16 @@
     // Höger kolumn widgets - CSS flex hanterar layouten
     // Vi behöver bara sätta canvas-storlekar baserat på faktisk storlek
 
-    // L/R Balance (monoDev) canvas
+    // L/R Balance (monoDev) canvas - use monoDevCanvas (defined later in script)
     const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
-    if (monoDevWrapEl && monoDev) {
+    const monoDevEl = document.getElementById('monoDev');
+    if (monoDevWrapEl && monoDevEl) {
       const rect = monoDevWrapEl.getBoundingClientRect();
       const mdw = Math.floor(rect.width * dpr);
       const mdh = Math.floor(rect.height * dpr);
-      if (monoDev.width !== mdw || monoDev.height !== mdh) {
-        monoDev.width = Math.max(10, mdw);
-        monoDev.height = Math.max(10, mdh);
+      if (monoDevEl.width !== mdw || monoDevEl.height !== mdh) {
+        monoDevEl.width = Math.max(10, mdw);
+        monoDevEl.height = Math.max(10, mdh);
       }
     }
 
@@ -2545,18 +2552,31 @@
     try{ sysSrc && sysSrc.disconnect() }catch{} try{ sysTrimNode && sysTrimNode.disconnect() }catch{} try{ sysSplit && sysSplit.disconnect() }catch{} try{ sysMonGain && sysMonGain.disconnect() }catch{}
     sysStream=null; sysSrc=null; sysTrimNode=null; sysSplit=null; sysMonGain=null; sysMonitorMuted=true; btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnTab.disabled=false; btnStop.disabled=true; dbgTab.textContent='no';
   }
+  // Helper: Build monitor status text based on actual state
+  // Defaults: System monitor OFF, Generator monitor ON
+  function updateMonitorStatusDisplay() {
+    const monitorStatus = document.getElementById('monitorStatus');
+    if (!monitorStatus) return;
+
+    // System monitor: OFF is default, ON is active state
+    const sysActive = sysMonGain && !sysMonitorMuted;
+    const sysStatus = sysActive ? '<b>ON</b>' : '<b>OFF</b> (default)';
+
+    // Generator monitor: ON is default, OFF is muted state
+    const genActive = genMonGain && !monitorMuted;
+    const genStatus = genActive ? '<b>ON</b> (default)' : '<b>OFF</b>';
+
+    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
+  }
+
   function toggleSysMonitorMute(){
     if(!sysMonGain) return;
     sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
     sysMonVal.textContent = sysMonGainEl.value;
     if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; }
     else { btnSysMonMute.classList.add('btn-active'); btnSysMonMute.classList.remove('btn-ghost'); btnSysMonMute.textContent='Mute system monitor'; sysMonState.textContent='(on)'; }
-    
-    // Update monitor status display
-    const monitorStatus = document.getElementById('monitorStatus');
-    const genStatus = monitorMuted ? '<b>OFF</b>' : '<b>ON</b>' + (!monitorMuted ? ' (default)' : '');
-    const sysStatus = sysMonitorMuted ? '<b>OFF</b>' + (sysMonitorMuted ? ' (default)' : '') : '<b>ON</b>';
-    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
+
+    updateMonitorStatusDisplay();
   }
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
@@ -2623,12 +2643,8 @@
     monVal.textContent = monGainEl.value;
     if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute generator monitor'; monState.textContent='(muted)'; }
     else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; }
-    
-    // Update monitor status display
-    const monitorStatus = document.getElementById('monitorStatus');
-    const genStatus = monitorMuted ? '<b>OFF</b>' : '<b>ON</b>' + (!monitorMuted ? ' (default)' : '');
-    const sysStatus = sysMonitorMuted ? '<b>OFF</b>' + (sysMonitorMuted ? ' (default)' : '') : '<b>ON</b>';
-    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
+
+    updateMonitorStatusDisplay();
   }
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
