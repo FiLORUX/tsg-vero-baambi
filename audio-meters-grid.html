@@ -23,13 +23,138 @@
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
     /* ===== NY LAYOUT: Goniometer + Correlation (vänster topp) ===== */
+    .stereoContainer {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+    }
     .gonioModule {
       display: flex;
       gap: 12px;
-      height: 100%;
+      flex: 1;
       min-height: 0;
       align-items: center;
       justify-content: center;
+    }
+
+    /* ===== STEREO ANALYSIS STRIP ===== */
+    .stereoAnalysisStrip {
+      display: flex;
+      gap: 8px;
+      height: 72px;
+      flex-shrink: 0;
+      padding: 0 4px;
+    }
+    .stereoWidget {
+      background: rgba(15, 18, 20, 0.8);
+      border: 1px solid var(--outline);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .histogramWidget { flex: 2; }
+    .msWidget { flex: 1; }
+    .rotationWidget { flex: 1; }
+    .widgetHeader {
+      padding: 3px 8px;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--outline);
+      flex-shrink: 0;
+    }
+    .widgetBody {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Histogram */
+    .histogramWidget canvas {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+    }
+    .histogramAxis {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 6px;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+    /* M/S Meter */
+    .msWidget .widgetBody {
+      padding: 4px 6px;
+      gap: 3px;
+      justify-content: center;
+    }
+    .msBar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .msLabel {
+      font-size: 9px;
+      font-weight: 700;
+      width: 12px;
+      color: var(--muted);
+    }
+    .msTrack {
+      flex: 1;
+      height: 10px;
+      background: #0a0c0e;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .msFill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.05s linear;
+    }
+    .msFillM { background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; }
+    .msFillS { background: linear-gradient(90deg, #22d3ee, #67e8f9); width: 0%; }
+    .msValue {
+      font-size: 9px;
+      font-weight: 600;
+      width: 48px;
+      text-align: right;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+    /* Rotation Meter */
+    .rotationWidget canvas {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+    }
+    .rotationAxis {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 8px;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+    .rotationAxis span:nth-child(2) {
+      font-weight: 700;
+    }
+    /* Responsive: stack vertically on narrow screens */
+    @media (max-width: 900px) {
+      .stereoAnalysisStrip {
+        flex-direction: column;
+        height: auto;
+        gap: 6px;
+      }
+      .stereoWidget {
+        height: 52px;
+      }
     }
 
     /* Goniometer - kvadratisk container, JS sätter canvas-storlek */
@@ -732,21 +857,63 @@
         <!-- NY: Goniometer + Correlation (tidigare vectorscope) -->
         <div class="meter" id="xyCard">
           <header><label>Stereo Vectorscope</label><span class="badge">Goniometer + Phase Correlation</span></header>
-          <div class="gonioModule">
-            <!-- Goniometer till vänster -->
-            <div class="gonioSquare" id="xyWrap">
-              <div class="canvasPad"><canvas id="xy"></canvas></div>
-              <div class="overlay">Mono = 45°</div>
-            </div>
-            <!-- Två correlation-mätare staplade till höger -->
-            <div class="corrStack">
-              <div class="corrWrap">
-                <div class="canvasPad"><canvas id="corr"></canvas></div>
-                <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
+          <div class="stereoContainer">
+            <!-- Övre del: Goniometer + Correlation (befintlig) -->
+            <div class="gonioModule">
+              <!-- Goniometer till vänster -->
+              <div class="gonioSquare" id="xyWrap">
+                <div class="canvasPad"><canvas id="xy"></canvas></div>
+                <div class="overlay">Mono = 45°</div>
               </div>
-              <div class="monoDevWrap">
-                <div class="canvasPad"><canvas id="monoDev"></canvas></div>
-                <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
+              <!-- Två correlation-mätare staplade till höger -->
+              <div class="corrStack">
+                <div class="corrWrap">
+                  <div class="canvasPad"><canvas id="corr"></canvas></div>
+                  <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
+                </div>
+                <div class="monoDevWrap">
+                  <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                  <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
+                </div>
+              </div>
+            </div>
+            <!-- Nedre del: Stereo Analysis Strip (ny) -->
+            <div class="stereoAnalysisStrip">
+              <!-- 1) Stereo Spread Histogram (50% bredd) -->
+              <div class="stereoWidget histogramWidget">
+                <div class="widgetHeader"><span>Stereo Width</span></div>
+                <div class="widgetBody">
+                  <canvas id="stereoHistogram"></canvas>
+                  <div class="histogramAxis">
+                    <span>Mono</span><span>Narrow</span><span>Wide</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 2) Mid/Side Meter (25% bredd) -->
+              <div class="stereoWidget msWidget">
+                <div class="widgetHeader"><span>M/S</span></div>
+                <div class="widgetBody">
+                  <div class="msBar">
+                    <span class="msLabel">M</span>
+                    <div class="msTrack"><div class="msFill msFillM" id="msFillM"></div></div>
+                    <span class="msValue" id="msValueM">--.- dB</span>
+                  </div>
+                  <div class="msBar">
+                    <span class="msLabel">S</span>
+                    <div class="msTrack"><div class="msFill msFillS" id="msFillS"></div></div>
+                    <span class="msValue" id="msValueS">--.- dB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 3) Rotation Meter (25% bredd) -->
+              <div class="stereoWidget rotationWidget">
+                <div class="widgetHeader"><span>Rotation</span></div>
+                <div class="widgetBody">
+                  <canvas id="rotationMeter"></canvas>
+                  <div class="rotationAxis">
+                    <span>L</span><span>C</span><span>R</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1064,6 +1231,86 @@
   const xy = document.getElementById('xy'), xyCtx = xy.getContext('2d');
   const corr = document.getElementById('corr'), corrCtx = corr.getContext('2d');
   const corrVal = document.getElementById('corrVal');
+
+  // --- Stereo Analysis Strip (nya widgets) ---
+  const stereoHistogram = document.getElementById('stereoHistogram');
+  const stereoHistogramCtx = stereoHistogram ? stereoHistogram.getContext('2d') : null;
+  const msFillM = document.getElementById('msFillM');
+  const msFillS = document.getElementById('msFillS');
+  const msValueM = document.getElementById('msValueM');
+  const msValueS = document.getElementById('msValueS');
+  const rotationMeter = document.getElementById('rotationMeter');
+  const rotationMeterCtx = rotationMeter ? rotationMeter.getContext('2d') : null;
+
+  // =====================================================
+  // STEREO ANALYSIS ENGINE
+  // Computes: Stereo Width Histogram, M/S Levels, Rotation Angle
+  // =====================================================
+  const StereoAnalysisEngine = (function() {
+    'use strict';
+
+    // Configuration
+    const NUM_BINS = 24;           // Histogram bins (0-100% width)
+    const DECAY = 0.96;            // Exponential decay per update (~30fps → ~3s half-life)
+    const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and rotation
+
+    // State
+    const bins = new Float32Array(NUM_BINS);
+    let midLevel = -60, sideLevel = -60;
+    let rotation = 0;              // -1 to +1 (mapped to angle)
+
+    // Analyze a block of L/R samples
+    function analyze(bufL, bufR) {
+      const n = Math.min(bufL.length, bufR.length);
+      if (n === 0) return;
+
+      let sumM2 = 0, sumS2 = 0;
+      let sumL2 = 0, sumR2 = 0;
+
+      for (let i = 0; i < n; i++) {
+        const L = bufL[i], R = bufR[i];
+        const M = (L + R) * 0.5;
+        const S = (L - R) * 0.5;
+        sumM2 += M * M;
+        sumS2 += S * S;
+        sumL2 += L * L;
+        sumR2 += R * R;
+      }
+
+      const rmsM = Math.sqrt(sumM2 / n);
+      const rmsS = Math.sqrt(sumS2 / n);
+      const rmsL = Math.sqrt(sumL2 / n);
+      const rmsR = Math.sqrt(sumR2 / n);
+
+      // 1) Stereo width: S / (M + S + ε)
+      const eps = 1e-10;
+      const width = rmsS / (rmsM + rmsS + eps);
+      const binIdx = Math.min(NUM_BINS - 1, Math.floor(width * NUM_BINS));
+
+      // Update histogram with decay
+      for (let i = 0; i < NUM_BINS; i++) {
+        bins[i] *= DECAY;
+      }
+      bins[binIdx] += 1.0;
+
+      // 2) M/S levels in dB
+      const newMidDb = rmsM > eps ? 20 * Math.log10(rmsM) : -60;
+      const newSideDb = rmsS > eps ? 20 * Math.log10(rmsS) : -60;
+      midLevel += SMOOTH_ALPHA * (newMidDb - midLevel);
+      sideLevel += SMOOTH_ALPHA * (newSideDb - sideLevel);
+
+      // 3) Rotation: (R - L) / (R + L + ε), smoothed
+      const newRotation = (rmsR - rmsL) / (rmsR + rmsL + eps);
+      rotation += SMOOTH_ALPHA * (newRotation - rotation);
+    }
+
+    function getHistogramBins() { return bins; }
+    function getMidLevel() { return midLevel; }
+    function getSideLevel() { return sideLevel; }
+    function getRotation() { return rotation; }
+
+    return { analyze, getHistogramBins, getMidLevel, getSideLevel, getRotation };
+  })();
 
   const dbfs = document.getElementById('dbfs'), dbfsScale = document.getElementById('dbfsScale');
   const dbL = document.getElementById('dbL'), dbR = document.getElementById('dbR');
@@ -1567,6 +1814,149 @@
 
     // Uppdatera display
     monoDevVal.textContent = formatDbSigned(monoDevHold, 1, 5);
+  }
+
+  // =====================================================
+  // STEREO ANALYSIS WIDGETS - Draw Functions
+  // =====================================================
+
+  // 1) Stereo Spread Histogram
+  function drawStereoHistogram() {
+    if (!stereoHistogramCtx) return;
+    const canvas = stereoHistogram;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+
+    // Resize canvas if needed
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+
+    const ctx = stereoHistogramCtx;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const bins = StereoAnalysisEngine.getHistogramBins();
+    const numBins = bins.length;
+
+    // Find max for normalization
+    let maxVal = 0;
+    for (let i = 0; i < numBins; i++) {
+      if (bins[i] > maxVal) maxVal = bins[i];
+    }
+    if (maxVal < 0.1) maxVal = 1; // Avoid division by zero
+
+    const padding = 4 * dpr;
+    const barW = (canvas.width - padding * 2) / numBins;
+    const maxH = canvas.height - padding * 2;
+
+    // Draw bars
+    for (let i = 0; i < numBins; i++) {
+      const norm = bins[i] / maxVal;
+      const barH = norm * maxH;
+      const x = padding + i * barW;
+      const y = canvas.height - padding - barH;
+
+      // Color gradient: mono=blue, wide=cyan
+      const t = i / (numBins - 1);
+      const r = Math.floor(34 + t * (34 - 34));
+      const g = Math.floor(130 + t * (211 - 130));
+      const b = Math.floor(246 + t * (238 - 246));
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+
+      ctx.fillRect(x + 1, y, barW - 2, barH);
+    }
+
+    // Target zone marker (typical stereo ~0.3-0.5)
+    const targetStart = Math.floor(0.3 * numBins);
+    const targetEnd = Math.floor(0.5 * numBins);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    const x1 = padding + targetStart * barW;
+    const x2 = padding + targetEnd * barW;
+    ctx.beginPath();
+    ctx.moveTo(x1, padding); ctx.lineTo(x1, canvas.height - padding);
+    ctx.moveTo(x2, padding); ctx.lineTo(x2, canvas.height - padding);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 2) Mid/Side Meter (DOM-based, just update values)
+  function updateMSMeter() {
+    if (!msFillM || !msFillS) return;
+
+    const midDb = StereoAnalysisEngine.getMidLevel();
+    const sideDb = StereoAnalysisEngine.getSideLevel();
+
+    // Map dB to percentage (0 = -60dB, 100% = 0dB)
+    const midPct = Math.max(0, Math.min(100, (midDb + 60) / 60 * 100));
+    const sidePct = Math.max(0, Math.min(100, (sideDb + 60) / 60 * 100));
+
+    msFillM.style.width = midPct + '%';
+    msFillS.style.width = sidePct + '%';
+
+    if (msValueM) msValueM.textContent = formatDb(midDb, 1, 6) + ' dB';
+    if (msValueS) msValueS.textContent = formatDb(sideDb, 1, 6) + ' dB';
+  }
+
+  // 3) Rotation Meter
+  function drawRotationMeter() {
+    if (!rotationMeterCtx) return;
+    const canvas = rotationMeter;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+
+    // Resize canvas if needed
+    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+    }
+
+    const ctx = rotationMeterCtx;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const rotation = StereoAnalysisEngine.getRotation(); // -1 to +1
+    const padding = 6 * dpr;
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const trackW = canvas.width - padding * 2;
+    const trackH = 6 * dpr;
+
+    // Draw track
+    ctx.fillStyle = '#1a1f25';
+    ctx.fillRect(padding, centerY - trackH / 2, trackW, trackH);
+
+    // Center tick
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(centerX - 1, centerY - trackH, 2, trackH * 2);
+
+    // Indicator position
+    const indicatorX = centerX + rotation * (trackW / 2 - 4 * dpr);
+
+    // Draw indicator glow
+    const gradient = ctx.createRadialGradient(indicatorX, centerY, 0, indicatorX, centerY, 8 * dpr);
+    gradient.addColorStop(0, 'rgba(34, 211, 238, 0.6)');
+    gradient.addColorStop(1, 'rgba(34, 211, 238, 0)');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(indicatorX, centerY, 8 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw indicator dot
+    ctx.fillStyle = '#22d3ee';
+    ctx.beginPath();
+    ctx.arc(indicatorX, centerY, 4 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Combined update function for all stereo analysis widgets
+  function updateStereoAnalysis() {
+    drawStereoHistogram();
+    updateMSMeter();
+    drawRotationMeter();
   }
 
   // ------- Digital RMS (dBFS) – Average digital level, 0 dBFS = full-scale sine -------
@@ -2626,6 +3016,9 @@
       if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
     }
     layoutXY(); layoutLoudness(); updatePPM(); drawXY(); drawCorr(); drawMonoDev(); drawDBFS(); drawTruePeak(); updateR128();
+    // Stereo Analysis: analyze same buffers used by drawCorr
+    StereoAnalysisEngine.analyze(bufL, bufR);
+    updateStereoAnalysis();
     // Pass momentary LUFS to radar for live value
     let mVal = parseFloat(lufsM && lufsM.dataset.v);
     drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
