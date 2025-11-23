@@ -32,12 +32,9 @@
       justify-content: center;
     }
 
-    /* Goniometer - kvadratisk, höjd-baserad */
+    /* Goniometer - kvadratisk container, JS sätter canvas-storlek */
     .gonioSquare {
       position: relative;
-      height: 100%;
-      aspect-ratio: 1;
-      max-width: 45%;  /* Lämna plats för corrStack */
       flex-shrink: 0;
     }
 
@@ -60,12 +57,11 @@
       font-size: 11px;
     }
 
-    /* Correlation-stack - två mätare i höjd, höjd-baserade */
+    /* Correlation-stack - två mätare i höjd, JS sätter storlekar */
     .corrStack {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      height: 100%;
       align-items: center;
       justify-content: center;
     }
@@ -73,8 +69,6 @@
     .corrStack .corrWrap,
     .corrStack .monoDevWrap {
       position: relative;
-      height: calc(50% - 4px);  /* Halva höjden minus gap */
-      aspect-ratio: 1;
       flex-shrink: 0;
     }
 
@@ -108,13 +102,10 @@
       align-items: center;
     }
 
-    /* Radar wrapper - kvadratisk, höjd-baserad */
+    /* Radar wrapper - JS sätter storlek */
     .radarWrap {
       position: relative;
-      height: 60%;  /* Max 60% av tillgänglig höjd */
-      aspect-ratio: 1;
-      max-width: 100%;
-      flex-shrink: 1;  /* Tillåt krympning om nödvändigt */
+      flex-shrink: 0;
     }
 
     #loudnessRadar {
@@ -143,7 +134,7 @@
     /* R128 värde-panel under radar */
     .r128-panel {
       flex: 1;
-      min-height: 80px;  /* Garantera minst plats för värden */
+      min-height: 0;
       width: 100%;
       overflow-y: auto;
     }
@@ -991,9 +982,11 @@
   const meters = document.getElementById('meters');
   // --- Loudness Radar ---
   const loudnessCard = document.getElementById('loudnessCard');
+  const loudnessModule = loudnessCard.querySelector('.loudnessModule');
   const loudnessRadar = document.getElementById('loudnessRadar');
   const loudnessRadarCtx = loudnessRadar.getContext('2d');
   const radarWrap = loudnessCard.querySelector('.radarWrap');
+  const r128Panel = loudnessCard.querySelector('.r128-panel');
   // --- Stereo Vectorscope ---
   const xyCard = document.getElementById('xyCard');
   const xyWrap = document.getElementById('xyWrap');
@@ -1123,51 +1116,83 @@
     const gonioModule = xyCard.querySelector('.gonioModule');
     if (!gonioModule) return;
 
-    // Goniometer: CSS aspect-ratio: 1 håller den kvadratisk
-    // Vi behöver bara sätta canvas-storlek baserat på containerns storlek
+    const gap = 12; // Gap mellan goniometer och corrStack
+    const corrGap = 8; // Gap mellan correlation-mätare
+
+    // Tillgängligt utrymme
+    const availH = gonioModule.clientHeight;
+    const availW = gonioModule.clientWidth;
+
+    // Goniometer: kvadrat som får plats i höjden, max 60% av bredden
+    const gonioSize = Math.min(availH, availW * 0.6);
+
+    // Correlation: två kvadrater staplade, får dela på samma höjd som goniometer
+    // Varje corr-mätare = (availH - corrGap) / 2
+    const corrSize = Math.floor((availH - corrGap) / 2);
+
+    // Sätt goniometer container och canvas
     const gonioSquare = xyCard.querySelector('.gonioSquare');
     if (gonioSquare) {
-      const gonioSize = Math.min(gonioSquare.clientWidth, gonioSquare.clientHeight);
-      const w = Math.floor(gonioSize * dpr), h = Math.floor(gonioSize * dpr);
-      if (xy.width !== w || xy.height !== h) {
+      gonioSquare.style.width = gonioSize + 'px';
+      gonioSquare.style.height = gonioSize + 'px';
+
+      const w = Math.floor(gonioSize * dpr);
+      if (xy.width !== w || xy.height !== w) {
         xy.width = w;
-        xy.height = h;
+        xy.height = w;
       }
     }
 
-    // Correlation-mätare: två stycken staplade i .corrStack
+    // Sätt correlation containers och canvases
     const corrWrapEl = xyCard.querySelector('.corrWrap');
     if (corrWrapEl) {
-      const corrSize = Math.min(corrWrapEl.clientWidth, corrWrapEl.clientHeight);
-      const cw = Math.floor(corrSize * dpr), ch = Math.floor(corrSize * dpr);
-      if (corr.width !== cw || corr.height !== ch) {
+      corrWrapEl.style.width = corrSize + 'px';
+      corrWrapEl.style.height = corrSize + 'px';
+
+      const cw = Math.floor(corrSize * dpr);
+      if (corr.width !== cw || corr.height !== cw) {
         corr.width = cw;
-        corr.height = ch;
+        corr.height = cw;
       }
     }
 
-    // MonoDev-mätare
     const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
     if (monoDevWrapEl && monoDev) {
-      const mdSize = Math.min(monoDevWrapEl.clientWidth, monoDevWrapEl.clientHeight);
-      const mdw = Math.floor(mdSize * dpr), mdh = Math.floor(mdSize * dpr);
-      if (monoDev.width !== mdw || monoDev.height !== mdh) {
+      monoDevWrapEl.style.width = corrSize + 'px';
+      monoDevWrapEl.style.height = corrSize + 'px';
+
+      const mdw = Math.floor(corrSize * dpr);
+      if (monoDev.width !== mdw || monoDev.height !== mdw) {
         monoDev.width = mdw;
-        monoDev.height = mdh;
+        monoDev.height = mdw;
       }
     }
   }
 
-  // Loudness Radar layout - sätt canvas-storlek för korrekt rendering
+  // Loudness Radar layout - beräkna och sätt storlekar
   function layoutLoudness() {
     if (isDragLayoutFrozen) return;
-    if (!radarWrap || !loudnessRadar) return;
+    if (!loudnessModule || !radarWrap || !loudnessRadar) return;
 
     const dpr = window.devicePixelRatio || 1;
-    // Använd den minsta dimensionen för att säkerställa cirkel
-    const size = Math.min(radarWrap.clientWidth, radarWrap.clientHeight);
-    const canvasSize = Math.floor(size * dpr);
+    const gap = 12;
+    const r128MinHeight = 180; // Minst plats för R128-värden
 
+    // Tillgängligt utrymme
+    const availH = loudnessModule.clientHeight;
+    const availW = loudnessModule.clientWidth;
+
+    // Radar: kvadrat som får plats, men lämnar utrymme för R128
+    // Max höjd = tillgänglig höjd - r128 minsta höjd - gap
+    const maxRadarH = availH - r128MinHeight - gap;
+    // Radar ska vara en cirkel, så begränsa till minsta av bredd och beräknad maxhöjd
+    const radarSize = Math.max(100, Math.min(maxRadarH, availW));
+
+    // Sätt radar container och canvas
+    radarWrap.style.width = radarSize + 'px';
+    radarWrap.style.height = radarSize + 'px';
+
+    const canvasSize = Math.floor(radarSize * dpr);
     if (loudnessRadar.width !== canvasSize || loudnessRadar.height !== canvasSize) {
       loudnessRadar.width = canvasSize;
       loudnessRadar.height = canvasSize;
@@ -2105,6 +2130,7 @@
       // Trigger resize event for responsive canvas elements after animation
       setTimeout(() => {
         scheduleLayoutUpdate(xyCard, layoutXY);
+        scheduleLayoutUpdate(loudnessCard, layoutLoudness);
         window.dispatchEvent(new Event('resize'));
       }, 400);
     });
