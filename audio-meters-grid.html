@@ -138,42 +138,59 @@
       height:calc(100dvh - 56px);
       transition: grid-template-columns 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     }
-    
-    .wrap.sidebar-collapsed {
-      grid-template-columns: 0 1fr;
-      gap: 0;
-      padding: 20px;
-    }
-    
-    .wrap.sidebar-collapsed .visning {
-      margin: 0;
-    }
-    
-    .wrap.sidebar-collapsed .sidebar-container {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 48px;
-      height: 100%;
-      z-index: 50;
-    }
-    
-    /* Sidebar Collapse System */
+
+    /*
+     * Sidebar Collapse System - GPU-only animation
+     * Använder ENDAST transform + opacity (GPU-accelererad)
+     * Ingen grid-template-columns ändring = ingen layout thrash
+     */
     .sidebar-container {
       position: relative;
-      overflow: hidden;
-      transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      overflow: visible;
+      /* GPU-hint för smooth animation */
+      will-change: transform;
     }
-    
+
     .sidebar-content {
       display: grid;
       gap: 16px;
       grid-template-rows: 2fr 1fr 1fr;
       height: 100%;
-      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease;
+      /* GPU-only properties */
+      will-change: transform, opacity;
     }
-    
+
+    /* Animerade transitions - läggs till efter page load */
+    .sidebar-ready .sidebar-container {
+      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    .sidebar-ready .sidebar-content {
+      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  opacity 0.3s ease;
+    }
+
+    .sidebar-ready .wrap {
+      transition: grid-template-columns 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    /* Collapsed state */
+    .wrap.sidebar-collapsed {
+      grid-template-columns: 48px 1fr;
+    }
+
     .sidebar-collapsed .sidebar-content {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Initial collapsed state (ingen animation vid page load) */
+    .sidebar-start-collapsed .wrap {
+      grid-template-columns: 48px 1fr;
+    }
+
+    .sidebar-start-collapsed .sidebar-content {
       transform: translateX(-100%);
       opacity: 0;
       pointer-events: none;
@@ -197,16 +214,29 @@
       box-shadow: 0 4px 16px rgba(0,0,0,.25);
     }
     
-    .sidebar-collapsed .collapse-toggle {
-      left: calc(0px + 20px - 24px);
+    /* Collapsed state för toggle */
+    .sidebar-collapsed .collapse-toggle,
+    .sidebar-start-collapsed .collapse-toggle {
+      left: 24px;
       opacity: 0;
-      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease 0.2s;
+    }
+
+    /* Transition endast när ready */
+    .sidebar-ready .collapse-toggle {
+      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  opacity 0.3s ease 0.2s;
     }
 
     /* Hover-zone: visa toggle när man hovrar vänstra kanten eller själva toggle */
     .sidebar-collapsed .sidebar-container:hover .collapse-toggle,
-    .sidebar-collapsed .collapse-toggle:hover {
+    .sidebar-collapsed .collapse-toggle:hover,
+    .sidebar-start-collapsed .sidebar-container:hover .collapse-toggle,
+    .sidebar-start-collapsed .collapse-toggle:hover {
       opacity: 1;
+    }
+
+    .sidebar-ready .sidebar-collapsed .collapse-toggle:hover,
+    .sidebar-ready .sidebar-collapsed .sidebar-container:hover .collapse-toggle {
       transition-delay: 0s;
     }
     
@@ -221,10 +251,14 @@
       width: 20px;
       height: 20px;
       fill: var(--ink);
+    }
+
+    .sidebar-ready .collapse-toggle svg {
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    
-    .sidebar-collapsed .collapse-toggle svg {
+
+    .sidebar-collapsed .collapse-toggle svg,
+    .sidebar-start-collapsed .collapse-toggle svg {
       transform: rotate(180deg);
     }
     
@@ -557,6 +591,14 @@
         100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
       }
   </style>
+  <!-- Sidebar state BEFORE render - förhindrar "flash" -->
+  <script>
+    (function() {
+      if (localStorage.getItem('tsg-sidebar-collapsed') === 'true') {
+        document.documentElement.classList.add('sidebar-start-collapsed');
+      }
+    })();
+  </script>
 </head>
 <body>
 <header>
@@ -2061,12 +2103,24 @@
     const sidebarToggle = document.getElementById('sidebarToggle');
     const wrap = document.getElementById('wrap');
     const metersSection = document.querySelector('.visning');
+    const html = document.documentElement;
 
-    // Återställ state från localStorage
-    let isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === 'true';
+    // Kolla initial state (satt av inline script i <head>)
+    let isCollapsed = html.classList.contains('sidebar-start-collapsed');
+
+    // Synka wrap class med initial state
     if (isCollapsed) {
       wrap.classList.add('sidebar-collapsed');
     }
+
+    // Aktivera transitions EFTER första renderingen (förhindrar flash)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        html.classList.add('sidebar-ready');
+        // Ta bort initial-klassen nu när wrap har rätt class
+        html.classList.remove('sidebar-start-collapsed');
+      });
+    });
 
     // Function to update toggle button vertical position (center to meters panel)
     function updateToggleVerticalPosition() {
