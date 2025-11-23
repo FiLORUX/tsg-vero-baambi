@@ -1228,8 +1228,11 @@
     // Visa i PPM (= dBu), RTW-style: L: +2.0 PPM
     const ppmL = dispL + 18; // dBFS -> PPM/dBu
     const ppmR = dispR + 18;
-    // formatDbu har snap-to-zero för stabil visning vid 0 dBu/PPM
-    document.getElementById('ppmLabel').innerHTML = `L: <b>${formatDbu(ppmL)} PPM</b> · R: <b>${formatDbu(ppmR)} PPM</b>`;
+    // Visa "--.-" om signalen är vid botten av skalan (ingen meningsfull signal)
+    const ppmFloor = PPM_MIN_DB + 18; // -36 dBu
+    const ppmLStr = (dispL <= PPM_MIN_DB + 1) ? '--.-' : formatDbu(ppmL);
+    const ppmRStr = (dispR <= PPM_MIN_DB + 1) ? '--.-' : formatDbu(ppmR);
+    document.getElementById('ppmLabel').innerHTML = `L: <b>${ppmLStr} PPM</b> · R: <b>${ppmRStr} PPM</b>`;
   }
   // Reset-funktion för PPM peak-hold
   window.resetPPMPeak = function(){ ppmPeakHoldL = -60; ppmPeakHoldR = -60; };
@@ -1730,7 +1733,10 @@
     const now=performance.now(); const dt=Math.max(0.001,(now-lastTsDB)/1000); lastTsDB=now; const tau=.3, a=1-Math.exp(-dt/tau);
     rmsHoldL += a*(rmsL - rmsHoldL); rmsHoldR += a*(rmsR - rmsHoldR);
     const dBL = 20*Math.log10(rmsHoldL+1e-12); const dBR = 20*Math.log10(rmsHoldR+1e-12);
-    document.getElementById('dbfsLabel').innerHTML = `L: <b>${formatDb(dBL)}</b> · R: <b>${formatDb(dBR)}</b> dBFS`;
+    // Visa "--.-" om signalen är under botten av skalan (-60 dBFS)
+    const dbfsLStr = (dBL <= -59) ? '--.-' : formatDb(dBL);
+    const dbfsRStr = (dBR <= -59) ? '--.-' : formatDb(dBR);
+    document.getElementById('dbfsLabel').innerHTML = `L: <b>${dbfsLStr}</b> · R: <b>${dbfsRStr}</b> dBFS`;
     drawHBar_DBFS(dbfs, dBL, dBR);
   }
   layoutDBFSScale(dbfsScale);
@@ -1773,8 +1779,11 @@
     // Label med peak-hold max och OVER-indikator
     const overHtml = tpOverFlag ? '<span style="color:var(--hot);font-weight:bold;margin-left:8px">OVER</span>' : '';
     const peakMaxVal = Math.max(tpPeakHoldL, tpPeakHoldR);
-    const peakMaxStr = peakMaxVal > -60 ? `Max: <b>${formatDb(peakMaxVal)}</b> dBTP` : '';
-    document.getElementById('tpLabel').innerHTML = `L: <b>${formatDb(tpSmoothL)}</b> · R: <b>${formatDb(tpSmoothR)}</b> dBTP · ${peakMaxStr}${overHtml}`;
+    const peakMaxStr = peakMaxVal > -59 ? `Max: <b>${formatDb(peakMaxVal)}</b> dBTP` : '';
+    // Visa "--.-" om signalen är under botten av skalan (-60 dBTP)
+    const tpLStr = (tpSmoothL <= -59) ? '--.-' : formatDb(tpSmoothL);
+    const tpRStr = (tpSmoothR <= -59) ? '--.-' : formatDb(tpSmoothR);
+    document.getElementById('tpLabel').innerHTML = `L: <b>${tpLStr}</b> · R: <b>${tpRStr}</b> dBTP · ${peakMaxStr}${overHtml}`;
 
     drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
