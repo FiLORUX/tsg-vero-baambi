@@ -199,6 +199,15 @@
     
     .sidebar-collapsed .collapse-toggle {
       left: calc(0px + 20px - 24px);
+      opacity: 0;
+      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.3s ease 0.2s;
+    }
+
+    /* Hover-zone: visa toggle när man hovrar vänstra kanten eller själva toggle */
+    .sidebar-collapsed .sidebar-container:hover .collapse-toggle,
+    .sidebar-collapsed .collapse-toggle:hover {
+      opacity: 1;
+      transition-delay: 0s;
     }
     
     .collapse-toggle:hover {
@@ -2046,12 +2055,19 @@
   monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
 
   // ------- Sidebar Collapse System -------
+  const SIDEBAR_STATE_KEY = 'tsg-sidebar-collapsed';
+
   function initSidebarToggle() {
     const sidebarToggle = document.getElementById('sidebarToggle');
     const wrap = document.getElementById('wrap');
     const metersSection = document.querySelector('.visning');
-    let isCollapsed = false;
-    
+
+    // Återställ state från localStorage
+    let isCollapsed = localStorage.getItem(SIDEBAR_STATE_KEY) === 'true';
+    if (isCollapsed) {
+      wrap.classList.add('sidebar-collapsed');
+    }
+
     // Function to update toggle button vertical position (center to meters panel)
     function updateToggleVerticalPosition() {
       if (metersSection) {
@@ -2060,20 +2076,23 @@
         sidebarToggle.style.top = centerY + 'px';
       }
     }
-    
+
     // Update vertical position on load and resize
     updateToggleVerticalPosition();
     window.addEventListener('resize', updateToggleVerticalPosition);
-    
+
     sidebarToggle.addEventListener('click', () => {
       isCollapsed = !isCollapsed;
-      
+
+      // Spara state till localStorage
+      localStorage.setItem(SIDEBAR_STATE_KEY, isCollapsed);
+
       if (isCollapsed) {
         wrap.classList.add('sidebar-collapsed');
       } else {
         wrap.classList.remove('sidebar-collapsed');
       }
-      
+
       // Update toggle vertical position after animation and trigger layout recalculation
       setTimeout(() => {
         updateToggleVerticalPosition();
