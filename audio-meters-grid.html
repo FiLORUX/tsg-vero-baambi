@@ -2725,9 +2725,10 @@
   // RMS blir då -21 dBFS (3 dB lägre pga crest factor √2)
   const SINE_A_FOR_MINUS18_PEAK = Math.pow(10, -18/20); // ≈ 0.126
 
-  // Two-oscillator architecture for sample-exact EBU Stereo-ID
-  // L and R are separate oscillators - no gain-based muting artifacts
-  let genOscL=null, genOscR=null, genGainL=null, genGainR=null, merger=null, genMonGain=null, genSplit=null;
+  // Single-oscillator architecture with gain-based EBU Stereo-ID control
+  // L and R come from SAME oscillator → guaranteed phase sync
+  // TransitionGuard blanking hides gain-switching artifacts
+  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null, genSplit=null;
   let monitorMuted=false;
   let ebuModeActive=false; // Track if EBU Stereo-ID is running
 
@@ -2748,24 +2749,37 @@
     currentGenFreq = freq;
     genBadgeEl.textContent = genPresets[freq] || genPresets['400'];
     // Om generatorn redan kör, uppdatera frekvensen live
-    if (genOscL) genOscL.frequency.value = freq;
-    if (genOscR) genOscR.frequency.value = freq;
+    if (genOsc) genOsc.frequency.value = freq;
   });
 
   async function startGenerator(){
     await ac.resume();
-    if(genOscR) return; // Already running (R is always on when generator active)
+    if(genOsc) return; // Already running
 
-    // Two-oscillator architecture: L and R are independent
-    // This eliminates gain-based muting artifacts for EBU Stereo-ID
-    genGainL = ac.createGain(); genGainL.gain.value = SINE_A_FOR_MINUS18_PEAK;
-    genGainR = ac.createGain(); genGainR.gain.value = SINE_A_FOR_MINUS18_PEAK;
+    // Single oscillator → split to L/R with individual gain control
+    // This guarantees L and R are always phase-aligned
+    genOsc = ac.createOscillator();
+    genOsc.type = 'sine';
+    genOsc.frequency.value = currentGenFreq;
+
+    genGain = ac.createGain();
+    genGain.gain.value = SINE_A_FOR_MINUS18_PEAK;
+
+    // Per-channel gain for EBU Stereo-ID pulse control
+    leftGain = ac.createGain();
+    leftGain.gain.value = 1;
+    rightGain = ac.createGain();
+    rightGain.gain.value = 1;
 
     merger = ac.createChannelMerger(2);
-    genGainL.connect(merger, 0, 0);
-    genGainR.connect(merger, 0, 1);
+    genOsc.connect(genGain);
+    genGain.connect(leftGain);
+    genGain.connect(rightGain);
+    leftGain.connect(merger, 0, 0);
+    rightGain.connect(merger, 0, 1);
 
-    genMonGain = ac.createGain(); genMonGain.gain.value = 0; // monitor muted default
+    genMonGain = ac.createGain();
+    genMonGain.gain.value = 0; // monitor muted default
     merger.connect(genMonGain).connect(ac.destination);
 
     genSplit = ac.createChannelSplitter(2);
@@ -2773,28 +2787,21 @@
     genSplit.connect(mixL, 0); genSplit.connect(mixR, 1);
     genSplit.connect(kHP_L, 0); genSplit.connect(kHP_R, 1);
 
-    // Create and start both oscillators
-    genOscL = ac.createOscillator(); genOscL.type = 'sine'; genOscL.frequency.value = currentGenFreq;
-    genOscR = ac.createOscillator(); genOscR.type = 'sine'; genOscR.frequency.value = currentGenFreq;
-    genOscL.connect(genGainL);
-    genOscR.connect(genGainR);
-    genOscL.start();
-    genOscR.start();
-
+    genOsc.start();
     ebuModeActive = false;
     btnTone.textContent='Stop tone'; dbgGen.textContent='yes';
     btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; monitorMuted = false;
   }
+
   async function stopGenerator(){
-    try { genOscL && genOscL.stop(); } catch {}
-    try { genOscR && genOscR.stop(); } catch {}
-    [genGainL, genGainR, merger, genMonGain, genSplit].forEach(n => {
+    try { genOsc && genOsc.stop(); } catch {}
+    [genGain, leftGain, rightGain, merger, genMonGain, genSplit].forEach(n => {
       try { n && n.disconnect && n.disconnect(); } catch {}
     });
-    genOscL = null; genOscR = null; genGainL = null; genGainR = null;
+    genOsc = null; genGain = null; leftGain = null; rightGain = null;
     merger = null; genMonGain = null; genSplit = null;
     ebuModeActive = false;
-    TransitionGuard.reset(); // Clear blanking state when stopping generator
+    TransitionGuard.reset();
     btnTone.textContent = 'Start/Stop tone'; dbgGen.textContent = 'no';
   }
   function toggleGenMonitorMute(){
@@ -3276,30 +3283,6 @@
   }
 
   /**
-   * EBU Stereo-ID: Start L oscillator (creates new instance)
-   * Oscillators can only be started once, so we create fresh each time
-   */
-  function ebuStartL() {
-    if (genOscL) return; // Already running
-    if (!genGainL) return; // Generator not active
-    genOscL = ac.createOscillator();
-    genOscL.type = 'sine';
-    genOscL.frequency.value = currentGenFreq;
-    genOscL.connect(genGainL);
-    genOscL.start();
-  }
-
-  /**
-   * EBU Stereo-ID: Stop L oscillator
-   */
-  function ebuStopL() {
-    if (!genOscL) return;
-    try { genOscL.stop(); } catch {}
-    try { genOscL.disconnect(); } catch {}
-    genOscL = null;
-  }
-
-  /**
    * Measurement Loop - Runs via setInterval, NOT throttled by Chrome in background tabs
    * Critical for: LUFS accumulation, radar history, stereo analysis
    */
@@ -3308,8 +3291,9 @@
     const dt = now - lastMeasureTime;
     lastMeasureTime = now;
 
-    // EBU Stereo-ID pulse timing - oscillator start/stop (sample-exact, no gain artifacts)
-    if (muteLeft.checked && genGainL) {
+    // EBU Stereo-ID pulse timing - gain-based control with TransitionGuard blanking
+    // Single oscillator ensures L/R phase sync; blanking hides gain-switch artifacts
+    if (muteLeft.checked && leftGain) {
       ebuModeActive = true;
       leftMuteTimer += dt;
       const EBU_PERIOD_MS = 3000;
@@ -3319,18 +3303,16 @@
       // Detect state transition and trigger blanking
       if (shouldBeOn !== ebuPrevState) {
         TransitionGuard.trigger();
-        if (shouldBeOn) {
-          ebuStartL();
-        } else {
-          ebuStopL();
-        }
+        // Use setValueAtTime for immediate gain change (block-aligned)
+        const target = shouldBeOn ? 1 : 0;
+        leftGain.gain.setValueAtTime(target, ac.currentTime);
         ebuPrevState = shouldBeOn;
       }
     } else if (ebuModeActive && !muteLeft.checked) {
-      // EBU mode was just disabled - ensure L is running
+      // EBU mode was just disabled - ensure L is full volume
       ebuModeActive = false;
-      if (!genOscL && genGainL) {
-        ebuStartL();
+      if (leftGain) {
+        leftGain.gain.setValueAtTime(1, ac.currentTime);
       }
     }
 
@@ -3439,7 +3421,7 @@
   visibilityObserver.observe(loudnessCard);
 
   // ------- Bind -------
-  btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOscR) await startGenerator(); else await stopGenerator(); };
+  btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOsc) await startGenerator(); else await stopGenerator(); };
   btnMonMute.onclick = toggleGenMonitorMute; btnSysMonMute.onclick = toggleSysMonitorMute;
 
   // ------- Boot: ingen auto-ton, allt muted default -------
