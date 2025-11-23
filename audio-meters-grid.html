@@ -558,7 +558,7 @@
         <div class="row" style="align-items:center">
           <button id="btnTone">Start/Stop tone</button>
           <label><input type="checkbox" id="muteLeft"> Mute left 0.5 s every 1.5 s</label>
-          <span class="badge">440 Hz · −18 dBFS RMS (0 VU)</span>
+          <span class="badge">440 Hz · −18 dBFS peak (≈ −21 dBFS RMS)</span>
         </div>
         <div class="row" style="margin-top:6px;align-items:center">
           <label>Generator monitor:</label>
@@ -1027,8 +1027,12 @@
   let ppmHoldL = -60, ppmHoldR = -60, lastTsPPM = performance.now();
   const PPM_ATTACK_MS = 5;          // 5 ms integration (IEC Type I)
   const PPM_DECAY_DB_PER_S = 20/1.7; // 20 dB på 1.7 s ≈ 11.76 dB/s (linjär)
-  const PPM_MIN_DB = -54;           // -36 dBu = -54 dBFS
-  const PPM_MAX_DB = -9;            // +9 dBu = -9 dBFS
+  const PPM_MIN_DB = -54;           // -36 PPM = -54 dBFS
+  const PPM_MAX_DB = -9;            // +9 PPM = -9 dBFS
+
+  // Peak-hold för PPM (RTW-style: 10 sekunders hold som default)
+  let ppmPeakHoldL = -60, ppmPeakHoldR = -60, ppmPeakTimeL = 0, ppmPeakTimeR = 0;
+  const PPM_PEAK_HOLD_SEC = 10; // 10 sekunder peak-hold (RTW default)
 
   function quasiPeakDb(buf, sampleRate){
     // Quasi-peak: hitta max amplitude med ~5ms integration
@@ -1083,16 +1087,24 @@
     const dispL = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldL));
     const dispR = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldR));
 
-    // Rita
-    drawHBar_PPM(ppmCanvas, dispL, dispR);
+    // Peak-hold logik (10 sekunder)
+    const nowSec = now / 1000;
+    if (dispL > ppmPeakHoldL) { ppmPeakHoldL = dispL; ppmPeakTimeL = nowSec; }
+    else if (nowSec - ppmPeakTimeL > PPM_PEAK_HOLD_SEC) { ppmPeakHoldL = dispL; ppmPeakTimeL = nowSec; }
+    if (dispR > ppmPeakHoldR) { ppmPeakHoldR = dispR; ppmPeakTimeR = nowSec; }
+    else if (nowSec - ppmPeakTimeR > PPM_PEAK_HOLD_SEC) { ppmPeakHoldR = dispR; ppmPeakTimeR = nowSec; }
 
-    // Visa i dBu (0 dBu = -18 dBFS)
-    const dBuL = dispL + 18; // -18 dBFS → 0 dBu
-    const dBuR = dispR + 18;
-    const fmtdBu = (v) => (v > 0 ? '+' : '') + v.toFixed(0);
-    ppmLVal.textContent = fmtdBu(dBuL);
-    ppmRVal.textContent = fmtdBu(dBuR);
+    // Rita med peak-hold
+    drawHBar_PPM(ppmCanvas, dispL, dispR, ppmPeakHoldL, ppmPeakHoldR);
+
+    // Visa i PPM (= dBu), RTW-style: L: +2.0 PPM
+    const ppmL = dispL + 18; // dBFS -> PPM/dBu
+    const ppmR = dispR + 18;
+    const fmtPPM = (v) => (v > 0 ? '+' : '') + v.toFixed(1) + ' PPM';
+    document.getElementById('ppmLabel').innerHTML = `L: <b>${fmtPPM(ppmL)}</b> · R: <b>${fmtPPM(ppmR)}</b>`;
   }
+  // Reset-funktion för PPM peak-hold
+  window.resetPPMPeak = function(){ ppmPeakHoldL = -60; ppmPeakHoldR = -60; };
 
   // ------- XY + Correlation -------
   function drawXY(){
@@ -1168,7 +1180,11 @@
       ctx.fillText(tv.toString(), box.x+box.w+Math.round(8*dpr), y);
     }
     const y0 = yFromV(0); const yc = yFromV(corrHold);
-    const col = (corrHold<-0.2)?getCss('--hot'):(corrHold>0.9?getCss('--ok'):getCss('--warn'));
+    // RTW-style färgzoner för correlation
+    // Grönt (≥+0.3): stabil stereo, bra mono-kompatibilitet
+    // Amber (−0.3 till +0.3): gränsland, reverb eller smal stereo
+    // Rött (<−0.3): risk för kansellering i mono
+    const col = (corrHold < -0.3) ? getCss('--hot') : (corrHold >= 0.3 ? getCss('--ok') : getCss('--warn'));
     ctx.globalAlpha=.18; ctx.fillStyle='#0f1214'; ctx.fillRect(box.x, box.y, box.w, box.h);
     ctx.globalAlpha=.85; ctx.fillStyle=col;
     if (yc < y0) { ctx.fillRect(box.x+2, yc, box.w-4, (y0 - yc)); }
@@ -1293,26 +1309,36 @@
     el.appendChild(tag);
   }
 
-  // Nordic PPM – horisontell skala: -36 dBu till +9 dBu (dBFS: -54 till -9)
-  // Skalmarkeringar i dBu (traditionell Nordic)
-  const ppmMarks_dBu = [-36, -30, -24, -18, -12, -6, 0, 6, 9]; // dBu
+  // Nordic PPM – RTW-style skala i PPM-steg
+  // PPM-skala: -36 till +9 där 0 PPM = 0 dBu = -18 dBFS peak
+  // RTW-operators standard: −∞, −3, 0, +3, +6, +9 PPM
+  const ppmMarks = [
+    {ppm: -36, label: '−36'},
+    {ppm: -18, label: '−18'},
+    {ppm: -9, label: '−9'},
+    {ppm: -3, label: '−3'},
+    {ppm: 0, label: '0'},
+    {ppm: 3, label: '+3'},
+    {ppm: 6, label: '+6'},
+    {ppm: 9, label: '+9'}
+  ];
   function layoutPPMScale(el){
     el.innerHTML='';
     const dbMin=-54, dbMax=-9, dbSpan=dbMax-dbMin; // 45 dB i dBFS
-    ppmMarks_dBu.forEach(dBu=>{
-      const dBFS = dBu - 18; // Konvertera dBu till dBFS
+    // PPM = dBu, dBFS = dBu - 18
+    ppmMarks.forEach(m=>{
+      const dBFS = m.ppm - 18;
       const x = ((dBFS-dbMin)/dbSpan)*100;
       const t=document.createElement('div');
       t.style.position='absolute'; t.style.left=`calc(${x}% - 0.5px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='1px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
-      // Visa dBu-värde (traditionell Nordic-visning)
-      lab.textContent = (dBu>0?'+':'') + dBu;
+      lab.textContent = m.label;
       lab.style.position='absolute'; lab.style.left=`calc(${x}% - 20px)`; lab.style.top='6px'; lab.style.width='40px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // TEST = 0 dBu = -18 dBFS (cyan linje)
-    const xTest = ((-18-dbMin)/dbSpan)*100; // 0 dBu = -18 dBFS
+    // TEST = 0 PPM = 0 dBu = -18 dBFS (cyan linje)
+    const xTest = ((-18-dbMin)/dbSpan)*100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xTest}% - 1px)`;
@@ -1323,7 +1349,7 @@
     ref.style.opacity='0.95';
     el.appendChild(ref);
     const tag=document.createElement('div');
-    tag.innerHTML='<div>TEST</div><div>0 dBu (0 PPM)</div><div>−18 dBFS peak</div>';
+    tag.innerHTML='<div>TEST</div><div>0 PPM (0 dBu)</div><div>−18 dBFS peak</div>';
     tag.style.position='absolute';
     tag.style.left=`calc(${xTest}% - 44px)`;
     tag.style.bottom='4px';
@@ -1337,8 +1363,8 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
-    // PML = +9 dBu = -9 dBFS (röd markering)
-    const xPML = ((-9-dbMin)/dbSpan)*100; // +9 dBu = -9 dBFS
+    // PML = +9 PPM = +9 dBu = -9 dBFS (röd markering)
+    const xPML = ((-9-dbMin)/dbSpan)*100;
     const pmlLine=document.createElement('div');
     pmlLine.style.position='absolute';
     pmlLine.style.left=`calc(${xPML}% - 1px)`;
@@ -1349,7 +1375,7 @@
     pmlLine.style.opacity='0.95';
     el.appendChild(pmlLine);
     const pmlTag=document.createElement('div');
-    pmlTag.innerHTML='<div>PML</div><div>+9 dBu</div>';
+    pmlTag.innerHTML='<div>PML</div><div>+9 PPM</div>';
     pmlTag.style.position='absolute';
     pmlTag.style.left=`calc(${xPML}% - 32px)`;
     pmlTag.style.bottom='8px';
@@ -1383,30 +1409,43 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBFS fence
   }
 
-  // True Peak (dBTP) – diode style rendering
-  function drawDiodeBar_TP(canvas, valueL, valueR){
+  // True Peak (dBTP) – diode style rendering med peak-hold markör
+  function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h); ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=1; const xFromDb = db => Math.round((Math.max(-60,Math.min(0,db))+60)/60*w);
     function segColor(db){ if(db>=-1) return getCss('--hot'); if(db>=-3) return getCss('--caution'); if(db>=-6) return getCss('--warn'); return getCss('--ok'); }
-    function drawChannel(yTop, val){
+    function drawChannel(yTop, val, peakHold){
+      // Bakgrund (dimmat)
       for(let d=-60; d<0; d+=step){ const x0=xFromDb(d), x1=xFromDb(d+step); const col=segColor(d+step/2); ctx.globalAlpha=.14; ctx.fillStyle=col; ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      // Aktiv stapel
       const tEnd = Math.min(0, val);
       for(let d=-60; d<tEnd; d+=step){
         const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd));
         let col=segColor(tEnd); if(tEnd<-1){ col=segColor(d+step/2); }
         ctx.globalAlpha=.9; ctx.fillStyle=col; ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
+      // Peak-hold markör (tunn vertikal linje)
+      if (peakHold !== undefined && peakHold > -60) {
+        const xPeak = xFromDb(peakHold);
+        const peakColor = segColor(peakHold);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = peakColor;
+        // Rita tunn linje (2px bred) med ljusare färg
+        ctx.fillRect(xPeak - 1, yTop - 2, 2, h*0.12 + 4);
+        // Liten "tick" topp
+        ctx.fillRect(xPeak - 3, yTop - 2, 6, 2);
+      }
     }
-    drawChannel(h*0.35, valueL); drawChannel(h*0.55, valueR);
+    drawChannel(h*0.35, valueL, peakHoldL); drawChannel(h*0.55, valueR, peakHoldR);
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBTP fence (visual)
   }
 
-  // Nordic PPM – horisontell canvas rendering
-  // Range: -54 dBFS till -9 dBFS (45 dB span) = -36 dBu till +9 dBu
-  // 0 PPM = 0 dBu = -18 dBFS peak, PML = +9 dBu = -9 dBFS
-  function drawHBar_PPM(canvas, dBfsL, dBfsR){
+  // Nordic PPM – horisontell canvas rendering med RTW-style färgzoner
+  // Range: -54 dBFS till -9 dBFS (45 dB span) = -36 PPM till +9 PPM
+  // 0 PPM = 0 dBu = -18 dBFS peak, PML = +9 PPM = -9 dBFS
+  function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1;
     const rect = canvas.getBoundingClientRect();
     const w=Math.floor(rect.width*dpr), h=Math.floor(rect.height*dpr);
@@ -1417,15 +1456,15 @@
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=1;
-    // Färgzoner för Nordic PPM (baserat på dBu-nivåer)
+    // RTW-style färgzoner för Nordic PPM (PPM = dBu = dBFS + 18)
     function segColor(db){
-      // db är i dBFS, konvertera till dBu: dBu = dBFS + 18
-      const dBu = db + 18;
-      if(dBu >= 6) return getCss('--hot');      // +6 dBu och över = rött (nära PML)
-      if(dBu >= 0) return getCss('--warn');     // 0 till +6 dBu = orange (över TEST)
-      return getCss('--ok');                     // Under TEST = grönt
+      const ppm = db + 18; // dBFS -> PPM/dBu
+      if(ppm >= 6) return getCss('--hot');        // +6 till +9 PPM: rött (nära PML)
+      if(ppm >= 0) return getCss('--warn');       // 0 till +6 PPM: amber (varning)
+      if(ppm >= -3) return getCss('--cyan');      // -3 till 0 PPM: cyan/teal (nominal)
+      return getCss('--ok');                       // Under -3 PPM: grönt (headroom)
     }
-    function drawChannel(yTop, val){
+    function drawChannel(yTop, val, peakHold){
       // Bakgrund (dimmat)
       for(let d=dbMin; d<dbMax; d+=step){
         const x0=xFromDb(d), x1=xFromDb(d+step);
@@ -1441,9 +1480,18 @@
         ctx.fillStyle=segColor(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
+      // Peak-hold markör (RTW-style: tunn linje)
+      if (peakHold !== undefined && peakHold > dbMin) {
+        const xPeak = xFromDb(peakHold);
+        const peakColor = segColor(peakHold);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = peakColor;
+        ctx.fillRect(xPeak - 1, yTop - 2, 2, h*0.12 + 4);
+        ctx.fillRect(xPeak - 3, yTop - 2, 6, 2);
+      }
     }
-    drawChannel(h*0.35, dBfsL); drawChannel(h*0.55, dBfsR);
-    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // +9 dBu fence
+    drawChannel(h*0.35, dBfsL, peakHoldL); drawChannel(h*0.55, dBfsR, peakHoldR);
+    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // +9 PPM fence
   }
 
   let rmsHoldL=0, rmsHoldR=0; let lastTsDB=performance.now();
@@ -1473,18 +1521,53 @@
     return 20*Math.log10(maxAbs + 1e-9);
   }
   let tpSmoothL=-60, tpSmoothR=-60;
+  // Peak-hold för True Peak (RTW-style): 3 sekunders hold
+  let tpPeakHoldL=-60, tpPeakHoldR=-60, tpPeakTimeL=0, tpPeakTimeR=0;
+  const TP_PEAK_HOLD_SEC = 3; // 3 sekunder peak-hold
+  let tpOverFlag = false; // OVER-indikator
+
   function drawTruePeak(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const rawL = Math.min(0, truePeakDb(bufL)); const rawR = Math.min(0, truePeakDb(bufR));
     const a = 0.25; tpSmoothL = tpSmoothL + a*(rawL - tpSmoothL); tpSmoothR = tpSmoothR + a*(rawR - tpSmoothR);
-    document.getElementById('tpLabel').innerHTML = `L: <b>${tpSmoothL.toFixed(1)}</b> · R: <b>${tpSmoothR.toFixed(1)}</b> dBTP`;
-    drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR);
+
+    // Peak-hold logik
+    const now = performance.now() / 1000;
+    if (tpSmoothL > tpPeakHoldL) { tpPeakHoldL = tpSmoothL; tpPeakTimeL = now; }
+    else if (now - tpPeakTimeL > TP_PEAK_HOLD_SEC) { tpPeakHoldL = tpSmoothL; tpPeakTimeL = now; }
+    if (tpSmoothR > tpPeakHoldR) { tpPeakHoldR = tpSmoothR; tpPeakTimeR = now; }
+    else if (now - tpPeakTimeR > TP_PEAK_HOLD_SEC) { tpPeakHoldR = tpSmoothR; tpPeakTimeR = now; }
+
+    // OVER-indikator om TP >= -1.0 dBTP
+    const maxPeak = Math.max(tpPeakHoldL, tpPeakHoldR);
+    if (maxPeak >= -1.0) tpOverFlag = true;
+
+    // Label med peak-hold max och OVER-indikator
+    const overHtml = tpOverFlag ? '<span style="color:var(--hot);font-weight:bold;margin-left:8px">OVER</span>' : '';
+    const peakMaxVal = Math.max(tpPeakHoldL, tpPeakHoldR);
+    const peakMaxStr = peakMaxVal > -60 ? `Max: <b>${peakMaxVal.toFixed(1)}</b> dBTP` : '';
+    document.getElementById('tpLabel').innerHTML = `L: <b>${tpSmoothL.toFixed(1)}</b> · R: <b>${tpSmoothR.toFixed(1)}</b> dBTP · ${peakMaxStr}${overHtml}`;
+
+    drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
+  // Reset-funktion för OVER-indikator (kan kopplas till en knapp)
+  window.resetTPOver = function(){ tpOverFlag = false; tpPeakHoldL = -60; tpPeakHoldR = -60; };
   layoutTPScale(tpScale);
 
-  // ------- R128 -------
+  // ------- R128 – EBU R128 Loudness med broadcast target −23 LUFS -------
+  const LOUDNESS_TARGET = -23; // Europa broadcast target (EBU R128)
   const frameDur = 2048 / 48000; const mLen = Math.max(1, Math.round(0.4 / frameDur)); const sLen = Math.max(1, Math.round(3.0 / frameDur));
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
+
+  // Färg baserat på avstånd från target
+  function loudnessColor(lufs) {
+    if (!isFinite(lufs)) return 'var(--muted)';
+    const offset = lufs - LOUDNESS_TARGET;
+    if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 till −22: grönt (on target)
+    if (offset < -1) return getCss('--cyan');                     // Under −24: cyan (too quiet)
+    if (offset <= 3) return getCss('--warn');                     // −22 till −20: amber (bit loud)
+    return getCss('--hot');                                        // Över −20: rött (too loud)
+  }
   function energyFromK(){
     kAnL.getFloatTimeDomainData(kBufL); kAnR.getFloatTimeDomainData(kBufR);
     let eL=0,eR=0; for(let i=0;i<kBufL.length;i++){ eL+=kBufL[i]*kBufL[i]; eR+=kBufR[i]*kBufR[i]; }
@@ -1511,9 +1594,22 @@
       const prevM=parseFloat(lufsM.dataset.v||'-999'); const prevS=parseFloat(lufsS.dataset.v||'-999'); const prevI=parseFloat(lufsI.dataset.v||'-999');
       const mDisp=isFinite(prevM)? prevM + a*(mLUFS-prevM): mLUFS; const sDisp=isFinite(prevS)? prevS + a*(sLUFS-prevS): sLUFS; const iDisp=isFinite(prevI)? prevI + a*(iLUFS-prevI): iLUFS;
       lufsM.dataset.v=mDisp; lufsS.dataset.v=sDisp; lufsI.dataset.v=iDisp;
+      // Momentary
       lufsM.textContent=isFinite(mDisp)? mDisp.toFixed(1)+' LUFS':'—';
+      lufsM.style.color = loudnessColor(mDisp);
+      // Short-term
       lufsS.textContent=isFinite(sDisp)? sDisp.toFixed(1)+' LUFS':'—';
-      lufsI.textContent = (isFinite(iDisp) ? iDisp.toFixed(1)+' LUFS' : '—');
+      lufsS.style.color = loudnessColor(sDisp);
+      // Integrated med offset från target
+      if (isFinite(iDisp)) {
+        const offsetLU = iDisp - LOUDNESS_TARGET;
+        const offsetStr = (offsetLU >= 0 ? '+' : '') + offsetLU.toFixed(1) + ' LU';
+        lufsI.innerHTML = `${iDisp.toFixed(1)} LUFS <span style="opacity:0.7;font-size:0.85em">(${offsetStr})</span>`;
+        lufsI.style.color = loudnessColor(iDisp);
+      } else {
+        lufsI.textContent = '—';
+        lufsI.style.color = '';
+      }
       lraEl.textContent=LRA; lastText=now;
       // --- Update radar buffer with short-term loudness ---
       pushRadarLoudness(sDisp);
