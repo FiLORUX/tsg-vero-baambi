@@ -134,15 +134,15 @@
       display:grid;
       gap:16px;
       grid-template-columns: var(--sidebar-width, 360px) 1fr;
-      grid-template-rows: 1fr; 
+      grid-template-rows: 1fr;
       height:calc(100dvh - 56px);
-      transition: grid-template-columns 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      /* Ingen transition på grid - omedelbar resize för att undvika "scrambling" */
     }
 
     /*
      * Sidebar Collapse System - GPU-only animation
      * Använder ENDAST transform + opacity (GPU-accelererad)
-     * Ingen grid-template-columns ändring = ingen layout thrash
+     * Grid ändras omedelbart (ingen animation) - meters snap till ny storlek
      */
     .sidebar-container {
       position: relative;
@@ -170,10 +170,6 @@
                   opacity 0.3s ease;
     }
 
-    .sidebar-ready .wrap {
-      transition: grid-template-columns 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-
     /* Collapsed state */
     .wrap.sidebar-collapsed {
       grid-template-columns: 48px 1fr;
@@ -199,6 +195,7 @@
     .collapse-toggle {
       position: fixed;
       left: calc(var(--sidebar-width, 360px) + 20px - 24px);
+      top: 50%;
       transform: translateY(-50%);
       width: 48px;
       height: 48px;
@@ -210,10 +207,9 @@
       align-items: center;
       justify-content: center;
       z-index: 100;
-      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
       box-shadow: 0 4px 16px rgba(0,0,0,.25);
     }
-    
+
     /* Collapsed state för toggle */
     .sidebar-collapsed .collapse-toggle,
     .sidebar-start-collapsed .collapse-toggle {
@@ -275,8 +271,6 @@
       grid-template-rows:auto 1fr;
       gap:12px;
       min-height:0;
-      transition: margin 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-      margin-right: 0;
     }
 
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -2102,7 +2096,6 @@
   function initSidebarToggle() {
     const sidebarToggle = document.getElementById('sidebarToggle');
     const wrap = document.getElementById('wrap');
-    const metersSection = document.querySelector('.visning');
     const html = document.documentElement;
 
     // Kolla initial state (satt av inline script i <head>)
@@ -2122,19 +2115,6 @@
       });
     });
 
-    // Function to update toggle button vertical position (center to meters panel)
-    function updateToggleVerticalPosition() {
-      if (metersSection) {
-        const metersRect = metersSection.getBoundingClientRect();
-        const centerY = metersRect.top + (metersRect.height / 2);
-        sidebarToggle.style.top = centerY + 'px';
-      }
-    }
-
-    // Update vertical position on load and resize
-    updateToggleVerticalPosition();
-    window.addEventListener('resize', updateToggleVerticalPosition);
-
     sidebarToggle.addEventListener('click', () => {
       isCollapsed = !isCollapsed;
 
@@ -2147,12 +2127,9 @@
         wrap.classList.remove('sidebar-collapsed');
       }
 
-      // Update toggle vertical position after animation and trigger layout recalculation
+      // Trigger resize event for responsive canvas elements after animation
       setTimeout(() => {
-        updateToggleVerticalPosition();
-        // **BEST PRACTICE 2025: Use scheduled layout update instead of direct call**
         scheduleLayoutUpdate(xyCard, layoutXY);
-        // Trigger resize event for any other responsive elements
         window.dispatchEvent(new Event('resize'));
       }, 400);
     });
