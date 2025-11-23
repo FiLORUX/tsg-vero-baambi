@@ -999,8 +999,8 @@
     function lufsToRadius(lufs, rOuter, rInner) {
       const clamped = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, lufs));
       const t = (clamped - RADAR_MIN_LUFS) / (RADAR_MAX_LUFS - RADAR_MIN_LUFS); // 0..1
-      // Yttre ring = t=1 ≈ "loud", inre = t=0 ≈ "tyst" – samma känsla som Clarity
-      return rInner + (1 - t) * (rOuter - rInner);
+      // Broadcast-standard: quiet (t=0) near center, loud (t=1) toward outer ring
+      return rInner + t * (rOuter - rInner);
     }
 
     // Clarity-style färgzoner
