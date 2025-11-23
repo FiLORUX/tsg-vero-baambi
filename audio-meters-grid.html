@@ -46,28 +46,10 @@
       flex-shrink: 0;
     }
 
-    /* Phase correlation widget under goniometer */
+    /* Phase correlation widget under goniometer - tar resterande höjd */
     .corrWidget {
-      flex: 0 0 auto !important;
-      height: 70px;
-      padding: 6px 8px;
-    }
-    .corrWidget .corrWrap {
       flex: 1;
       min-height: 0;
-      position: relative;
-      width: 100%;
-    }
-    .corrWidget .corrWrap .canvasPad {
-      width: 100%;
-      height: 100%;
-      position: relative;
-    }
-    .corrWidget canvas {
-      position: absolute;
-      inset: 0;
-      width: 100% !important;
-      height: 100% !important;
     }
 
     /* Right column: L/R Balance, Rotation, M/S, Histogram (stacked) */
@@ -1470,14 +1452,9 @@
     const availH = stereoContainer.clientHeight;
     const availW = stereoContainer.clientWidth;
 
-    // Vänster kolumn: Goniometer (kvadrat) + Phase Correlation under
-    // Beräkna goniometer-storlek baserat på tillgänglig höjd minus utrymme för corr
-    const corrHeight = 70; // Fast höjd för phase correlation
-    const corrGap = 8;
-    const gonioMaxH = availH - corrHeight - corrGap;
-
-    // Goniometer ska vara kvadrat, begränsad av höjd och 55% av bredd
-    const gonioSize = Math.min(gonioMaxH, availW * 0.55);
+    // Goniometer: kvadrat begränsad av 55% av bredd och 85% av höjd
+    // Resten av höjden går till correlation-widgeten via flex
+    const gonioSize = Math.min(availH * 0.85, availW * 0.55);
 
     // Sätt goniometer container och canvas
     const gonioSquare = xyCard.querySelector('.gonioSquare');
@@ -1498,7 +1475,7 @@
       leftCol.style.width = gonioSize + 'px';
     }
 
-    // Phase correlation canvas (under goniometer)
+    // Phase correlation canvas (under goniometer) - flex tar hand om höjden
     const corrWrapEl = xyCard.querySelector('.corrWrap');
     if (corrWrapEl && corr) {
       const rect = corrWrapEl.getBoundingClientRect();
