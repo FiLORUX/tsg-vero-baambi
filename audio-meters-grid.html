@@ -220,20 +220,13 @@
     /* Transition endast när ready */
     .sidebar-ready .collapse-toggle {
       transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                  opacity 0.3s ease 0.2s;
+                  opacity 0.3s ease;
     }
 
-    /* Hover-zone: visa toggle när man hovrar vänster sida eller själva toggle */
-    .wrap.sidebar-collapsed .sidebar-container:hover ~ .collapse-toggle,
-    .wrap.sidebar-collapsed .collapse-toggle:hover,
-    .sidebar-start-collapsed .wrap .sidebar-container:hover ~ .collapse-toggle,
-    .sidebar-start-collapsed .wrap .collapse-toggle:hover {
+    /* Visa toggle när man hovrar NÅGONSTANS på sidan (när collapsed) */
+    .wrap.sidebar-collapsed:hover .collapse-toggle,
+    .sidebar-start-collapsed .wrap:hover .collapse-toggle {
       opacity: 1;
-    }
-
-    .sidebar-ready .wrap.sidebar-collapsed .collapse-toggle:hover,
-    .sidebar-ready .wrap.sidebar-collapsed .sidebar-container:hover ~ .collapse-toggle {
-      transition-delay: 0s;
     }
     
     .collapse-toggle:hover {
@@ -331,13 +324,14 @@
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
 /* XY + Corr (vertikal layout: goniometer ovan, correlation under) */
-/* Båda ska ALLTID vara kvadratiska */
+/* ALLA tre mätare ska ha SAMMA bredd (bestäms av goniometer) */
 .xyGrid {
+  --gonio-size: min(100%, 280px); /* CSS variable för gemensam bredd */
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   width: 100%;
   height: 100%;
   padding: 8px 0;
@@ -350,26 +344,20 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  aspect-ratio: 1;
+  width: var(--gonio-size);
 }
 
-/* Goniometer: tar upp tillgängligt utrymme */
+/* Goniometer: kvadratisk */
 .xySquare {
-  flex: 1 1 auto;
-  min-width: 100px;
-  min-height: 100px;
-  max-width: 100%;
-  max-height: 60%;
-  margin: 0 auto;
+  aspect-ratio: 1;
+  min-width: 80px;
+  min-height: 80px;
 }
 
-/* Correlation: mindre, under goniometern */
+/* Correlation: kvadratisk, mindre höjd */
 .corrWrap {
-  flex: 0 0 auto;
-  min-width: 60px;
-  min-height: 60px;
-  max-height: 25%;
-  margin: 0 auto;
+  aspect-ratio: 1;
+  max-height: 100px;
 }
 
 .corrWrap .canvasPad {
@@ -451,12 +439,11 @@
   font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
 }
 
-/* Mono Deviation meter */
+/* Mono Deviation meter - samma bredd som goniometer */
 .monoDevWrap {
-  width: 100%;
-  max-width: 280px;
+  width: var(--gonio-size, 280px);
   margin: 0 auto;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 .monoDevWrap .canvasPad {
   height: 32px;
