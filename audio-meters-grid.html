@@ -818,43 +818,34 @@
       ctx.restore();
     }
 
-    // Clarity-style label-positioner
-    const RADAR_LABELS = [
-      { lufs: -23, angle:   0 },   // överst (target)
-      { lufs: -17, angle:  30 },
-      { lufs: -11, angle:  60 },
-      { lufs:  -5, angle:  90 },
-      { lufs: -29, angle: 330 },
-      { lufs: -35, angle: 300 },
-      { lufs: -41, angle: 270 },
-      { lufs: -47, angle: 240 },
-      { lufs: -53, angle: 210 },
-      { lufs: -59, angle: 180 }
-    ];
+    // Radiella LUFS-labels längs kl 3-spaken (visar skalan för radie, inte vinkel)
+    // Visa endast nyckelringar för läsbarhet: -5, -11, -17, -23 (target), -35, -47, -59
+    const RADAR_SCALE_LABELS = [-5, -17, -23, -29, -41, -59];
 
     function drawRadarLabels(ctx, cx, cy, rOuter, rInner, canvasWidth) {
       ctx.save();
-      const fontSize = Math.max(9, Math.floor(canvasWidth * 0.024));
+      const fontSize = Math.max(8, Math.floor(canvasWidth * 0.020));
       ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#d1d5db';
 
-      const rText = rOuter + fontSize * 1.2;
+      // Placera labels längs kl 3-spaken (0 radianer = höger)
+      const labelAngle = 0;
 
-      RADAR_LABELS.forEach(lbl => {
-        const a = (lbl.angle - 90) * Math.PI / 180;
-        const x = cx + rText * Math.cos(a);
-        const y = cy + rText * Math.sin(a);
-        // Highlight target (-23)
-        if (lbl.lufs === RADAR_TARGET_LUFS) {
+      RADAR_SCALE_LABELS.forEach(lufs => {
+        const r = lufsToRadius(lufs, rOuter, rInner);
+        const x = cx + r * Math.cos(labelAngle) + 3;
+        const y = cy + r * Math.sin(labelAngle);
+
+        // Highlight target (-23 LUFS)
+        if (lufs === RADAR_TARGET_LUFS) {
           ctx.fillStyle = '#40a0ff';
           ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         } else {
-          ctx.fillStyle = '#9ca3af';
+          ctx.fillStyle = '#6b7280';
           ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         }
-        ctx.fillText(lbl.lufs.toString(), x, y);
+        ctx.fillText(lufs.toString(), x, y);
       });
 
       ctx.restore();
