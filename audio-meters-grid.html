@@ -343,45 +343,24 @@
   transform: translateX(-50%);
   z-index: 2;
   pointer-events: none;
-}    
-    /* **BEST PRACTICE 2025: CSS Container Queries for Responsive Design** */
-    /* Modern approach to responsive layouts that responds to container size, not viewport */
-    .xyModule {
-      container-type: inline-size;
-      container-name: vectorscope;
-    }
-    
-    /* Responsive layout adjustments based on container width */
-    @container vectorscope (min-width: 400px) {
-      .xyGrid {
-        grid-template-columns: 2fr 1fr;
-        gap: 12px;
-      }
-    }
+}
 
-    .xySquare {
-      position: relative;
-      aspect-ratio: 1;
-      height: 100%;
-      max-height: 100%;
-      min-height: 0;
-      margin: 0 auto;
-    }
-    .canvasPad {
-      width: 100%;
-      height: 100%;
-      position: relative;
-    }
-    .canvasPad > canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      border-radius: 10px;
-      border: 1px solid var(--outline);
-      background: #0d0f11;
-      box-sizing: border-box;
-    }
+/* Canvas-pad gemensamma regler */
+.canvasPad {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.canvasPad > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--outline);
+  background: #0d0f11;
+  box-sizing: border-box;
+}
 
     /* Horisontella stapel-metrar */
     .hMeter{position:relative;height:100%;min-height:80px;margin-bottom: var(--meter-gap);}
@@ -410,23 +389,6 @@
     .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
     .brand svg{display:block;height:60px;width:auto}
     .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
-
-    .canvasPad {
-      width: 100%;
-      height: 100%;
-      padding-top: 16px;
-      padding-bottom: 16px;
-      box-sizing: border-box;
-      position: relative;
-    }
-    .canvasPad > canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      border-radius: 10px;
-      border: 1px solid var(--outline);
-      background: #0d0f11;
-    }
 
     /* Divider/linje under rubrik */
     .meter .divider {
@@ -1001,15 +963,13 @@
     const moduleW = xyModule.clientWidth;
     const gap = 12;
 
-    // Båda ska vara KVADRATISKA
-    // Goniometer: 70% av tillgängligt utrymme, Correlation: 30%
-    const totalH = moduleH - gap;
-    const gonioRatio = 0.7;
-    const corrRatio = 0.28;
+    // Båda ska vara KVADRATISKA och staplad vertikalt
+    // Layout: goniometer överst (större), korrelation under (mindre men inte för liten)
+    const totalH = moduleH;
 
-    // Goniometer: kvadratisk
-    const gonioMaxH = totalH * gonioRatio;
-    const gonioSide = Math.max(120, Math.min(gonioMaxH, moduleW));
+    // Goniometer: tar ca 72% av höjden, men är kvadratisk (begränsas av bredd)
+    const gonioTargetH = totalH * 0.72;
+    const gonioSide = Math.max(120, Math.min(gonioTargetH, moduleW));
     xyWrap.style.width = gonioSide + 'px';
     xyWrap.style.height = gonioSide + 'px';
 
@@ -1019,11 +979,15 @@
       xy.height = h;
     }
 
-    // Correlation: KVADRATISK (proportionell till goniometer)
+    // Correlation: KVADRATISK, använder KVARVARANDE utrymme efter goniometer
     const corrWrapEl = document.querySelector('.corrWrap');
     if (corrWrapEl) {
-      // Korrelationsmätaren ska vara proportionell - ca 35% av goniometerns storlek
-      const corrSide = Math.max(60, Math.floor(gonioSide * 0.35));
+      // Tillgängligt utrymme under goniometern
+      const remainingH = totalH - gonioSide - gap;
+      // Korrelationsmätaren ska vara kvadratisk: begränsas av min(remaining height, width)
+      // Men ska inte bli för liten - minst 80px, och inte större än 50% av goniometern
+      const corrMaxBySpace = Math.min(remainingH, moduleW * 0.6);
+      const corrSide = Math.max(80, Math.min(corrMaxBySpace, gonioSide * 0.5));
       corrWrapEl.style.width = corrSide + 'px';
       corrWrapEl.style.height = corrSide + 'px';
 
