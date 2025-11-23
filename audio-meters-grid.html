@@ -624,12 +624,15 @@
             </div>
             <!-- Sub-panel: existing R128 loudness panel -->
             <div class="r128-subpanel">
-              <header><label>Loudness (EBU R128, Integrated LUFS)</label><span class="badge">M/S/I + LRA</span></header>
+              <header><label>Loudness (EBU R128)</label><span class="badge">M/S/I + LRA + TP</span></header>
               <div class="r128">
-                <div class="row"><small>Momentary (400 ms)</small><span class="big" id="lufsM">—</span></div>
-                <div class="row"><small>Short-term (3 s)</small><span class="big" id="lufsS">—</span></div>
-                <div class="row"><small>Integrated (gated)</small><span class="big" id="lufsI">—</span></div>
-                <div class="row"><small>LRA (last ~60 s)</small><span class="big" id="lra">—</span></div>
+                <div class="row"><small>M</small><span class="big" id="lufsM">—</span></div>
+                <div class="row"><small>S</small><span class="big" id="lufsS">—</span></div>
+                <div class="row"><small>I</small><span class="big" id="lufsI">—</span></div>
+                <div class="row"><small>LRA</small><span class="big" id="lra">—</span></div>
+                <div class="row"><small>TP</small><span class="big" id="r128TpMax">—</span></div>
+                <div class="row"><small>time</small><span class="big" id="r128Time">00:00:00</span></div>
+                <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
               </div>
             </div>
           </div>
@@ -1092,9 +1095,9 @@
   const PPM_MIN_DB = -54;           // -36 PPM = -54 dBFS
   const PPM_MAX_DB = -9;            // +9 PPM = -9 dBFS
 
-  // Peak-hold för PPM (RTW-style: 10 sekunders hold som default)
+  // Peak-hold för PPM (RTW broadcast standard: 3 sekunder)
   let ppmPeakHoldL = -60, ppmPeakHoldR = -60, ppmPeakTimeL = 0, ppmPeakTimeR = 0;
-  const PPM_PEAK_HOLD_SEC = 10; // 10 sekunder peak-hold (RTW default)
+  const PPM_PEAK_HOLD_SEC = 3; // 3 sekunder peak-hold (RTW broadcast standard)
 
   function quasiPeakDb(buf, sampleRate){
     // Quasi-peak: hitta max amplitude med ~5ms integration
@@ -1619,6 +1622,41 @@
   const frameDur = 2048 / 48000; const mLen = Math.max(1, Math.round(0.4 / frameDur)); const sLen = Math.max(1, Math.round(3.0 / frameDur));
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
 
+  // R128 panel: TPmax och elapsed time
+  let r128TpMax = -Infinity;
+  let r128StartTime = performance.now();
+  const r128TpMaxEl = document.getElementById('r128TpMax');
+  const r128TimeEl = document.getElementById('r128Time');
+  const r128ResetBtn = document.getElementById('r128Reset');
+
+  function formatElapsed(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  }
+
+  function resetR128() {
+    // Reset integrated loudness
+    intEnergy = 0; intCount = 0;
+    mQ.length = 0; sQ.length = 0; stHistory = [];
+    // Reset TPmax
+    r128TpMax = -Infinity;
+    tpOverFlag = false;
+    tpPeakHoldL = -60; tpPeakHoldR = -60;
+    // Reset time
+    r128StartTime = performance.now();
+    // Reset radar
+    radarHistory.length = 0;
+    // Update display
+    lufsM.textContent = '—'; lufsS.textContent = '—'; lufsI.textContent = '—';
+    lraEl.textContent = '—';
+    r128TpMaxEl.textContent = '—';
+    r128TimeEl.textContent = '00:00:00';
+  }
+  r128ResetBtn.addEventListener('click', resetR128);
+
   // Färg baserat på avstånd från target
   function loudnessColor(lufs) {
     if (!isFinite(lufs)) return 'var(--muted)';
@@ -1671,6 +1709,22 @@
         lufsI.style.color = '';
       }
       lraEl.textContent=LRA; lastText=now;
+
+      // --- TPmax: spåra max true peak sedan reset ---
+      const currentTpMax = Math.max(tpPeakHoldL, tpPeakHoldR);
+      if (currentTpMax > r128TpMax) r128TpMax = currentTpMax;
+      if (isFinite(r128TpMax) && r128TpMax > -60) {
+        r128TpMaxEl.textContent = formatDb(r128TpMax) + ' dBTP';
+        r128TpMaxEl.style.color = r128TpMax >= -1.0 ? getCss('--hot') : getCss('--ok');
+      } else {
+        r128TpMaxEl.textContent = '—';
+        r128TpMaxEl.style.color = '';
+      }
+
+      // --- Elapsed time ---
+      const elapsed = now - r128StartTime;
+      r128TimeEl.textContent = formatElapsed(elapsed);
+
       // --- Update radar buffer with short-term loudness ---
       pushRadarLoudness(sDisp);
     }
