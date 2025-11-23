@@ -1738,9 +1738,8 @@
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
 
-    // STEP 1: ALWAYS fade first - prevents frozen artifacts during blanking
-    const fade = 0.10;
-    xyCtx.fillStyle = `rgba(13,15,17,${fade})`;
+    // DEBUG: Full clear instead of fade to see if ovals are from accumulation
+    xyCtx.fillStyle = '#0d0f11';
     xyCtx.fillRect(0,0,w,h);
 
     // STEP 2: Only draw NEW samples if TransitionGuard allows
