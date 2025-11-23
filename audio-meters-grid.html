@@ -146,9 +146,7 @@
      */
     .sidebar-container {
       position: relative;
-      overflow: visible;
-      /* GPU-hint för smooth animation */
-      will-change: transform;
+      overflow: hidden;
     }
 
     .sidebar-content {
@@ -161,10 +159,6 @@
     }
 
     /* Animerade transitions - läggs till efter page load */
-    .sidebar-ready .sidebar-container {
-      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    }
-
     .sidebar-ready .sidebar-content {
       transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
                   opacity 0.3s ease;
@@ -223,16 +217,16 @@
                   opacity 0.3s ease 0.2s;
     }
 
-    /* Hover-zone: visa toggle när man hovrar vänstra kanten eller själva toggle */
-    .sidebar-collapsed .sidebar-container:hover .collapse-toggle,
-    .sidebar-collapsed .collapse-toggle:hover,
-    .sidebar-start-collapsed .sidebar-container:hover .collapse-toggle,
-    .sidebar-start-collapsed .collapse-toggle:hover {
+    /* Hover-zone: visa toggle när man hovrar vänster sida eller själva toggle */
+    .wrap.sidebar-collapsed .sidebar-container:hover ~ .collapse-toggle,
+    .wrap.sidebar-collapsed .collapse-toggle:hover,
+    .sidebar-start-collapsed .wrap .sidebar-container:hover ~ .collapse-toggle,
+    .sidebar-start-collapsed .wrap .collapse-toggle:hover {
       opacity: 1;
     }
 
-    .sidebar-ready .sidebar-collapsed .collapse-toggle:hover,
-    .sidebar-ready .sidebar-collapsed .sidebar-container:hover .collapse-toggle {
+    .sidebar-ready .wrap.sidebar-collapsed .collapse-toggle:hover,
+    .sidebar-ready .wrap.sidebar-collapsed .sidebar-container:hover ~ .collapse-toggle {
       transition-delay: 0s;
     }
     
@@ -709,12 +703,13 @@
         </div>
       </section>
     </div>
-    
-    <div class="collapse-toggle" id="sidebarToggle">
-      <svg viewBox="0 0 24 24">
-        <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-      </svg>
-    </div>
+  </div>
+
+  <!-- Toggle utanför sidebar-container så position:fixed fungerar korrekt -->
+  <div class="collapse-toggle" id="sidebarToggle">
+    <svg viewBox="0 0 24 24">
+      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+    </svg>
   </div>
 
   <section class="card visning">
