@@ -23,43 +23,46 @@
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
 
-    /* ===== RTW-STYLE STEREO LAYOUT ===== */
+    /* ===== TWO-COLUMN STEREO LAYOUT ===== */
     .stereoContainer {
       display: flex;
-      flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       height: 100%;
       min-height: 0;
     }
 
-    /* Top Row: Vectorscope (left) + Phase Column (right) */
-    .stereoTopRow {
+    /* Left column: Goniometer + Phase Correlation (stacked) */
+    .stereoLeftCol {
       display: flex;
-      gap: 10px;
-      flex: 1;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
       min-height: 0;
-      align-items: stretch;
     }
 
-    /* Vectorscope - keeps its aspect ratio, JS sets size */
+    /* Vectorscope - keeps aspect ratio, JS sets size */
     .gonioSquare {
       position: relative;
       flex-shrink: 0;
-      /* JS sets width/height to maintain square */
     }
 
-    /* Phase & Stereo Geometry Column */
-    .phaseColumn {
+    /* Phase correlation widget under goniometer */
+    .corrWidget {
+      flex: 0 0 auto !important;
+      min-height: 60px;
+    }
+
+    /* Right column: L/R Balance, Rotation, M/S, Histogram (stacked) */
+    .stereoRightCol {
       display: flex;
       flex-direction: column;
       gap: 6px;
       flex: 1;
       min-height: 0;
-      min-width: 100px;
-      max-width: 160px;
+      min-width: 180px;
     }
 
-    /* Individual phase widgets */
+    /* Individual widgets in right column */
     .phaseWidget {
       background: rgba(15, 18, 20, 0.6);
       border: 1px solid var(--outline);
@@ -69,26 +72,21 @@
       flex: 1;
       min-height: 0;
       overflow: hidden;
+      padding: 6px 8px;
     }
 
-    /* Smaller tertiary widgets (Rotation, M/S) */
-    .phaseWidgetSmall {
-      flex: 0.7;
-      padding: 4px 6px;
-    }
-
-    /* Widget label (small text header) */
+    /* Widget label */
     .widgetLabel {
-      font-size: 8px;
+      font-size: 9px;
       font-weight: 600;
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.4px;
-      margin-bottom: 3px;
+      margin-bottom: 4px;
       flex-shrink: 0;
     }
 
-    /* Phase correlation and L/R balance inside phaseWidget */
+    /* Phase correlation and L/R balance wraps */
     .phaseWidget .corrWrap,
     .phaseWidget .monoDevWrap {
       flex: 1;
@@ -108,16 +106,16 @@
     .phaseWidget .overlay {
       position: absolute;
       left: 50%;
-      bottom: 2px;
+      bottom: 4px;
       transform: translateX(-50%);
-      font-size: 9px;
-      padding: 1px 5px;
+      font-size: 10px;
+      padding: 2px 6px;
       background: rgba(0,0,0,.5);
       border-radius: 4px;
     }
 
-    /* Rotation meter in phase column */
-    .phaseWidgetSmall canvas {
+    /* Canvas in widgets */
+    .phaseWidget canvas {
       flex: 1;
       width: 100%;
       min-height: 0;
@@ -125,99 +123,93 @@
       background: #0a0c0e;
     }
 
+    /* Rotation axis labels */
     .rotationAxis {
       display: flex;
       justify-content: space-between;
-      font-size: 7px;
+      font-size: 8px;
       color: var(--muted);
       opacity: 0.7;
-      margin-top: 2px;
+      margin-top: 3px;
+      padding: 0 2px;
     }
     .rotationAxis span:nth-child(2) {
       font-weight: 700;
     }
 
-    /* M/S Compact meter in phase column */
+    /* M/S Meter */
     .msCompact {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 4px;
       flex: 1;
+      justify-content: center;
     }
     .msBar {
       display: flex;
       align-items: center;
-      gap: 3px;
+      gap: 6px;
     }
     .msLabel {
-      font-size: 8px;
+      font-size: 10px;
       font-weight: 700;
-      width: 10px;
+      width: 14px;
       color: var(--muted);
     }
     .msTrack {
       flex: 1;
-      height: 8px;
+      height: 12px;
       background: #0a0c0e;
-      border-radius: 3px;
+      border-radius: 4px;
       overflow: hidden;
     }
     .msFill {
       height: 100%;
-      border-radius: 3px;
+      border-radius: 4px;
       transition: width 0.05s linear;
     }
     .msFillM { background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; }
     .msFillS { background: linear-gradient(90deg, #22d3ee, #67e8f9); width: 0%; }
     .msValue {
-      font-size: 8px;
+      font-size: 10px;
       font-weight: 600;
-      width: 42px;
+      width: 52px;
       text-align: right;
       color: var(--ink);
       font-variant-numeric: tabular-nums;
     }
 
-    /* Width Histogram Strip (full width below vectorscope) */
-    .stereoWidthStrip {
-      background: rgba(15, 18, 20, 0.6);
-      border: 1px solid var(--outline);
-      border-radius: 6px;
-      padding: 4px 8px;
-      flex-shrink: 0;
-      height: 56px;
-      display: flex;
-      flex-direction: column;
-    }
-    .stereoWidthStrip canvas {
-      flex: 1;
-      width: 100%;
-      min-height: 0;
-      border-radius: 4px;
-      background: #0a0c0e;
+    /* Histogram widget */
+    .histogramWidget {
+      flex: 1.2;
     }
     .histogramAxis {
       display: flex;
       justify-content: space-between;
-      font-size: 7px;
+      font-size: 8px;
       color: var(--muted);
       opacity: 0.7;
-      margin-top: 2px;
+      margin-top: 3px;
+      padding: 0 2px;
     }
 
-    /* Responsive: stack phase column below on narrow screens */
+    /* Responsive: stack columns vertically on narrow screens */
     @media (max-width: 700px) {
-      .stereoTopRow {
+      .stereoContainer {
         flex-direction: column;
       }
-      .phaseColumn {
+      .stereoLeftCol {
         flex-direction: row;
-        max-width: none;
-        height: 60px;
-        flex: 0 0 auto;
+        gap: 8px;
+      }
+      .stereoRightCol {
+        flex-direction: row;
+        flex-wrap: wrap;
+        min-width: 0;
       }
       .phaseWidget {
-        flex: 1;
+        flex: 1 1 45%;
+        min-width: 120px;
       }
     }
 
@@ -882,59 +874,58 @@
         <div class="meter" id="xyCard">
           <header><label>Stereo Vectorscope</label><span class="badge">Goniometer + Phase Correlation</span></header>
           <div class="stereoContainer">
-            <!-- Övre del: Vectorscope (vänster) + Phase Column (höger) -->
-            <div class="stereoTopRow">
-              <!-- Vectorscope (primär) -->
+            <!-- Vänster kolumn: Goniometer + Phase Correlation -->
+            <div class="stereoLeftCol">
               <div class="gonioSquare" id="xyWrap">
                 <div class="canvasPad"><canvas id="xy"></canvas></div>
                 <div class="overlay">Mono = 45°</div>
               </div>
-              <!-- Phase & Stereo Geometry Column (sekundär) -->
-              <div class="phaseColumn">
-                <!-- 1) Phase Correlation Bar -->
-                <div class="phaseWidget">
-                  <div class="corrWrap">
-                    <div class="canvasPad"><canvas id="corr"></canvas></div>
-                    <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
-                  </div>
-                </div>
-                <!-- 2) L/R Balance Meter -->
-                <div class="phaseWidget">
-                  <div class="monoDevWrap">
-                    <div class="canvasPad"><canvas id="monoDev"></canvas></div>
-                    <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
-                  </div>
-                </div>
-                <!-- 3) Rotation Meter -->
-                <div class="phaseWidget phaseWidgetSmall">
-                  <div class="widgetLabel">Angle</div>
-                  <canvas id="rotationMeter"></canvas>
-                  <div class="rotationAxis"><span>L</span><span>C</span><span>R</span></div>
-                </div>
-                <!-- 4) M/S Meter (compact) -->
-                <div class="phaseWidget phaseWidgetSmall">
-                  <div class="widgetLabel">M/S</div>
-                  <div class="msCompact">
-                    <div class="msBar">
-                      <span class="msLabel">M</span>
-                      <div class="msTrack"><div class="msFill msFillM" id="msFillM"></div></div>
-                      <span class="msValue" id="msValueM">--.- dB</span>
-                    </div>
-                    <div class="msBar">
-                      <span class="msLabel">S</span>
-                      <div class="msTrack"><div class="msFill msFillS" id="msFillS"></div></div>
-                      <span class="msValue" id="msValueS">--.- dB</span>
-                    </div>
-                  </div>
+              <div class="phaseWidget corrWidget">
+                <div class="corrWrap">
+                  <div class="canvasPad"><canvas id="corr"></canvas></div>
+                  <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
                 </div>
               </div>
             </div>
-            <!-- Nedre del: Stereo Width Histogram (full bredd) -->
-            <div class="stereoWidthStrip">
-              <div class="widgetLabel">Stereo Width</div>
-              <canvas id="stereoHistogram"></canvas>
-              <div class="histogramAxis">
-                <span>Mono</span><span>Narrow</span><span>Wide</span>
+            <!-- Höger kolumn: L/R Balance, Rotation, M/S, Width Histogram -->
+            <div class="stereoRightCol">
+              <!-- 1) L/R Balance Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">L/R Balance</div>
+                <div class="monoDevWrap">
+                  <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                  <div class="overlay">L/R = <b id="monoDevVal">--.-</b> dB</div>
+                </div>
+              </div>
+              <!-- 2) Rotation / Angle -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Rotation / Angle</div>
+                <canvas id="rotationMeter"></canvas>
+                <div class="rotationAxis"><span>L</span><span>C</span><span>R</span></div>
+              </div>
+              <!-- 3) M/S Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">M/S Meter</div>
+                <div class="msCompact">
+                  <div class="msBar">
+                    <span class="msLabel">M</span>
+                    <div class="msTrack"><div class="msFill msFillM" id="msFillM"></div></div>
+                    <span class="msValue" id="msValueM">--.- dB</span>
+                  </div>
+                  <div class="msBar">
+                    <span class="msLabel">S</span>
+                    <div class="msTrack"><div class="msFill msFillS" id="msFillS"></div></div>
+                    <span class="msValue" id="msValueS">--.- dB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 4) Stereo Width Histogram -->
+              <div class="phaseWidget histogramWidget">
+                <div class="widgetLabel">Stereo Width</div>
+                <canvas id="stereoHistogram"></canvas>
+                <div class="histogramAxis">
+                  <span>Mono</span><span>Narrow</span><span>Wide</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1452,21 +1443,23 @@
     }
 
     const dpr = window.devicePixelRatio || 1;
-    const stereoTopRow = xyCard.querySelector('.stereoTopRow');
-    if (!stereoTopRow) return;
+    const stereoContainer = xyCard.querySelector('.stereoContainer');
+    if (!stereoContainer) return;
 
-    const phaseColumnGap = 10; // Gap mellan vectorscope och phaseColumn
+    const gap = 10; // Gap mellan kolumner
 
-    // Tillgängligt utrymme i stereoTopRow
-    const availH = stereoTopRow.clientHeight;
-    const availW = stereoTopRow.clientWidth;
+    // Tillgängligt utrymme
+    const availH = stereoContainer.clientHeight;
+    const availW = stereoContainer.clientWidth;
 
-    // phaseColumn tar ca 100-160px, resten till goniometer
-    const phaseColWidth = Math.min(160, Math.max(100, availW * 0.2));
+    // Vänster kolumn: Goniometer (kvadrat) + Phase Correlation under
+    // Beräkna goniometer-storlek baserat på tillgänglig höjd minus utrymme för corr
+    const corrHeight = 70; // Fast höjd för phase correlation
+    const corrGap = 8;
+    const gonioMaxH = availH - corrHeight - corrGap;
 
-    // Goniometer: kvadrat som får plats i höjden OCH inom tillgänglig bredd
-    const gonioMaxW = availW - phaseColWidth - phaseColumnGap;
-    const gonioSize = Math.min(availH, gonioMaxW);
+    // Goniometer ska vara kvadrat, begränsad av höjd och 55% av bredd
+    const gonioSize = Math.min(gonioMaxH, availW * 0.55);
 
     // Sätt goniometer container och canvas
     const gonioSquare = xyCard.querySelector('.gonioSquare');
@@ -1481,56 +1474,60 @@
       }
     }
 
-    // Phase column - CSS hanterar flex layout, men vi sätter canvas-storlekar
-    const phaseColumn = xyCard.querySelector('.phaseColumn');
-    if (phaseColumn) {
-      phaseColumn.style.width = phaseColWidth + 'px';
+    // Vänster kolumn bredd = goniometer bredd
+    const leftCol = xyCard.querySelector('.stereoLeftCol');
+    if (leftCol) {
+      leftCol.style.width = gonioSize + 'px';
+    }
 
-      // Corr och monoDev canvases - ta deras faktiska container-storlek
-      const corrWrapEl = xyCard.querySelector('.corrWrap');
-      if (corrWrapEl && corr) {
-        const rect = corrWrapEl.getBoundingClientRect();
-        const cw = Math.floor(rect.width * dpr);
-        const ch = Math.floor(rect.height * dpr);
-        if (corr.width !== cw || corr.height !== ch) {
-          corr.width = cw;
-          corr.height = ch;
-        }
+    // Phase correlation canvas (under goniometer)
+    const corrWrapEl = xyCard.querySelector('.corrWrap');
+    if (corrWrapEl && corr) {
+      const rect = corrWrapEl.getBoundingClientRect();
+      const cw = Math.floor(rect.width * dpr);
+      const ch = Math.floor(rect.height * dpr);
+      if (corr.width !== cw || corr.height !== ch) {
+        corr.width = Math.max(10, cw);
+        corr.height = Math.max(10, ch);
       }
+    }
 
-      const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
-      if (monoDevWrapEl && monoDev) {
-        const rect = monoDevWrapEl.getBoundingClientRect();
-        const mdw = Math.floor(rect.width * dpr);
-        const mdh = Math.floor(rect.height * dpr);
-        if (monoDev.width !== mdw || monoDev.height !== mdh) {
-          monoDev.width = mdw;
-          monoDev.height = mdh;
-        }
+    // Höger kolumn widgets - CSS flex hanterar layouten
+    // Vi behöver bara sätta canvas-storlekar baserat på faktisk storlek
+
+    // L/R Balance (monoDev) canvas
+    const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
+    if (monoDevWrapEl && monoDev) {
+      const rect = monoDevWrapEl.getBoundingClientRect();
+      const mdw = Math.floor(rect.width * dpr);
+      const mdh = Math.floor(rect.height * dpr);
+      if (monoDev.width !== mdw || monoDev.height !== mdh) {
+        monoDev.width = Math.max(10, mdw);
+        monoDev.height = Math.max(10, mdh);
       }
+    }
 
-      // Rotation meter canvas
-      const rotationMeter = document.getElementById('rotationMeter');
-      if (rotationMeter) {
-        const parent = rotationMeter.parentElement;
-        const rect = parent.getBoundingClientRect();
-        const rw = Math.floor(rect.width * dpr);
-        const rh = Math.floor((rect.height - 20) * dpr); // Leave room for axis labels
-        if (rotationMeter.width !== rw || rotationMeter.height !== rh) {
-          rotationMeter.width = Math.max(10, rw);
-          rotationMeter.height = Math.max(10, rh);
-        }
+    // Rotation meter canvas
+    const rotationMeter = document.getElementById('rotationMeter');
+    if (rotationMeter) {
+      const parent = rotationMeter.parentElement;
+      const rect = parent.getBoundingClientRect();
+      const rw = Math.floor((rect.width - 16) * dpr); // Padding
+      const rh = Math.floor((rect.height - 30) * dpr); // Label + axis
+      if (rotationMeter.width !== rw || rotationMeter.height !== rh) {
+        rotationMeter.width = Math.max(10, rw);
+        rotationMeter.height = Math.max(10, rh);
       }
     }
 
     // Stereo histogram canvas
     const histogramCanvas = document.getElementById('stereoHistogram');
     if (histogramCanvas) {
-      const strip = xyCard.querySelector('.stereoWidthStrip');
-      if (strip) {
-        const rect = strip.getBoundingClientRect();
-        const hw = Math.floor((rect.width - 16) * dpr); // Padding compensation
-        const hh = Math.floor((rect.height - 28) * dpr); // Label + axis
+      const parent = histogramCanvas.parentElement;
+      if (parent) {
+        const rect = parent.getBoundingClientRect();
+        const hw = Math.floor((rect.width - 16) * dpr); // Padding
+        const hh = Math.floor((rect.height - 30) * dpr); // Label + axis
         if (histogramCanvas.width !== hw || histogramCanvas.height !== hh) {
           histogramCanvas.width = Math.max(10, hw);
           histogramCanvas.height = Math.max(10, hh);
