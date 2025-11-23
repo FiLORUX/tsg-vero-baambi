@@ -22,59 +22,64 @@
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
     header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
     h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
-    /* Loudness Radar Panel (RTW/TC style) */
+    /* Loudness Radar Panel (RTW/TC style) - Responsiv layout */
     .loudnessRadarModule {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  justify-content: flex-start;
-  height: 100%;
-  gap: 2.5vw;
-  min-height: 0;
-  position: relative;
-  min-width: 0;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+      min-height: 0;
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
     }
     .loudnessRadarModule .canvasPad {
-  flex: 1 1 0;
-  min-width: 180px;
-  max-width: 420px;
-  aspect-ratio: 1/1;
-  margin: 0;
-  background: none;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
+      flex: 1 1 180px;
+      min-width: 100px;
+      max-width: min(50%, 340px);
+      aspect-ratio: 1/1;
+      margin: 0;
+      background: none;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-height: 0;
     }
     #loudnessRadar {
       width: 100%;
-      height: auto;
+      height: 100%;
       aspect-ratio: 1/1;
       background: #181c20;
       border-radius: 50%;
       border: 2px solid var(--outline);
       box-shadow: 0 4px 24px rgba(0,0,0,0.25);
       display: block;
-      max-width: 340px;
-      min-width: 120px;
-      min-height: 120px;
+      max-width: 100%;
+      min-width: 80px;
+      min-height: 80px;
     }
     .r128-subpanel {
-  flex: 1 1 220px;
-  min-width: 200px;
-  max-width: 320px;
-  background: rgba(20,22,24,0.92);
-  border-radius: 10px;
-  border: 1px solid var(--outline);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
-  padding: 12px 16px 10px 16px;
-  margin-top: 0;
-  font-size: 15px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  justify-content: flex-start;
+      flex: 1 1 180px;
+      min-width: 140px;
+      max-width: 320px;
+      background: rgba(20,22,24,0.92);
+      border-radius: 10px;
+      border: 1px solid var(--outline);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+      padding: 10px 12px 8px 12px;
+      margin-top: 0;
+      font-size: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      justify-content: flex-start;
+      overflow: hidden;
+      min-height: 0;
     }
     .r128-subpanel header {
   font-size: 13px;
@@ -87,29 +92,40 @@
   gap: 8px;
     }
 
-    @container (max-width: 420px) {
-      .loudnessRadarModule {
-        flex-direction: column;
-        align-items: center;
-          /* LUFS value in radar center */
-        }
-        .loudnessRadarModule .canvasPad .radar-lufs-value {
-          position: absolute;
-          left: 0; right: 0; top: 0; bottom: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          pointer-events: none;
-          font-size: clamp(2.2rem, 6vw, 4.5rem);
-          font-weight: 800;
-          color: var(--cyan);
-          text-shadow: 0 2px 12px #000, 0 0 2px #69bfff;
-          letter-spacing: 0.5px;
-          z-index: 2;
-      }
-      .loudnessRadarModule .canvasPad { max-width: 180px; }
-      #loudnessRadar { max-width: 180px; min-width: 80px; min-height: 80px; }
-      .r128-subpanel { width: 100%; }
+    /* LUFS value overlay i radar center */
+    .loudnessRadarModule .canvasPad .radar-lufs-value {
+      position: absolute;
+      left: 0; right: 0; top: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      font-size: clamp(1.2rem, 4vw, 2.5rem);
+      font-weight: 800;
+      color: var(--cyan);
+      text-shadow: 0 2px 12px #000, 0 0 2px #69bfff;
+      letter-spacing: 0.5px;
+      z-index: 2;
+    }
+
+    /* R128 värden - responsiva */
+    .r128 .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .r128 .big {
+      font-size: clamp(16px, 3vw, 26px);
+      font-weight: 800;
+      letter-spacing: .3px;
+      white-space: nowrap;
+    }
+    .r128 small {
+      color: #a9b2c7;
+      font-size: clamp(10px, 1.5vw, 12px);
+      white-space: nowrap;
     }
 
     .wrap{
@@ -371,11 +387,8 @@
     .overlay{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36;text-align:left}
     .gonio-overlay{left:auto;right:10px}
 
-    /* R128 – sifferpanel */
-    .r128{display:grid;grid-template-columns:1fr;gap:8px}
-    .r128 .row{justify-content:space-between}
-    .r128 .big{font-size:26px;font-weight:800;letter-spacing:.3px}
-    .r128 small{color:#a9b2c7}
+    /* R128 – sifferpanel (huvudregler finns ovan) */
+    .r128{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
 
     .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
     .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
