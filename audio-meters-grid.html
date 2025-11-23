@@ -579,7 +579,8 @@
           <span class="badge" id="genBadge">400 Hz · −18 dBFS peak (0 dBu / 0 PPM · EBU alignment)</span>
         </div>
         <div class="row" style="margin-top:6px;align-items:center">
-          <label><input type="checkbox" id="muteLeft"> Mute left 0.5 s every 1.5 s</label>
+          <label><input type="checkbox" id="muteLeft"> EBU stereo-ID (L pulsed 250 ms / 3 s)</label>
+          <span class="tiny" style="margin-left:8px;opacity:0.7">ITU-R BR.1385 / EBU R49</span>
         </div>
         <div class="row" style="margin-top:6px;align-items:center">
           <label>Generator monitor:</label>
@@ -2142,9 +2143,17 @@
   // ------- Loop -------
   let startTs=performance.now(); let leftMuteTimer=0;
   function loop(){
+    // EBU Stereo-ID (ITU-R BR.1385 / EBU R49):
+    // Standard broadcast line-up tone med stereo-identifikation:
+    // - Höger kanal: kontinuerlig ton
+    // - Vänster kanal: 250 ms avbrott ("pulse") var 3:e sekund
+    // Källa: EBU R49, ITU-R BR.1385, Grass Valley 12G test pattern spec
     if (muteLeft.checked && leftGain){
-      leftMuteTimer += 16.7; const period=1500, win=500;
-      const on = (leftMuteTimer % period) >= win; const target = on ? 1 : 0;
+      leftMuteTimer += 16.7;
+      const EBU_PERIOD_MS = 3000;  // 3 sekunder mellan pulser
+      const EBU_MUTE_MS = 250;     // 250 ms mute/avbrott på vänster
+      const on = (leftMuteTimer % EBU_PERIOD_MS) >= EBU_MUTE_MS;
+      const target = on ? 1 : 0;
       if (leftGain.gain.value !== target){ leftGain.gain.setValueAtTime(target, ac.currentTime) }
     }
     layoutXY(); updatePPM(); drawXY(); drawCorr(); drawDBFS(); drawTruePeak(); updateR128();
