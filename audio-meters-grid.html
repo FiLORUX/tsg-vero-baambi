@@ -1262,6 +1262,39 @@
 
   // =====================================================
   // STEREO ANALYSIS ENGINE
+  // =====================================================
+  // TransitionGuard - Blanking during signal transitions
+  // Prevents visual artifacts in goniometer during EBU pulse edges
+  // =====================================================
+  const TransitionGuard = (function() {
+    'use strict';
+
+    let blankFrames = 0;
+    const BLANK_DURATION = 3; // Frames to skip after transition
+
+    return {
+      // Call when signal state changes (EBU pulse on/off)
+      trigger() {
+        blankFrames = BLANK_DURATION;
+      },
+
+      // Check if rendering should proceed (does NOT decrement counter)
+      shouldRender() {
+        return blankFrames === 0;
+      },
+
+      // Call once per frame in render loop to decrement counter
+      tick() {
+        if (blankFrames > 0) blankFrames--;
+      },
+
+      // Check if currently blanking (for debug/status)
+      isBlanking() {
+        return blankFrames > 0;
+      }
+    };
+  })();
+
   // Computes: Stereo Width Histogram, M/S Levels, Rotation Angle
   // =====================================================
   const StereoAnalysisEngine = (function() {
@@ -1685,19 +1718,27 @@
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
     const fade = 0.10; xyCtx.fillStyle = `rgba(13,15,17,${fade})`; xyCtx.fillRect(0,0,w,h);
-    analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    let n=Math.min(bufL.length,bufR.length), mL=0,mR=0; for(let i=0;i<n;i++){ mL+=bufL[i]; mR+=bufR[i]; } mL/=n; mR/=n;
-    xyCtx.globalAlpha=0.85; xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.85)'; const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
-    let prevX=null, prevY=null;
-    for(let i=0;i<n;i+=2){
-      const L=(bufL[i]-mL) * VECTORSCOPE_GAIN, R=(bufR[i]-mR) * VECTORSCOPE_GAIN;
-      // Centrera och skala: -1..1 till canvas-koordinater
-      const x = (L * w/2) + w/2;
-      const y = h - ((R * h/2) + h/2);
-      if(prevX!==null){ xyCtx.globalAlpha=.35; xyCtx.strokeStyle='rgba(105,191,255,.35)'; xyCtx.beginPath(); xyCtx.moveTo(prevX,prevY); xyCtx.lineTo(x,y); xyCtx.stroke(); }
-      xyCtx.globalAlpha=.85; xyCtx.fillRect(x,y,px,px); prevX=x; prevY=y;
+
+    // TransitionGuard: Skip sample rendering during EBU pulse transitions
+    // This prevents visual artifacts (ellipses) from block-boundary timing differences
+    if (TransitionGuard.shouldRender()) {
+      analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
+      let n=Math.min(bufL.length,bufR.length), mL=0,mR=0; for(let i=0;i<n;i++){ mL+=bufL[i]; mR+=bufR[i]; } mL/=n; mR/=n;
+      xyCtx.globalAlpha=0.85; xyCtx.globalCompositeOperation='lighter'; xyCtx.fillStyle='rgba(105,191,255,.85)'; const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
+      let prevX=null, prevY=null;
+      for(let i=0;i<n;i+=2){
+        const L=(bufL[i]-mL) * VECTORSCOPE_GAIN, R=(bufR[i]-mR) * VECTORSCOPE_GAIN;
+        // Centrera och skala: -1..1 till canvas-koordinater
+        const x = (L * w/2) + w/2;
+        const y = h - ((R * h/2) + h/2);
+        if(prevX!==null){ xyCtx.globalAlpha=.35; xyCtx.strokeStyle='rgba(105,191,255,.35)'; xyCtx.beginPath(); xyCtx.moveTo(prevX,prevY); xyCtx.lineTo(x,y); xyCtx.stroke(); }
+        xyCtx.globalAlpha=.85; xyCtx.fillRect(x,y,px,px); prevX=x; prevY=y;
+      }
+      xyCtx.globalCompositeOperation='source-over';
     }
-    xyCtx.globalCompositeOperation='source-over'; xyCtx.globalAlpha=1; xyCtx.strokeStyle = '#3a4855'; xyCtx.lineWidth = 1;
+
+    // Grid lines always drawn (not affected by blanking)
+    xyCtx.globalAlpha=1; xyCtx.strokeStyle = '#3a4855'; xyCtx.lineWidth = 1;
     xyCtx.beginPath();
     xyCtx.moveTo(w/2,0); xyCtx.lineTo(w/2,h);
     xyCtx.moveTo(0,h/2); xyCtx.lineTo(w,h/2);
@@ -1714,9 +1755,14 @@
   }
   let corrHold=0, corrUp=.25, corrDn=.06;
   function drawCorr(){
-    analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    const cRaw = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
-    corrHold = cRaw>corrHold ? corrHold + corrUp*(cRaw-corrHold) : corrHold + corrDn*(cRaw-corrHold);
+    // TransitionGuard: Skip sample reading during EBU pulse transitions
+    // This prevents corrupted correlation values from transition artifacts
+    if (TransitionGuard.shouldRender()) {
+      analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
+      const cRaw = Math.max(-1, Math.min(1, corrNow(bufL,bufR)));
+      corrHold = cRaw>corrHold ? corrHold + corrUp*(cRaw-corrHold) : corrHold + corrDn*(cRaw-corrHold);
+    }
+    // Always render the current held value (even during blanking)
 
     // Uppdatera canvas-storlek baserat på faktisk elementstorlek
     const dpr = window.devicePixelRatio || 1;
@@ -2587,7 +2633,12 @@
   // För sinus: Amplitude = 10^(-18/20) ≈ 0.126 → Peak = -18 dBFS
   // RMS blir då -21 dBFS (3 dB lägre pga crest factor √2)
   const SINE_A_FOR_MINUS18_PEAK = Math.pow(10, -18/20); // ≈ 0.126
-  let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null; let monitorMuted=false;
+
+  // Two-oscillator architecture for sample-exact EBU Stereo-ID
+  // L and R are separate oscillators - no gain-based muting artifacts
+  let genOscL=null, genOscR=null, genGainL=null, genGainR=null, merger=null, genMonGain=null, genSplit=null;
+  let monitorMuted=false;
+  let ebuModeActive=false; // Track if EBU Stereo-ID is running
 
   // Generator presets (frekvens → badge-text)
   const genPresets = {
@@ -2606,38 +2657,53 @@
     currentGenFreq = freq;
     genBadgeEl.textContent = genPresets[freq] || genPresets['400'];
     // Om generatorn redan kör, uppdatera frekvensen live
-    if (genOsc) {
-      genOsc.frequency.value = freq;
-    }
+    if (genOscL) genOscL.frequency.value = freq;
+    if (genOscR) genOscR.frequency.value = freq;
   });
 
   async function startGenerator(){
     await ac.resume();
-    if(genOsc) return;
+    if(genOscR) return; // Already running (R is always on when generator active)
 
-    genOsc = ac.createOscillator(); genOsc.type='sine'; genOsc.frequency.value=currentGenFreq;
-    genGain = ac.createGain(); genGain.gain.value=SINE_A_FOR_MINUS18_PEAK; // Peak vid -18 dBFS (0 dBu)
-    leftGain = ac.createGain(); rightGain = ac.createGain(); leftGain.gain.value=1; rightGain.gain.value=1;
+    // Two-oscillator architecture: L and R are independent
+    // This eliminates gain-based muting artifacts for EBU Stereo-ID
+    genGainL = ac.createGain(); genGainL.gain.value = SINE_A_FOR_MINUS18_PEAK;
+    genGainR = ac.createGain(); genGainR.gain.value = SINE_A_FOR_MINUS18_PEAK;
+
     merger = ac.createChannelMerger(2);
-    genOsc.connect(genGain); genGain.connect(leftGain); genGain.connect(rightGain);
-    leftGain.connect(merger,0,0); rightGain.connect(merger,0,1);
+    genGainL.connect(merger, 0, 0);
+    genGainR.connect(merger, 0, 1);
 
     genMonGain = ac.createGain(); genMonGain.gain.value = 0; // monitor muted default
     merger.connect(genMonGain).connect(ac.destination);
 
-    const genSplit = ac.createChannelSplitter(2);
+    genSplit = ac.createChannelSplitter(2);
     merger.connect(genSplit);
-    genSplit.connect(mixL,0); genSplit.connect(mixR,1);
-    genSplit.connect(kHP_L,0); genSplit.connect(kHP_R,1);
+    genSplit.connect(mixL, 0); genSplit.connect(mixR, 1);
+    genSplit.connect(kHP_L, 0); genSplit.connect(kHP_R, 1);
 
-    genOsc.start();
+    // Create and start both oscillators
+    genOscL = ac.createOscillator(); genOscL.type = 'sine'; genOscL.frequency.value = currentGenFreq;
+    genOscR = ac.createOscillator(); genOscR.type = 'sine'; genOscR.frequency.value = currentGenFreq;
+    genOscL.connect(genGainL);
+    genOscR.connect(genGainR);
+    genOscL.start();
+    genOscR.start();
+
+    ebuModeActive = false;
     btnTone.textContent='Stop tone'; dbgGen.textContent='yes';
     btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; monitorMuted = false;
   }
   async function stopGenerator(){
-    try{ genOsc && genOsc.stop() }catch{}
-    [genGain,leftGain,rightGain,merger,genMonGain].forEach(n=>{ try{ n && n.disconnect && n.disconnect() }catch{} });
-    genOsc=null; genGain=null; leftGain=null; rightGain=null; merger=null; genMonGain=null; btnTone.textContent='Start/Stop tone'; dbgGen.textContent='no';
+    try { genOscL && genOscL.stop(); } catch {}
+    try { genOscR && genOscR.stop(); } catch {}
+    [genGainL, genGainR, merger, genMonGain, genSplit].forEach(n => {
+      try { n && n.disconnect && n.disconnect(); } catch {}
+    });
+    genOscL = null; genOscR = null; genGainL = null; genGainR = null;
+    merger = null; genMonGain = null; genSplit = null;
+    ebuModeActive = false;
+    btnTone.textContent = 'Start/Stop tone'; dbgGen.textContent = 'no';
   }
   function toggleGenMonitorMute(){
     if(!genMonGain) return;
@@ -3105,6 +3171,7 @@
   let startTs = performance.now();
   let leftMuteTimer = 0;
   let lastMeasureTime = 0;
+  let ebuPrevState = true; // Track previous L state for transition detection
   const MEASURE_INTERVAL_MS = 50; // 20 Hz measurement rate (sufficient for 400ms LUFS window)
 
   /**
@@ -3117,6 +3184,30 @@
   }
 
   /**
+   * EBU Stereo-ID: Start L oscillator (creates new instance)
+   * Oscillators can only be started once, so we create fresh each time
+   */
+  function ebuStartL() {
+    if (genOscL) return; // Already running
+    if (!genGainL) return; // Generator not active
+    genOscL = ac.createOscillator();
+    genOscL.type = 'sine';
+    genOscL.frequency.value = currentGenFreq;
+    genOscL.connect(genGainL);
+    genOscL.start();
+  }
+
+  /**
+   * EBU Stereo-ID: Stop L oscillator
+   */
+  function ebuStopL() {
+    if (!genOscL) return;
+    try { genOscL.stop(); } catch {}
+    try { genOscL.disconnect(); } catch {}
+    genOscL = null;
+  }
+
+  /**
    * Measurement Loop - Runs via setInterval, NOT throttled by Chrome in background tabs
    * Critical for: LUFS accumulation, radar history, stereo analysis
    */
@@ -3125,15 +3216,29 @@
     const dt = now - lastMeasureTime;
     lastMeasureTime = now;
 
-    // EBU Stereo-ID pulse timing (needs accurate timing even in background)
-    if (muteLeft.checked && leftGain) {
+    // EBU Stereo-ID pulse timing - oscillator start/stop (sample-exact, no gain artifacts)
+    if (muteLeft.checked && genGainL) {
+      ebuModeActive = true;
       leftMuteTimer += dt;
       const EBU_PERIOD_MS = 3000;
       const EBU_MUTE_MS = 250;
-      const on = (leftMuteTimer % EBU_PERIOD_MS) >= EBU_MUTE_MS;
-      const target = on ? 1 : 0;
-      if (leftGain.gain.value !== target) {
-        leftGain.gain.setValueAtTime(target, ac.currentTime);
+      const shouldBeOn = (leftMuteTimer % EBU_PERIOD_MS) >= EBU_MUTE_MS;
+
+      // Detect state transition and trigger blanking
+      if (shouldBeOn !== ebuPrevState) {
+        TransitionGuard.trigger();
+        if (shouldBeOn) {
+          ebuStartL();
+        } else {
+          ebuStopL();
+        }
+        ebuPrevState = shouldBeOn;
+      }
+    } else if (ebuModeActive && !muteLeft.checked) {
+      // EBU mode was just disabled - ensure L is running
+      ebuModeActive = false;
+      if (!genOscL && genGainL) {
+        ebuStartL();
       }
     }
 
@@ -3174,6 +3279,9 @@
 
     // Uptime display
     uptimeEl.textContent = ((performance.now() - startTs) / 1000).toFixed(1);
+
+    // Decrement TransitionGuard blanking counter (once per frame)
+    TransitionGuard.tick();
 
     requestAnimationFrame(renderLoop);
   }
@@ -3233,7 +3341,7 @@
   visibilityObserver.observe(loudnessCard);
 
   // ------- Bind -------
-  btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOsc) await startGenerator(); else await stopGenerator(); };
+  btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOscR) await startGenerator(); else await stopGenerator(); };
   btnMonMute.onclick = toggleGenMonitorMute; btnSysMonMute.onclick = toggleSysMonitorMute;
 
   // ------- Boot: ingen auto-ton, allt muted default -------
