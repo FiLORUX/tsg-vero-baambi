@@ -49,7 +49,25 @@
     /* Phase correlation widget under goniometer */
     .corrWidget {
       flex: 0 0 auto !important;
-      min-height: 60px;
+      height: 70px;
+      padding: 6px 8px;
+    }
+    .corrWidget .corrWrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      width: 100%;
+    }
+    .corrWidget .corrWrap .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    .corrWidget canvas {
+      position: absolute;
+      inset: 0;
+      width: 100% !important;
+      height: 100% !important;
     }
 
     /* Right column: L/R Balance, Rotation, M/S, Histogram (stacked) */
@@ -881,9 +899,9 @@
                 <div class="overlay">Mono = 45°</div>
               </div>
               <div class="phaseWidget corrWidget">
+                <div class="widgetLabel">Phase Correlation <span style="float:right">ρ = <b id="corrVal">+-.--</b></span></div>
                 <div class="corrWrap">
                   <div class="canvasPad"><canvas id="corr"></canvas></div>
-                  <div class="overlay">ρ = <b id="corrVal">+-.--</b></div>
                 </div>
               </div>
             </div>
