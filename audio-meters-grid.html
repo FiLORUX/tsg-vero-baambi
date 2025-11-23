@@ -222,11 +222,7 @@
       transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
                   opacity 0.2s ease;
     }
-
-    /* Visa toggle när musen är NÅGONSTANS på sidan (båda states) */
-    body:hover .collapse-toggle {
-      opacity: 1;
-    }
+    /* Toggle visas/göms via JavaScript baserat på musrörelse */
     
     .collapse-toggle:hover {
       background: linear-gradient(135deg, rgba(147, 197, 253, 0.2), rgba(34, 211, 238, 0.1));
@@ -2146,6 +2142,18 @@
         sidebarToggle.click();
       }
     });
+
+    // Visa toggle vid musrörelse, göm efter 2s inaktivitet
+    let hideToggleTimeout;
+    const showToggle = () => {
+      sidebarToggle.style.opacity = '1';
+      clearTimeout(hideToggleTimeout);
+      hideToggleTimeout = setTimeout(() => {
+        sidebarToggle.style.opacity = '0';
+      }, 2000);
+    };
+    document.addEventListener('mousemove', showToggle);
+    document.addEventListener('mouseenter', showToggle);
   }
 
   // ------- Drag & Drop System -------
