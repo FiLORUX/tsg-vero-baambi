@@ -156,7 +156,9 @@
 
     /* Animerade transitions - läggs till efter page load */
     .sidebar-ready .wrap {
-      transition: grid-template-columns 0.35s ease-out;
+      transition: grid-template-columns 0.35s ease-out,
+                  gap 0.35s ease-out,
+                  padding-left 0.35s ease-out;
     }
 
     .sidebar-ready .sidebar-content {
@@ -164,9 +166,11 @@
                   opacity 0.25s ease-out;
     }
 
-    /* Collapsed state - 0px så mätarna får full bredd */
+    /* Collapsed state - ta bort sidebar helt */
     .wrap.sidebar-collapsed {
       grid-template-columns: 0px 1fr;
+      gap: 0;
+      padding-left: 20px; /* behåll samma marginal som höger */
     }
 
     .sidebar-collapsed .sidebar-content {
@@ -178,6 +182,8 @@
     /* Initial collapsed state (ingen animation vid page load) */
     .sidebar-start-collapsed .wrap {
       grid-template-columns: 0px 1fr;
+      gap: 0;
+      padding-left: 20px;
     }
 
     .sidebar-start-collapsed .sidebar-content {
@@ -255,7 +261,9 @@
     .collapse-toggle:hover svg {
       fill: rgba(147, 197, 253, 0.9);
     }
-    .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0;overflow:hidden}
+    .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0}
+    /* Sidebar cards får scrolla vid overflow */
+    .sidebar-content .card{overflow-y:auto;overflow-x:hidden}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
 
     .visning{
