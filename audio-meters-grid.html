@@ -568,10 +568,18 @@
 
       <section class="card leftBottom">
         <h2>Internal test tone generator</h2>
-        <div class="row" style="align-items:center">
+        <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
           <button id="btnTone">Start/Stop tone</button>
+          <select id="genPreset" style="padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+            <option value="400" selected>400 Hz · EBU broadcast line-up</option>
+            <option value="1000">1 kHz · digital test tone (AES-style)</option>
+            <option value="997">997 Hz · FFT-optimised test tone</option>
+            <option value="440">440 Hz · musical A (non-broadcast)</option>
+          </select>
+          <span class="badge" id="genBadge">400 Hz · −18 dBFS peak (0 dBu / 0 PPM · EBU alignment)</span>
+        </div>
+        <div class="row" style="margin-top:6px;align-items:center">
           <label><input type="checkbox" id="muteLeft"> Mute left 0.5 s every 1.5 s</label>
-          <span class="badge">440 Hz · −18 dBFS peak (≈ −21 dBFS RMS)</span>
         </div>
         <div class="row" style="margin-top:6px;align-items:center">
           <label>Generator monitor:</label>
@@ -1681,11 +1689,33 @@
   const SINE_A_FOR_MINUS18_PEAK = Math.pow(10, -18/20); // ≈ 0.126
   let genOsc=null, genGain=null, leftGain=null, rightGain=null, merger=null, genMonGain=null; let monitorMuted=false;
 
+  // Generator presets (frekvens → badge-text)
+  const genPresets = {
+    '400':  '400 Hz · −18 dBFS peak (0 dBu / 0 PPM · EBU alignment)',
+    '1000': '1 kHz · −18 dBFS peak (digital test tone · AES-style)',
+    '997':  '997 Hz · −18 dBFS peak (FFT-optimised test tone)',
+    '440':  '440 Hz · −18 dBFS peak (musical A · non-broadcast)'
+  };
+  const genPresetEl = document.getElementById('genPreset');
+  const genBadgeEl = document.getElementById('genBadge');
+  let currentGenFreq = 400; // Standard: 400 Hz (EBU broadcast line-up)
+
+  // Uppdatera badge och frekvens vid preset-ändring
+  genPresetEl.addEventListener('change', () => {
+    const freq = parseInt(genPresetEl.value);
+    currentGenFreq = freq;
+    genBadgeEl.textContent = genPresets[freq] || genPresets['400'];
+    // Om generatorn redan kör, uppdatera frekvensen live
+    if (genOsc) {
+      genOsc.frequency.value = freq;
+    }
+  });
+
   async function startGenerator(){
     await ac.resume();
     if(genOsc) return;
 
-    genOsc = ac.createOscillator(); genOsc.type='sine'; genOsc.frequency.value=440;
+    genOsc = ac.createOscillator(); genOsc.type='sine'; genOsc.frequency.value=currentGenFreq;
     genGain = ac.createGain(); genGain.gain.value=SINE_A_FOR_MINUS18_PEAK; // Peak vid -18 dBFS (0 dBu)
     leftGain = ac.createGain(); rightGain = ac.createGain(); leftGain.gain.value=1; rightGain.gain.value=1;
     merger = ac.createChannelMerger(2);
