@@ -684,29 +684,35 @@
 (async function(){
 
   // =====================================================
-  // LOUDNESS RADAR MODULE (RTW/TC Electronic Style)
+  // LOUDNESS RADAR MODULE (Clarity-style)
   // =====================================================
   const LoudnessRadar = (function() {
     'use strict';
-    
+
+    // ----- R A D A R  S C A L E  (Clarity-lik) -----
+    // 10 ringar, 6 dB mellanrum: -5, -11, -17, -23, -29, -35, -41, -47, -53, -59
+    const RADAR_MAX_LUFS = -5;
+    const RADAR_MIN_LUFS = -59;
+    const RADAR_RING_STEP = 6;
+    const RADAR_TARGET_LUFS = -23; // EBU R128 broadcast target
+
     function lufsToRadius(lufs, rOuter, rInner) {
-      const minLufs = -60;
-      const maxLufs = -9;
-      const clamped = Math.max(minLufs, Math.min(maxLufs, lufs));
-      const normalized = (clamped - minLufs) / (maxLufs - minLufs);
-      return rInner + (rOuter - rInner) * normalized;
+      const clamped = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, lufs));
+      const t = (clamped - RADAR_MIN_LUFS) / (RADAR_MAX_LUFS - RADAR_MIN_LUFS); // 0..1
+      // Yttre ring = t=1 ≈ "loud", inre = t=0 ≈ "tyst" – samma känsla som Clarity
+      return rInner + (1 - t) * (rOuter - rInner);
     }
-    
-    function getLoudnessColor(lufs) {
-      if (lufs >= -9)  return '#ff5a63';
-      if (lufs >= -14) return '#ff9a2d';
-      if (lufs >= -18) return '#ffde58';
-      if (lufs >= -23) return '#58d38c';
-      if (lufs >= -30) return '#69bfff';
-      if (lufs >= -42) return '#5a7a9a';
-      return '#3a4855';
+
+    // Clarity-style färgzoner
+    function radarColorForLufs(lufs) {
+      if (lufs > -11) return '#ff4335';   // röd – för högt
+      if (lufs > -17) return '#ff9a2d';   // orange
+      if (lufs > -23) return '#ffd94a';   // gul – runt target
+      if (lufs > -29) return '#88d65c';   // ljusgrön
+      if (lufs > -41) return '#2fbf8f';   // turkos/grön
+      return '#1f2933';                   // mörk bakgrund för låg nivå
     }
-    
+
     function drawRadarBackground(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       const gradient = ctx.createRadialGradient(cx, cy, rInner, cx, cy, rOuter);
@@ -728,51 +734,62 @@
       ctx.stroke();
       ctx.restore();
     }
-    
+
+    // Clarity-style grid med -23 target-ring
     function drawRadarGrid(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
-      const refLevels = [
-        { lufs: -9,  color: '#ff9a2d', alpha: 0.5 },
-        { lufs: -18, color: '#69bfff', alpha: 0.7 },
-        { lufs: -23, color: '#58d38c', alpha: 0.6 },
-        { lufs: -30, color: '#6b7280', alpha: 0.4 }
-      ];
-      refLevels.forEach(ref => {
-        const r = lufsToRadius(ref.lufs, rOuter, rInner);
+      ctx.lineCap = 'round';
+
+      // Ringarna (var 6 dB)
+      for (let lu = RADAR_MIN_LUFS; lu <= RADAR_MAX_LUFS; lu += RADAR_RING_STEP) {
+        const r = lufsToRadius(lu, rOuter, rInner);
         ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-        ctx.strokeStyle = ref.color;
-        ctx.lineWidth = (ref.lufs === -23) ? 2 : 1;
-        ctx.globalAlpha = ref.alpha;
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 0.2;
-      ctx.strokeStyle = '#3a4855';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 12; i++) {
-        const angle = (i * 30) * Math.PI / 180;
-        ctx.beginPath();
-        ctx.moveTo(cx + rInner * Math.cos(angle), cy + rInner * Math.sin(angle));
-        ctx.lineTo(cx + rOuter * Math.cos(angle), cy + rOuter * Math.sin(angle));
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+
+        if (lu === RADAR_TARGET_LUFS) {
+          // "Target"-ringen (-23 LUFS) – streckad, blå, starkare
+          ctx.strokeStyle = '#40a0ff';
+          ctx.setLineDash([4, 4]);
+          ctx.lineWidth = 2.0;
+        } else {
+          ctx.strokeStyle = '#4b5563';
+          ctx.setLineDash([2, 6]);
+          ctx.lineWidth = 1.0;
+        }
         ctx.stroke();
       }
+
+      // Spokes var 30° (12 "klockslag")
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#374151';
+      ctx.lineWidth = 1.0;
+      for (let deg = 0; deg < 360; deg += 30) {
+        const a = (deg - 90) * Math.PI / 180;   // 0° = kl 12
+        const r1 = rInner * 0.6;
+        const r2 = rOuter;
+        ctx.beginPath();
+        ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
+        ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a));
+        ctx.stroke();
+      }
+
       ctx.restore();
     }
-    
+
     function drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge) {
       ctx.save();
       const now = Date.now();
       const segmentCount = history.length;
-      const anglePerSegment = (2 * Math.PI) / segmentCount;
+      const anglePerSegment = (2 * Math.PI) / Math.max(segmentCount, 60);
       history.forEach((point, index) => {
         const age = now - point.t;
         if (age < 0 || age > maxAge) return;
         const normalizedAge = age / maxAge;
         const startAngle = (2 * Math.PI * (1 - normalizedAge)) - Math.PI / 2;
         const endAngle = startAngle + anglePerSegment;
-        const lufs = Math.max(-60, Math.min(-9, point.v));
+        const lufs = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, point.v));
         const r = lufsToRadius(lufs, rOuter, rInner);
-        const color = getLoudnessColor(lufs);
+        const color = radarColorForLufs(lufs);
         const opacity = 0.85 * (1 - normalizedAge * 0.3);
         ctx.beginPath();
         ctx.moveTo(cx, cy);
@@ -800,47 +817,59 @@
       }
       ctx.restore();
     }
-    
+
+    // Clarity-style label-positioner
+    const RADAR_LABELS = [
+      { lufs: -23, angle:   0 },   // överst (target)
+      { lufs: -17, angle:  30 },
+      { lufs: -11, angle:  60 },
+      { lufs:  -5, angle:  90 },
+      { lufs: -29, angle: 330 },
+      { lufs: -35, angle: 300 },
+      { lufs: -41, angle: 270 },
+      { lufs: -47, angle: 240 },
+      { lufs: -53, angle: 210 },
+      { lufs: -59, angle: 180 }
+    ];
+
     function drawRadarLabels(ctx, cx, cy, rOuter, rInner, canvasWidth) {
       ctx.save();
-      const fontSize = Math.max(10, Math.floor(canvasWidth * 0.028));
-      ctx.font = `600 ${fontSize}px ui-sans-serif, Arial`;
+      const fontSize = Math.max(9, Math.floor(canvasWidth * 0.024));
+      ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const labels = [
-        { lufs: -9,  angle: 45,  color: '#ff9a2d' },
-        { lufs: -18, angle: 0,   color: '#69bfff' },
-        { lufs: -23, angle: 315, color: '#58d38c' },
-        { lufs: -30, angle: 225, color: '#a9b2c7' },
-        { lufs: -42, angle: 180, color: '#6b7280' }
-      ];
-      labels.forEach(label => {
-        const angleRad = (label.angle - 90) * Math.PI / 180;
-        const labelRadius = rOuter + fontSize * 1.5;
-        const x = cx + labelRadius * Math.cos(angleRad);
-        const y = cy + labelRadius * Math.sin(angleRad);
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = label.color;
-        ctx.fillText(`${label.lufs}`, x, y);
+      ctx.fillStyle = '#d1d5db';
+
+      const rText = rOuter + fontSize * 1.2;
+
+      RADAR_LABELS.forEach(lbl => {
+        const a = (lbl.angle - 90) * Math.PI / 180;
+        const x = cx + rText * Math.cos(a);
+        const y = cy + rText * Math.sin(a);
+        // Highlight target (-23)
+        if (lbl.lufs === RADAR_TARGET_LUFS) {
+          ctx.fillStyle = '#40a0ff';
+          ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+        } else {
+          ctx.fillStyle = '#9ca3af';
+          ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
+        }
+        ctx.fillText(lbl.lufs.toString(), x, y);
       });
-      ctx.shadowBlur = 0;
-      ctx.font = `700 ${fontSize * 1.2}px ui-sans-serif, Arial`;
-      ctx.fillStyle = '#e8eef9';
-      ctx.fillText('LUFS', cx, cy + rOuter + fontSize * 3);
+
       ctx.restore();
     }
-    
+
     function drawCenterLUFS(ctx, cx, cy, rInner, momentaryLufs) {
       ctx.save();
-      const fontSize = Math.max(16, rInner * 0.4);
+      const fontSize = Math.max(14, rInner * 0.35);
       ctx.font = `800 ${fontSize}px ui-sans-serif, Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (typeof momentaryLufs === 'number' && isFinite(momentaryLufs)) {
-        const color = getLoudnessColor(momentaryLufs);
+        const color = radarColorForLufs(momentaryLufs);
         ctx.shadowColor = color;
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 10;
         ctx.fillStyle = color;
         ctx.fillText(momentaryLufs.toFixed(1), cx, cy);
       } else {
@@ -849,23 +878,23 @@
       }
       ctx.restore();
     }
-    
+
     function drawEmptyRadar(ctx, w, h) {
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.46;
-      const rInner = rOuter * 0.15;
+      const rOuter = Math.min(w, h) * 0.42;
+      const rInner = rOuter * 0.12;
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
       ctx.save();
-      ctx.font = '600 14px ui-sans-serif, Arial';
+      ctx.font = '600 12px ui-sans-serif, Arial';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#6b7280';
       ctx.fillText('Waiting for audio...', cx, cy);
       ctx.restore();
     }
-    
+
     function render(canvas, ctx, history, momentaryLufs, maxSeconds) {
       const w = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
       const h = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
@@ -877,8 +906,8 @@
       }
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.46;
-      const rInner = rOuter * 0.15;
+      const rOuter = Math.min(w, h) * 0.42;
+      const rInner = rOuter * 0.12;
       const maxAge = maxSeconds * 1000;
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
@@ -886,7 +915,7 @@
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
       drawCenterLUFS(ctx, cx, cy, rInner, momentaryLufs);
     }
-    
+
     return { render: render };
   })();
   
