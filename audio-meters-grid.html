@@ -1867,10 +1867,12 @@
 
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
+    // Positiv balance (L > R) → bar åt VÄNSTER (mot L-etiketten)
+    // Negativ balance (R > L) → bar åt HÖGER (mot R-etiketten)
     if (monoDevHold >= 0) {
-      ctx.fillRect(centerX, barY + 2, devW, barH - 4);
-    } else {
       ctx.fillRect(centerX - devW, barY + 2, devW, barH - 4);
+    } else {
+      ctx.fillRect(centerX, barY + 2, devW, barH - 4);
     }
     ctx.globalAlpha = 1;
 
