@@ -816,10 +816,10 @@
         </div>
         <div class="row" style="align-items:center">
           <label>Line-up (Chrome, dB):</label>
-          <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="0" />
-          <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="0.0" />
-          <span class="tiny" id="sysTrimOut">0.0 dB</span>
-          <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0 dB</button>
+          <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
+          <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" />
+          <span class="tiny" id="sysTrimOut">-18.0 dB</span>
+          <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18 dB</button>
         </div>
         <div class="kv" id="info">
           <div><small>Source</small><span id="srcKind">–</span></div>
@@ -2491,8 +2491,26 @@
 
   // ------- Capture -------
   let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true, sysTrimNode=null; let sysTrimDb = 0;
-  function setSysTrim(dB){ sysTrimDb = clamp(parseFloat(dB)||0, -48, 24); sysTrimRange.value=sysTrimDb; sysTrimInput.value=sysTrimDb.toFixed(1); sysTrimOut.textContent = sysTrimDb.toFixed(1)+' dB'; if(sysTrimNode){ sysTrimNode.gain.value = dbToGain(sysTrimDb); } }
-  setSysTrim(0); sysTrimRange.addEventListener('input', e=> setSysTrim(e.target.value)); sysTrimInput.addEventListener('change', e=> setSysTrim(e.target.value)); sysTrimInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ setSysTrim(e.target.value); e.target.blur(); }}); sysTrimReset.addEventListener('click', ()=> setSysTrim(0));
+  const SYS_TRIM_DEFAULT = -18; // EBU broadcast standard: -18 dBFS = 0 dBu
+  const SYS_TRIM_STORAGE_KEY = 'tsg_sysTrimDb';
+
+  function setSysTrim(dB, save = true) {
+    sysTrimDb = clamp(parseFloat(dB) || SYS_TRIM_DEFAULT, -48, 24);
+    sysTrimRange.value = sysTrimDb;
+    sysTrimInput.value = sysTrimDb.toFixed(1);
+    sysTrimOut.textContent = sysTrimDb.toFixed(1) + ' dB';
+    if (sysTrimNode) { sysTrimNode.gain.value = dbToGain(sysTrimDb); }
+    if (save) { try { localStorage.setItem(SYS_TRIM_STORAGE_KEY, sysTrimDb.toFixed(1)); } catch(e) {} }
+  }
+
+  // Load from localStorage or use default (-18 dB)
+  const storedSysTrim = localStorage.getItem(SYS_TRIM_STORAGE_KEY);
+  setSysTrim(storedSysTrim !== null ? parseFloat(storedSysTrim) : SYS_TRIM_DEFAULT, false);
+
+  sysTrimRange.addEventListener('input', e => setSysTrim(e.target.value));
+  sysTrimInput.addEventListener('change', e => setSysTrim(e.target.value));
+  sysTrimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setSysTrim(e.target.value); e.target.blur(); } });
+  sysTrimReset.addEventListener('click', () => setSysTrim(SYS_TRIM_DEFAULT));
 
   async function startTabCapture(){
     try{
