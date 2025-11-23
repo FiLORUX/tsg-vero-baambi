@@ -208,24 +208,23 @@
       justify-content: center;
       z-index: 100;
       box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      opacity: 0; /* Gömd som default */
     }
 
-    /* Collapsed state för toggle */
+    /* Collapsed state - annan position */
     .sidebar-collapsed .collapse-toggle,
     .sidebar-start-collapsed .collapse-toggle {
       left: 24px;
-      opacity: 0;
     }
 
-    /* Transition endast när ready */
+    /* Transition */
     .sidebar-ready .collapse-toggle {
       transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-                  opacity 0.3s ease;
+                  opacity 0.2s ease;
     }
 
-    /* Visa toggle när man hovrar NÅGONSTANS på sidan (när collapsed) */
-    .wrap.sidebar-collapsed:hover .collapse-toggle,
-    .sidebar-start-collapsed .wrap:hover .collapse-toggle {
+    /* Visa toggle när musen är NÅGONSTANS på sidan (båda states) */
+    body:hover .collapse-toggle {
       opacity: 1;
     }
     
