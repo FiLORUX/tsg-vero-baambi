@@ -332,12 +332,17 @@
       min-height: 0;
       overflow: hidden;
     }
-    .meter-tabs {
+    .meter-switcher > header {
       display: flex;
-      gap: 4px;
+      justify-content: space-between;
+      align-items: center;
       padding: 8px 12px;
       border-bottom: 1px solid var(--outline);
       flex-shrink: 0;
+    }
+    .meter-tabs {
+      display: flex;
+      gap: 4px;
     }
     .meter-tab {
       background: var(--btn-ghost);
@@ -746,26 +751,29 @@
             </div>
           </div>
         </div>
-        <!-- Meter switcher: RMS / True Peak / PPM -->
+        <!-- Meter switcher: TP / RMS / PPM -->
         <div class="meter-switcher" id="meterSwitcher">
-          <div class="meter-tabs">
-            <button class="meter-tab active" data-meter="rms">RMS</button>
-            <button class="meter-tab" data-meter="tp">True Peak</button>
-            <button class="meter-tab" data-meter="ppm">PPM</button>
-          </div>
-          <div class="meter-panels">
-            <div class="meter-panel active" id="dbfsCard" data-meter="rms">
-              <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
-              <div class="hMeter">
-                <canvas id="dbfs" height="160"></canvas>
-                <div class="hScale" id="dbfsScale"></div>
-              </div>
+          <header>
+            <div class="meter-tabs">
+              <button class="meter-tab active" data-meter="tp">TP</button>
+              <button class="meter-tab" data-meter="rms">RMS</button>
+              <button class="meter-tab" data-meter="ppm">PPM</button>
             </div>
-            <div class="meter-panel" id="tpCard" data-meter="tp">
+            <span class="badge" id="meterBadge">True Peak Level (dBTP)</span>
+          </header>
+          <div class="meter-panels">
+            <div class="meter-panel active" id="tpCard" data-meter="tp">
               <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> · R: <b id="tpR">--.-</b> dBTP</span>
               <div class="hMeter">
                 <canvas id="tp" height="160"></canvas>
                 <div class="hScale" id="tpScale"></div>
+              </div>
+            </div>
+            <div class="meter-panel" id="dbfsCard" data-meter="rms">
+              <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
+              <div class="hMeter">
+                <canvas id="dbfs" height="160"></canvas>
+                <div class="hScale" id="dbfsScale"></div>
               </div>
             </div>
             <div class="meter-panel" id="ppmCard" data-meter="ppm">
@@ -2155,6 +2163,11 @@
 
   // ------- Meter Mode Switcher -------
   const METER_MODE_KEY = 'tsg-meter-mode';
+  const METER_BADGES = {
+    tp: 'True Peak Level (dBTP)',
+    rms: 'Root Mean Square Level (dBFS)',
+    ppm: 'Nordic PPM Level (IEC Type I Units)'
+  };
 
   function initMeterSwitcher() {
     const switcher = document.getElementById('meterSwitcher');
@@ -2162,9 +2175,10 @@
 
     const tabs = switcher.querySelectorAll('.meter-tab');
     const panels = switcher.querySelectorAll('.meter-panel');
+    const badge = document.getElementById('meterBadge');
 
-    // Återställ sparad mode
-    const savedMode = localStorage.getItem(METER_MODE_KEY) || 'rms';
+    // Återställ sparad mode (default: tp)
+    const savedMode = localStorage.getItem(METER_MODE_KEY) || 'tp';
     setMeterMode(savedMode);
 
     // Tab click handlers
@@ -2185,6 +2199,10 @@
       panels.forEach(panel => {
         panel.classList.toggle('active', panel.dataset.meter === mode);
       });
+      // Uppdatera badge
+      if (badge && METER_BADGES[mode]) {
+        badge.textContent = METER_BADGES[mode];
+      }
     }
   }
 
