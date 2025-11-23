@@ -785,7 +785,7 @@
         const age = now - point.t;
         if (age < 0 || age > maxAge) return;
         const normalizedAge = age / maxAge;
-        const startAngle = (2 * Math.PI * (1 - normalizedAge)) - Math.PI / 2;
+        const startAngle = (2 * Math.PI * normalizedAge) - Math.PI / 2;
         const endAngle = startAngle + anglePerSegment;
         const lufs = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, point.v));
         const r = lufsToRadius(lufs, rOuter, rInner);
