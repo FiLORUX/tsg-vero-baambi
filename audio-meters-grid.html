@@ -1185,96 +1185,93 @@
       ctx.restore();
     }
 
-    // TC/RTW-style outer ring med momentary bargraph ("diod-segment")
-    // Använder MOMENTARY_LU_MIN/MAX från toppen - ingen lokal hårdkodning
+    // TC/RTW-style outer ring med momentary bargraph
+    // Geometri: 270° båge, -18 till +9 LU = 27 LU, 10° per LU
+    // Ticks var 2°, major tick var 10° (1 per LU)
     function drawOuterMomentaryRing(ctx, cx, cy, rOuter, canvasWidth, momentaryLufs) {
       ctx.save();
 
       // Geometri för ringen
       const ringOuterRadius = rOuter * 1.08;
-      const ringThickness = rOuter * 0.08;
+      const ringThickness = rOuter * 0.07;
       const ringInnerRadius = ringOuterRadius - ringThickness;
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
 
-      // Antal segment i bargraphen
-      const NUM_SEGMENTS = 54;  // 54 segment för snygg upplösning
+      // 270° båge: -135° till +135° (0 LU vid kl 12 = -90°)
+      // -18 LU vid -135° (kl 7:30), +9 LU vid +135° (kl 4:30)
+      const START_ANGLE_DEG = -135;  // -18 LU
+      const END_ANGLE_DEG = 135;     // +9 LU
+      const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG;  // 270°
 
-      // Vinklar: 0 LU vid kl 12 (-90°/−π/2)
-      // -18 LU vid vänster (kl 7-8), +9 LU vid höger (kl 4-5)
-      // Totalt ca 270° av cirkeln
-      const START_ANGLE = -Math.PI * 0.75;  // -135° (kl 7:30, -18 LU)
-      const END_ANGLE = Math.PI * 0.25;     // +45° (kl 4:30, +9 LU)
-      const TOTAL_ARC = END_ANGLE - START_ANGLE;
-      const anglePerSegment = TOTAL_ARC / NUM_SEGMENTS;
-      const segmentGap = 0.008; // Liten gap mellan segment
+      // 27 LU = 270° → 10° per LU
+      const DEG_PER_LU = TOTAL_ARC_DEG / MOMENTARY_LU_RANGE;  // 10°
+
+      // Tick var 2° → 135 ticks totalt
+      const TICK_STEP_DEG = 2;
+      const NUM_TICKS = Math.floor(TOTAL_ARC_DEG / TICK_STEP_DEG) + 1;
 
       // Beräkna momentary LU relativt target
       const momentaryLu = (typeof momentaryLufs === 'number' && isFinite(momentaryLufs))
         ? momentaryLufs - RADAR_TARGET_LUFS
-        : MOMENTARY_LU_MIN - 1;  // Under skalan om inget värde
+        : MOMENTARY_LU_MIN - 1;
 
-      // Normalisera och beräkna antal tända segment
+      // Normalisera momentary → vinkel
       const normalized = luToNormalized(momentaryLu, MOMENTARY_LU_MIN, MOMENTARY_LU_MAX);
-      const litSegments = Math.round(normalized * NUM_SEGMENTS);
+      const litAngleDeg = START_ANGLE_DEG + normalized * TOTAL_ARC_DEG;
 
-      // Rita alla segment (tända och släckta)
-      for (let i = 0; i < NUM_SEGMENTS; i++) {
-        const t = i / NUM_SEGMENTS;
-        const segmentStartAngle = START_ANGLE + i * anglePerSegment + segmentGap;
-        const segmentEndAngle = START_ANGLE + (i + 1) * anglePerSegment - segmentGap;
+      // Rita alla ticks (tända och släckta)
+      ctx.lineCap = 'round';
+      const tickOuterR = ringOuterRadius;
+      const minorTickLen = rOuter * 0.035;
+      const majorTickLen = rOuter * 0.055;
 
-        // LU-värde vid detta segment (för färgberäkning)
-        const luAtSegment = MOMENTARY_LU_MIN + t * MOMENTARY_LU_RANGE;
-        const isLit = i < litSegments;
+      for (let i = 0; i < NUM_TICKS; i++) {
+        const angleDeg = START_ANGLE_DEG + i * TICK_STEP_DEG;
+        const angleRad = (angleDeg - 90) * Math.PI / 180;  // -90° offset för kl 12
+
+        // Major tick var 10° (1 per LU)
+        const isMajor = (Math.round(angleDeg - START_ANGLE_DEG) % 10 === 0);
+        const tickLen = isMajor ? majorTickLen : minorTickLen;
+        const tickInnerR = tickOuterR - tickLen;
+
+        // LU vid denna vinkel
+        const t = (angleDeg - START_ANGLE_DEG) / TOTAL_ARC_DEG;
+        const luAtTick = MOMENTARY_LU_MIN + t * MOMENTARY_LU_RANGE;
+
+        // Tänd om vi är under momentary-nivån
+        const isLit = angleDeg <= litAngleDeg;
 
         // Färg: tänd = zonbaserad, släckt = mörk
-        const color = isLit ? colorForLu(luAtSegment) : '#1a1e22';
-        const alpha = isLit ? 0.95 : 0.3;
+        const color = isLit ? colorForLu(luAtTick) : '#1a1e22';
+        const alpha = isLit ? 0.95 : 0.35;
+        const lineWidth = isMajor ? 2.5 : 1.5;
 
-        // Rita arc-segment
         ctx.beginPath();
-        ctx.arc(cx, cy, ringInnerRadius, segmentStartAngle, segmentEndAngle);
-        ctx.arc(cx, cy, ringOuterRadius, segmentEndAngle, segmentStartAngle, true);
-        ctx.closePath();
-        ctx.fillStyle = color;
+        ctx.moveTo(cx + tickInnerR * Math.cos(angleRad), cy + tickInnerR * Math.sin(angleRad));
+        ctx.lineTo(cx + tickOuterR * Math.cos(angleRad), cy + tickOuterR * Math.sin(angleRad));
+        ctx.strokeStyle = color;
         ctx.globalAlpha = alpha;
-        ctx.fill();
-      }
-
-      // Rita små tick-markeringar vid större LU-värden
-      ctx.globalAlpha = 1;
-      const tickRadius = ringOuterRadius + 3;
-      const tickLength = rOuter * 0.04;
-
-      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += 3) {
-        const t = (lu - MOMENTARY_LU_MIN) / MOMENTARY_LU_RANGE;
-        const angle = START_ANGLE + t * TOTAL_ARC;
-
-        ctx.beginPath();
-        ctx.moveTo(cx + tickRadius * Math.cos(angle), cy + tickRadius * Math.sin(angle));
-        ctx.lineTo(cx + (tickRadius + tickLength) * Math.cos(angle), cy + (tickRadius + tickLength) * Math.sin(angle));
-        ctx.strokeStyle = colorForLu(lu);
-        ctx.lineWidth = lu === 0 ? 2 : 1;
-        ctx.lineCap = 'round';
+        ctx.lineWidth = lineWidth;
         ctx.stroke();
       }
 
-      // Siffror runt ringen
+      // Siffror runt ringen (var 3 LU)
+      ctx.globalAlpha = 1;
       ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const labelRadius = ringOuterRadius + tickLength + fontSize * 0.7;
-      const majorTicks = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
+      const labelRadius = ringOuterRadius + fontSize * 0.8;
+      const majorLabels = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
 
-      majorTicks.forEach(lu => {
-        // Kontrollera att LU är inom range
+      majorLabels.forEach(lu => {
         if (lu < MOMENTARY_LU_MIN || lu > MOMENTARY_LU_MAX) return;
 
         const t = (lu - MOMENTARY_LU_MIN) / MOMENTARY_LU_RANGE;
-        const angle = START_ANGLE + t * TOTAL_ARC;
-        const x = cx + labelRadius * Math.cos(angle);
-        const y = cy + labelRadius * Math.sin(angle);
+        const angleDeg = START_ANGLE_DEG + t * TOTAL_ARC_DEG;
+        const angleRad = (angleDeg - 90) * Math.PI / 180;
+        const x = cx + labelRadius * Math.cos(angleRad);
+        const y = cy + labelRadius * Math.sin(angleRad);
 
         // Färg baserat på zon
         if (lu >= 3) {
@@ -1393,8 +1390,8 @@
   })();
   
   function drawLoudnessRadar(momentaryLufs) {
-    // Bind to existing tpOverFlag (True Peak over threshold)
-    LoudnessRadar.render(loudnessRadar, loudnessRadarCtx, radarHistory, momentaryLufs, radarMaxSeconds, tpOverFlag);
+    // Bind to peakIndicatorOn (current True Peak >= -1.0 dBTP with 500ms hold)
+    LoudnessRadar.render(loudnessRadar, loudnessRadarCtx, radarHistory, momentaryLufs, radarMaxSeconds, peakIndicatorOn);
 
     // Update DOM overlay for accessibility and readability
     const radarLufsValue = document.getElementById('radarLufsValue');
@@ -2678,6 +2675,12 @@
   const TP_PEAK_HOLD_SEC = 3; // 3 sekunder peak-hold
   let tpOverFlag = false; // OVER-indikator
 
+  // Peak indicator state (for radar diode) - current TP with short hold
+  const PEAK_INDICATOR_THRESHOLD = -1.0;  // dBTP threshold
+  const PEAK_INDICATOR_HOLD_MS = 500;     // 500ms hold to avoid flicker
+  let peakIndicatorOn = false;
+  let peakIndicatorLastTrigger = 0;
+
   function drawTruePeak(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
     const rawL = Math.min(0, truePeakDb(bufL)); const rawR = Math.min(0, truePeakDb(bufR));
@@ -2693,6 +2696,16 @@
     // OVER-indikator om TP >= -1.0 dBTP
     const maxPeak = Math.max(tpPeakHoldL, tpPeakHoldR);
     if (maxPeak >= -1.0) tpOverFlag = true;
+
+    // Peak indicator for radar (current True Peak with short hold)
+    const currentTruePeak = Math.max(tpSmoothL, tpSmoothR);
+    const nowMs = performance.now();
+    if (currentTruePeak >= PEAK_INDICATOR_THRESHOLD) {
+      peakIndicatorOn = true;
+      peakIndicatorLastTrigger = nowMs;
+    } else if (nowMs - peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
+      peakIndicatorOn = false;
+    }
 
     // Label med peak-hold max och OVER-indikator
     // Alltid samma bredd för att undvika "hopp" - använder visibility istället för att ta bort
@@ -2711,7 +2724,7 @@
     drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
   // Reset-funktion för OVER-indikator (kan kopplas till en knapp)
-  window.resetTPOver = function(){ tpOverFlag = false; tpPeakHoldL = -60; tpPeakHoldR = -60; };
+  window.resetTPOver = function(){ tpOverFlag = false; tpPeakHoldL = -60; tpPeakHoldR = -60; peakIndicatorOn = false; };
   layoutTPScale(tpScale);
 
   // ------- R128 – EBU R128 Loudness med broadcast target −23 LUFS -------
