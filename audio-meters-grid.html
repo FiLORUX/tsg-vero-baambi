@@ -1157,6 +1157,23 @@
       ctx.restore();
     }
 
+    // Target-ring ritas separat EFTER segmenten så den syns ovanpå
+    function drawTargetRing(ctx, cx, cy, rOuter, rInner) {
+      ctx.save();
+      const lufs = 0 + LOUDNESS_TARGET;  // LU=0 → LUFS
+      const r = lufsToRadius(lufs, rOuter, rInner);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#40a0ff';
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#40a0ff';
+      ctx.shadowBlur = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+
     function drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge) {
       ctx.save();
       const now = Date.now();
@@ -1384,13 +1401,13 @@
     function drawEmptyRadar(ctx, w, h) {
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.36;  // Mindre för yttre ring
-      const rInner = rOuter * 0.30;  // DONUT: 30% hål
-      drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, null);  // Ingen momentary = alla släckta
+      const rOuter = Math.min(w, h) * 0.38;
+      const rInner = rOuter * 0.30;
+      drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, null);
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
+      drawTargetRing(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
-      // Ingen text i mitten - hålet ska vara rent
     }
 
     function render(canvas, ctx, history, momentaryLufs, maxSeconds, peakFlag) {
@@ -1411,6 +1428,7 @@
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
+      drawTargetRing(ctx, cx, cy, rOuter, rInner);  // Ovanpå segmenten
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
       drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
     }
