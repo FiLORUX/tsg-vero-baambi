@@ -1323,7 +1323,7 @@
       // Ingen text i mitten - hålet ska vara rent
     }
 
-    function render(canvas, ctx, history, momentaryLufs, maxSeconds) {
+    function render(canvas, ctx, history, momentaryLufs, maxSeconds, peakFlag) {
       const w = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
       const h = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1342,14 +1342,59 @@
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
-      // Ingen drawCenterLUFS - siffrorna visas i DOM utanför radarn
+      drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
+    }
+
+    // Peak indicator - diode at ~45° (1:30 clock position) in upper-right quadrant
+    function drawPeakIndicator(ctx, cx, cy, rOuter, canvasWidth, peakFlag) {
+      ctx.save();
+
+      // Position: 45° from 12 o'clock = upper-right quadrant (kl 1:30)
+      const angle = -Math.PI / 4;  // -45° (from positive X axis, so 45° from 12 o'clock CW)
+      const indicatorRadius = rOuter * 1.18;  // Just outside the outer ring
+      const diodeSize = rOuter * 0.06;
+
+      // Diode position
+      const diodeX = cx + indicatorRadius * Math.cos(angle);
+      const diodeY = cy + indicatorRadius * Math.sin(angle);
+
+      // Draw diode (small circle/quad)
+      ctx.beginPath();
+      ctx.arc(diodeX, diodeY, diodeSize, 0, Math.PI * 2);
+
+      if (peakFlag) {
+        // ON: bright amber-red with glow
+        ctx.fillStyle = '#ff4e2d';
+        ctx.globalAlpha = 0.95;
+        ctx.shadowColor = '#ff4e2d';
+        ctx.shadowBlur = 8;
+      } else {
+        // OFF: dark red, low opacity (unlit faux-LED)
+        ctx.fillStyle = '#5a1c1c';
+        ctx.globalAlpha = 0.4;
+        ctx.shadowBlur = 0;
+      }
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Label "Peak" to the left of diode
+      const fontSize = Math.max(8, Math.floor(canvasWidth * 0.020));
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.globalAlpha = peakFlag ? 0.95 : 0.5;
+      ctx.fillStyle = peakFlag ? '#ff6655' : '#8899aa';
+      ctx.fillText('Peak', diodeX - diodeSize - 4, diodeY);
+
+      ctx.restore();
     }
 
     return { render: render };
   })();
   
   function drawLoudnessRadar(momentaryLufs) {
-    LoudnessRadar.render(loudnessRadar, loudnessRadarCtx, radarHistory, momentaryLufs, radarMaxSeconds);
+    // Bind to existing tpOverFlag (True Peak over threshold)
+    LoudnessRadar.render(loudnessRadar, loudnessRadarCtx, radarHistory, momentaryLufs, radarMaxSeconds, tpOverFlag);
 
     // Update DOM overlay for accessibility and readability
     const radarLufsValue = document.getElementById('radarLufsValue');
