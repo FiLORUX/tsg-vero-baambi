@@ -1222,8 +1222,8 @@
       // Rita alla ticks (tända och släckta)
       ctx.lineCap = 'round';
       const tickOuterR = ringOuterRadius;
-      const minorTickLen = rOuter * 0.035;
-      const majorTickLen = rOuter * 0.055;
+      const minorTickLen = rOuter * 0.055;
+      const majorTickLen = rOuter * 0.085;
 
       for (let i = 0; i < NUM_TICKS; i++) {
         const angleDeg = START_ANGLE_DEG + i * TICK_STEP_DEG;
@@ -1241,10 +1241,13 @@
         // Tänd om vi är under momentary-nivån
         const isLit = angleDeg <= litAngleDeg;
 
-        // Färg: tänd = zonbaserad, släckt = mörk
-        const color = isLit ? colorForLu(luAtTick) : '#1a1e22';
-        const alpha = isLit ? 0.95 : 0.35;
-        const lineWidth = isMajor ? 2.5 : 1.5;
+        // Färg: tänd = zonbaserad, släckt = synlig grå
+        const color = isLit ? colorForLu(luAtTick) : '#3a4048';
+        const alpha = isLit ? 0.95 : 0.55;
+        // Tjocklek: lit minor 2.5, major 4; unlit minor 2, major 3.5
+        const lineWidth = isLit
+          ? (isMajor ? 4 : 2.5)
+          : (isMajor ? 3.5 : 2);
 
         ctx.beginPath();
         ctx.moveTo(cx + tickInnerR * Math.cos(angleRad), cy + tickInnerR * Math.sin(angleRad));
@@ -1261,7 +1264,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const labelRadius = ringOuterRadius + fontSize * 0.8;
+      const labelRadius = ringOuterRadius + fontSize * 1.3;
       const majorLabels = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
 
       majorLabels.forEach(lu => {
