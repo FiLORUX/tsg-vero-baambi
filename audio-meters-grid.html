@@ -1818,23 +1818,30 @@
     const fontSize = Math.round(9 * dpr);
     xyCtx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
     xyCtx.fillStyle = '#6b7a8a';
-    xyCtx.textAlign = 'center';
     xyCtx.textBaseline = 'middle';
 
-    // MONO label at top of vertical axis
-    xyCtx.fillText('M', w/2, 10 * dpr);
-
-    // Side labels on horizontal axis
+    // Top row: +L / +M / +R
+    const margin = 12 * dpr;
     xyCtx.textAlign = 'left';
-    xyCtx.fillText('+S', w - 20 * dpr, h/2);
-    xyCtx.textAlign = 'right';
-    xyCtx.fillText('−S', 20 * dpr, h/2);
-
-    // L/R labels on diagonals (discretely placed)
+    xyCtx.fillText('+L', margin, margin);
     xyCtx.textAlign = 'center';
-    xyCtx.fillStyle = '#4a5560';
-    xyCtx.fillText('L', 18 * dpr, 18 * dpr);
-    xyCtx.fillText('R', w - 18 * dpr, 18 * dpr);
+    xyCtx.fillText('+M', w/2, margin);
+    xyCtx.textAlign = 'right';
+    xyCtx.fillText('+R', w - margin, margin);
+
+    // Middle row: –S / +S
+    xyCtx.textAlign = 'left';
+    xyCtx.fillText('–S', margin, h/2);
+    xyCtx.textAlign = 'right';
+    xyCtx.fillText('+S', w - margin, h/2);
+
+    // Bottom row: –L / –M / –R
+    xyCtx.textAlign = 'left';
+    xyCtx.fillText('–L', margin, h - margin);
+    xyCtx.textAlign = 'center';
+    xyCtx.fillText('–M', w/2, h - margin);
+    xyCtx.textAlign = 'right';
+    xyCtx.fillText('–R', w - margin, h - margin);
   }
 
   function corrNow(l,r){
