@@ -927,11 +927,11 @@
                 </div>
               </div>
             </div>
-            <!-- Höger kolumn: L/R Balance, Rotation, M/S, Width Histogram -->
+            <!-- Höger kolumn: Balance, Width, M/S, Spectrum -->
             <div class="stereoRightCol">
-              <!-- 1) L/R Balance Meter -->
+              <!-- 1) Balance Meter -->
               <div class="phaseWidget">
-                <div class="widgetLabel">L/R Balance</div>
+                <div class="widgetLabel">Balance</div>
                 <div class="monoDevWrap">
                   <div class="canvasPad"><canvas id="monoDev"></canvas></div>
                 </div>
@@ -941,11 +941,11 @@
                   <span>R</span>
                 </div>
               </div>
-              <!-- 2) Rotation / Angle -->
+              <!-- 2) Width Meter -->
               <div class="phaseWidget">
-                <div class="widgetLabel">Rotation / Angle</div>
-                <canvas id="rotationMeter"></canvas>
-                <div class="rotationAxis"><span>L</span><span>C</span><span>R</span></div>
+                <div class="widgetLabel">Width</div>
+                <canvas id="widthMeter"></canvas>
+                <div class="rotationAxis"><span>M</span><span></span><span>S</span></div>
               </div>
               <!-- 3) M/S Meter -->
               <div class="phaseWidget">
@@ -963,12 +963,12 @@
                   </div>
                 </div>
               </div>
-              <!-- 4) Stereo Width Histogram -->
+              <!-- 4) Spectrum Analyzer -->
               <div class="phaseWidget histogramWidget">
-                <div class="widgetLabel">Stereo Width</div>
-                <canvas id="stereoHistogram"></canvas>
+                <div class="widgetLabel">Spectrum</div>
+                <canvas id="spectrumAnalyzer"></canvas>
                 <div class="histogramAxis">
-                  <span>Mono</span><span>Narrow</span><span>Wide</span>
+                  <span>Lo</span><span></span><span>Hi</span>
                 </div>
               </div>
             </div>
@@ -1116,42 +1116,35 @@
       ctx.restore();
     }
 
-    // Radar grid - bara spokes (ritas före segment)
-    function drawRadarGrid(ctx, cx, cy, rOuter, rInner) {
+    // Grå stödlinjer - ringar OCH spokes (ritas OVANPÅ segment)
+    function drawGridOverlay(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.55;
 
-      // Spokes var 30° (12 "klockslag") - börjar vid rInner (donut-hålet)
+      // Ringar var 6 LU (utom target som ritas separat)
+      const GRID_STEP_LU = 6;
+      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
+        if (lu === 0) continue;
+        const lufs = lu + LOUDNESS_TARGET;
+        const r = lufsToRadius(lufs, rOuter, rInner);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = '#8b95a5';
+        ctx.setLineDash([3, 5]);
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+
+      // Spokes var 30° (12 "klockslag")
       ctx.setLineDash([]);
-      ctx.strokeStyle = '#374151';
+      ctx.strokeStyle = '#6b7580';
       ctx.lineWidth = 1.0;
       for (let deg = 0; deg < 360; deg += 30) {
         const a = (deg - 90) * Math.PI / 180;
         ctx.beginPath();
         ctx.moveTo(cx + rInner * Math.cos(a), cy + rInner * Math.sin(a));
         ctx.lineTo(cx + rOuter * Math.cos(a), cy + rOuter * Math.sin(a));
-        ctx.stroke();
-      }
-
-      ctx.restore();
-    }
-
-    // Grå stödlinjer (ritas OVANPÅ segment, semi-transparent)
-    function drawGridRings(ctx, cx, cy, rOuter, rInner) {
-      ctx.save();
-      ctx.lineCap = 'round';
-      ctx.globalAlpha = 0.6;
-
-      const GRID_STEP_LU = 6;
-      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
-        if (lu === 0) continue;  // Target-ringen ritas separat
-        const lufs = lu + LOUDNESS_TARGET;
-        const r = lufsToRadius(lufs, rOuter, rInner);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = '#6b7280';
-        ctx.setLineDash([2, 6]);
-        ctx.lineWidth = 1.0;
         ctx.stroke();
       }
 
@@ -1408,8 +1401,7 @@
       const rInner = rOuter * 0.30;
       drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, null);
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
-      drawRadarGrid(ctx, cx, cy, rOuter, rInner);
-      drawGridRings(ctx, cx, cy, rOuter, rInner);
+      drawGridOverlay(ctx, cx, cy, rOuter, rInner);
       drawTargetRing(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
     }
@@ -1430,10 +1422,9 @@
       const maxAge = maxSeconds * 1000;
       drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs);  // TC/RTW momentary bargraph
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
-      drawRadarGrid(ctx, cx, cy, rOuter, rInner);      // Spokes (under segment)
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
-      drawGridRings(ctx, cx, cy, rOuter, rInner);    // Grå ringar (ovanpå segment)
-      drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target-ring (ovanpå allt utom labels)
+      drawGridOverlay(ctx, cx, cy, rOuter, rInner);  // Grå ringar + spokes (ovanpå segment)
+      drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target-ring (ovanpå grid)
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels högst upp
       drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
     }
@@ -1516,14 +1507,14 @@
   const corrVal = document.getElementById('corrVal');
 
   // --- Stereo Analysis Strip (nya widgets) ---
-  const stereoHistogram = document.getElementById('stereoHistogram');
-  const stereoHistogramCtx = stereoHistogram ? stereoHistogram.getContext('2d') : null;
+  const spectrumAnalyzer = document.getElementById('spectrumAnalyzer');
+  const spectrumCtx = spectrumAnalyzer ? spectrumAnalyzer.getContext('2d') : null;
   const msFillM = document.getElementById('msFillM');
   const msFillS = document.getElementById('msFillS');
   const msValueM = document.getElementById('msValueM');
   const msValueS = document.getElementById('msValueS');
-  const rotationMeter = document.getElementById('rotationMeter');
-  const rotationMeterCtx = rotationMeter ? rotationMeter.getContext('2d') : null;
+  const widthMeter = document.getElementById('widthMeter');
+  const widthMeterCtx = widthMeter ? widthMeter.getContext('2d') : null;
 
   // =====================================================
   // STEREO ANALYSIS ENGINE
@@ -1562,20 +1553,20 @@
     };
   })();
 
-  // Computes: Stereo Width Histogram, M/S Levels, Rotation Angle
+  // Computes: Width, M/S Levels, Spectrum
   // =====================================================
   const StereoAnalysisEngine = (function() {
     'use strict';
 
     // Configuration
-    const NUM_BINS = 24;           // Histogram bins (0-100% width)
-    const DECAY = 0.96;            // Exponential decay per update (~30fps → ~3s half-life)
-    const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and rotation
+    const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and width
+    const PEAK_HOLD_SEC = 3;       // Peak hold for width meter
 
     // State
-    const bins = new Float32Array(NUM_BINS);
     let midLevel = -60, sideLevel = -60;
-    let rotation = 0;              // -1 to +1 (mapped to angle)
+    let width = 0;                 // 0..1+ (S / (M + S))
+    let widthPeak = 0;             // Peak hold value
+    let widthPeakTime = 0;         // Timestamp for peak hold
 
     // Analyze a block of L/R samples
     function analyze(bufL, bufR) {
@@ -1583,7 +1574,6 @@
       if (n === 0) return;
 
       let sumM2 = 0, sumS2 = 0;
-      let sumL2 = 0, sumR2 = 0;
 
       for (let i = 0; i < n; i++) {
         const L = bufL[i], R = bufR[i];
@@ -1591,43 +1581,39 @@
         const S = (L - R) * 0.5;
         sumM2 += M * M;
         sumS2 += S * S;
-        sumL2 += L * L;
-        sumR2 += R * R;
       }
 
       const rmsM = Math.sqrt(sumM2 / n);
       const rmsS = Math.sqrt(sumS2 / n);
-      const rmsL = Math.sqrt(sumL2 / n);
-      const rmsR = Math.sqrt(sumR2 / n);
-
-      // 1) Stereo width: S / (M + S + ε)
       const eps = 1e-10;
-      const width = rmsS / (rmsM + rmsS + eps);
-      const binIdx = Math.min(NUM_BINS - 1, Math.floor(width * NUM_BINS));
 
-      // Update histogram with decay
-      for (let i = 0; i < NUM_BINS; i++) {
-        bins[i] *= DECAY;
+      // Width: S / (M + S + ε) → 0..1+
+      const newWidth = rmsS / (rmsM + rmsS + eps);
+      width += SMOOTH_ALPHA * (newWidth - width);
+
+      // Peak hold for width
+      const now = performance.now() / 1000;
+      if (width > widthPeak) {
+        widthPeak = width;
+        widthPeakTime = now;
+      } else if (now - widthPeakTime > PEAK_HOLD_SEC) {
+        widthPeak = width;
+        widthPeakTime = now;
       }
-      bins[binIdx] += 1.0;
 
-      // 2) M/S levels in dB
+      // M/S levels in dB
       const newMidDb = rmsM > eps ? 20 * Math.log10(rmsM) : -60;
       const newSideDb = rmsS > eps ? 20 * Math.log10(rmsS) : -60;
       midLevel += SMOOTH_ALPHA * (newMidDb - midLevel);
       sideLevel += SMOOTH_ALPHA * (newSideDb - sideLevel);
-
-      // 3) Rotation: (R - L) / (R + L + ε), smoothed
-      const newRotation = (rmsR - rmsL) / (rmsR + rmsL + eps);
-      rotation += SMOOTH_ALPHA * (newRotation - rotation);
     }
 
-    function getHistogramBins() { return bins; }
+    function getWidth() { return width; }
+    function getWidthPeak() { return widthPeak; }
     function getMidLevel() { return midLevel; }
     function getSideLevel() { return sideLevel; }
-    function getRotation() { return rotation; }
 
-    return { analyze, getHistogramBins, getMidLevel, getSideLevel, getRotation };
+    return { analyze, getWidth, getWidthPeak, getMidLevel, getSideLevel };
   })();
 
   const dbfs = document.getElementById('dbfs'), dbfsScale = document.getElementById('dbfsScale');
@@ -1838,30 +1824,30 @@
       }
     }
 
-    // Rotation meter canvas
-    const rotationMeter = document.getElementById('rotationMeter');
-    if (rotationMeter) {
-      const parent = rotationMeter.parentElement;
+    // Width meter canvas
+    const widthMeterEl = document.getElementById('widthMeter');
+    if (widthMeterEl) {
+      const parent = widthMeterEl.parentElement;
       const rect = parent.getBoundingClientRect();
-      const rw = Math.floor((rect.width - 16) * dpr); // Padding
-      const rh = Math.floor((rect.height - 30) * dpr); // Label + axis
-      if (rotationMeter.width !== rw || rotationMeter.height !== rh) {
-        rotationMeter.width = Math.max(10, rw);
-        rotationMeter.height = Math.max(10, rh);
+      const rw = Math.floor((rect.width - 16) * dpr);
+      const rh = Math.floor((rect.height - 30) * dpr);
+      if (widthMeterEl.width !== rw || widthMeterEl.height !== rh) {
+        widthMeterEl.width = Math.max(10, rw);
+        widthMeterEl.height = Math.max(10, rh);
       }
     }
 
-    // Stereo histogram canvas
-    const histogramCanvas = document.getElementById('stereoHistogram');
-    if (histogramCanvas) {
-      const parent = histogramCanvas.parentElement;
+    // Spectrum analyzer canvas
+    const spectrumCanvas = document.getElementById('spectrumAnalyzer');
+    if (spectrumCanvas) {
+      const parent = spectrumCanvas.parentElement;
       if (parent) {
         const rect = parent.getBoundingClientRect();
-        const hw = Math.floor((rect.width - 16) * dpr); // Padding
-        const hh = Math.floor((rect.height - 30) * dpr); // Label + axis
-        if (histogramCanvas.width !== hw || histogramCanvas.height !== hh) {
-          histogramCanvas.width = Math.max(10, hw);
-          histogramCanvas.height = Math.max(10, hh);
+        const sw = Math.floor((rect.width - 16) * dpr);
+        const sh = Math.floor((rect.height - 30) * dpr);
+        if (spectrumCanvas.width !== sw || spectrumCanvas.height !== sh) {
+          spectrumCanvas.width = Math.max(10, sw);
+          spectrumCanvas.height = Math.max(10, sh);
         }
       }
     }
@@ -2328,67 +2314,92 @@
   // STEREO ANALYSIS WIDGETS - Draw Functions
   // =====================================================
 
-  // 1) Stereo Spread Histogram
-  function drawStereoHistogram() {
-    if (!stereoHistogramCtx) return;
-    const canvas = stereoHistogram;
+  // 1) Spectrum Analyzer (10-band, 1/3 octave)
+  // Band centers: 31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
+  const SPECTRUM_BANDS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  const spectrumFreqBufL = new Float32Array(1024);
+  const spectrumFreqBufR = new Float32Array(1024);
+  const spectrumSmooth = new Float32Array(SPECTRUM_BANDS.length);
+
+  function drawSpectrum() {
+    if (!spectrumCtx || !analyserL || !analyserR) return;
+    const canvas = spectrumAnalyzer;
+    if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (w === 0 || h === 0) return;
 
-    // Resize canvas if needed
     if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
     }
 
-    const ctx = stereoHistogramCtx;
+    const ctx = spectrumCtx;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const bins = StereoAnalysisEngine.getHistogramBins();
-    const numBins = bins.length;
+    // Get frequency data (dB values, -100 to 0)
+    analyserL.getFloatFrequencyData(spectrumFreqBufL);
+    analyserR.getFloatFrequencyData(spectrumFreqBufR);
 
-    // Find max for normalization
-    let maxVal = 0;
-    for (let i = 0; i < numBins; i++) {
-      if (bins[i] > maxVal) maxVal = bins[i];
+    const sampleRate = ac.sampleRate || 48000;
+    const binHz = sampleRate / analyserL.fftSize;
+    const numBands = SPECTRUM_BANDS.length;
+    const bandValues = new Float32Array(numBands);
+
+    // Calculate average dB for each band
+    for (let b = 0; b < numBands; b++) {
+      const centerFreq = SPECTRUM_BANDS[b];
+      const lowFreq = centerFreq / 1.26;  // ~1/3 octave below
+      const highFreq = centerFreq * 1.26; // ~1/3 octave above
+      const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
+      const highBin = Math.min(spectrumFreqBufL.length - 1, Math.ceil(highFreq / binHz));
+
+      let sum = 0, count = 0;
+      for (let i = lowBin; i <= highBin; i++) {
+        // Sum L+R (mono spectrum)
+        sum += (spectrumFreqBufL[i] + spectrumFreqBufR[i]) / 2;
+        count++;
+      }
+      bandValues[b] = count > 0 ? sum / count : -100;
     }
-    if (maxVal < 0.1) maxVal = 1; // Avoid division by zero
+
+    // Smooth the values
+    const smoothAlpha = 0.3;
+    for (let b = 0; b < numBands; b++) {
+      spectrumSmooth[b] += smoothAlpha * (bandValues[b] - spectrumSmooth[b]);
+    }
 
     const padding = 4 * dpr;
-    const barW = (canvas.width - padding * 2) / numBins;
+    const barW = (canvas.width - padding * 2) / numBands;
     const maxH = canvas.height - padding * 2;
 
     // Draw bars
-    for (let i = 0; i < numBins; i++) {
-      const norm = bins[i] / maxVal;
+    for (let b = 0; b < numBands; b++) {
+      // Map -60dB..0dB to 0..1
+      const db = Math.max(-60, Math.min(0, spectrumSmooth[b]));
+      const norm = (db + 60) / 60;
       const barH = norm * maxH;
-      const x = padding + i * barW;
+      const x = padding + b * barW;
       const y = canvas.height - padding - barH;
 
-      // Color gradient: mono=blue, wide=cyan
-      const t = i / (numBins - 1);
-      const r = Math.floor(34 + t * (34 - 34));
-      const g = Math.floor(130 + t * (211 - 130));
-      const b = Math.floor(246 + t * (238 - 246));
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-
-      ctx.fillRect(x + 1, y, barW - 2, barH);
+      // Gradient color: bass=cyan, mid=green, treble=purple
+      const t = b / (numBands - 1);
+      let r, g, bl;
+      if (t < 0.5) {
+        // Cyan to green
+        r = Math.floor(34 + t * 2 * (68 - 34));
+        g = Math.floor(211 + t * 2 * (187 - 211));
+        bl = Math.floor(238 + t * 2 * (102 - 238));
+      } else {
+        // Green to purple
+        const t2 = (t - 0.5) * 2;
+        r = Math.floor(68 + t2 * (168 - 68));
+        g = Math.floor(187 + t2 * (130 - 187));
+        bl = Math.floor(102 + t2 * (220 - 102));
+      }
+      ctx.fillStyle = `rgb(${r},${g},${bl})`;
+      ctx.fillRect(x + 2, y, barW - 4, barH);
     }
-
-    // Target zone marker (typical stereo ~0.3-0.5)
-    const targetStart = Math.floor(0.3 * numBins);
-    const targetEnd = Math.floor(0.5 * numBins);
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 2]);
-    const x1 = padding + targetStart * barW;
-    const x2 = padding + targetEnd * barW;
-    ctx.beginPath();
-    ctx.moveTo(x1, padding); ctx.lineTo(x1, canvas.height - padding);
-    ctx.moveTo(x2, padding); ctx.lineTo(x2, canvas.height - padding);
-    ctx.stroke();
-    ctx.setLineDash([]);
   }
 
   // 2) Mid/Side Meter (DOM-based, just update values)
@@ -2409,62 +2420,75 @@
     if (msValueS) msValueS.textContent = formatDb(sideDb, 1, 6) + ' dB';
   }
 
-  // 3) Rotation Meter
-  function drawRotationMeter() {
-    if (!rotationMeterCtx) return;
-    const canvas = rotationMeter;
+  // 3) Width Meter (replaces Rotation)
+  function drawWidthMeter() {
+    if (!widthMeterCtx) return;
+    const canvas = widthMeter;
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (w === 0 || h === 0) return;
 
-    // Resize canvas if needed
     if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
     }
 
-    const ctx = rotationMeterCtx;
+    const ctx = widthMeterCtx;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const rotation = StereoAnalysisEngine.getRotation(); // -1 to +1
+    const width = StereoAnalysisEngine.getWidth();     // 0..1+
+    const widthPeak = StereoAnalysisEngine.getWidthPeak();
     const padding = 6 * dpr;
-    const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
     const trackW = canvas.width - padding * 2;
     const trackH = 6 * dpr;
 
-    // Draw track
+    // Draw track background
     ctx.fillStyle = '#1a1f25';
     ctx.fillRect(padding, centerY - trackH / 2, trackW, trackH);
 
-    // Center tick
-    ctx.fillStyle = '#4b5563';
-    ctx.fillRect(centerX - 1, centerY - trackH, 2, trackH * 2);
+    // Color zones: 0-30% cyan, 30-60% green, 60-80% yellow, 80-100% orange, >100% red
+    function widthColor(w) {
+      if (w >= 1.0) return '#ff4444';   // Red: >100%
+      if (w >= 0.8) return '#ff9a2d';   // Orange: 80-100%
+      if (w >= 0.6) return '#ffd94a';   // Yellow: 60-80%
+      if (w >= 0.3) return '#44bb66';   // Green: 30-60%
+      return '#22d3ee';                  // Cyan: 0-30%
+    }
 
-    // Indicator position
-    const indicatorX = centerX + rotation * (trackW / 2 - 4 * dpr);
+    // Draw fill bar
+    const fillW = Math.min(1.0, width) * trackW;
+    const fillColor = widthColor(width);
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(padding, centerY - trackH / 2, fillW, trackH);
 
-    // Draw indicator glow
+    // Draw peak hold tick
+    const peakX = padding + Math.min(1.0, widthPeak) * trackW;
+    ctx.fillStyle = widthColor(widthPeak);
+    ctx.fillRect(peakX - 1.5 * dpr, centerY - trackH, 3 * dpr, trackH * 2);
+
+    // Current position indicator with glow
+    const indicatorX = padding + Math.min(1.0, width) * trackW;
     const gradient = ctx.createRadialGradient(indicatorX, centerY, 0, indicatorX, centerY, 8 * dpr);
-    gradient.addColorStop(0, 'rgba(34, 211, 238, 0.6)');
-    gradient.addColorStop(1, 'rgba(34, 211, 238, 0)');
+    gradient.addColorStop(0, fillColor.replace(')', ', 0.6)').replace('rgb', 'rgba').replace('#', 'rgba('));
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.arc(indicatorX, centerY, 8 * dpr, 0, Math.PI * 2);
     ctx.fill();
 
     // Draw indicator dot
-    ctx.fillStyle = '#22d3ee';
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(indicatorX, centerY, 4 * dpr, 0, Math.PI * 2);
+    ctx.arc(indicatorX, centerY, 3 * dpr, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // Combined update function for all stereo analysis widgets
   function updateStereoAnalysis() {
-    drawStereoHistogram();
+    drawSpectrum();
     updateMSMeter();
-    drawRotationMeter();
+    drawWidthMeter();
   }
 
   // ------- Digital RMS (dBFS) – Average digital level, 0 dBFS = full-scale sine -------
