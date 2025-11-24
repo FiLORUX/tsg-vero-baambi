@@ -1197,10 +1197,10 @@
       const ringInnerRadius = ringOuterRadius - ringThickness;
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
 
-      // 270° båge: -135° till +135° (0 LU vid kl 12 = -90°)
-      // -18 LU vid -135° (kl 7:30), +9 LU vid +135° (kl 4:30)
-      const START_ANGLE_DEG = -135;  // -18 LU
-      const END_ANGLE_DEG = 135;     // +9 LU
+      // 270° båge: -180° till +90° (kl 6 till kl 3)
+      // -18 LU vid -180° (kl 6, botten), +9 LU vid +90° (kl 3, höger)
+      const START_ANGLE_DEG = -180;  // -18 LU (kl 6, botten)
+      const END_ANGLE_DEG = 90;      // +9 LU (kl 3, höger)
       const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG;  // 270°
 
       // 27 LU = 270° → 10° per LU
