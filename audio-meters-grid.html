@@ -1342,22 +1342,21 @@
       drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
     }
 
-    // Peak indicator - LED at upper-right tangent point of outer ring circle
+    // Peak indicator - LED at upper-right corner of bounding square around outer ring
     function drawPeakIndicator(ctx, cx, cy, rOuter, canvasWidth, peakFlag) {
       ctx.save();
 
-      // Use same outer radius as momentary ring for exact tangent placement
+      // Use same outer radius as momentary ring
       const ringOuterRadius = rOuter * 1.08;
 
-      // Position: -45° = upper-right quadrant (between 12 o'clock and 3 o'clock)
-      const angle = -Math.PI / 4;  // -45°
-      const diodeSize = rOuter * 0.045;
+      // Position: upper-right corner of imaginary bounding square
+      // Square tangent to circle at 12, 3, 6, 9 o'clock → corner at (cx + r, cy - r)
+      const peakX = cx + ringOuterRadius;
+      const peakY = cy - ringOuterRadius;
 
-      // LED center exactly on the circle's circumference
-      const peakX = cx + ringOuterRadius * Math.cos(angle);
-      const peakY = cy + ringOuterRadius * Math.sin(angle);
+      const diodeSize = rOuter * 0.06;
 
-      // Draw LED (small filled circle)
+      // Draw LED (filled circle)
       ctx.beginPath();
       ctx.arc(peakX, peakY, diodeSize, 0, Math.PI * 2);
 
@@ -1376,16 +1375,14 @@
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      // Label "Peak" to the upper-right of LED (outside the circle)
+      // Label "Peak" - right-aligned, positioned to the LEFT of the LED
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.020));
       ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
-      ctx.textAlign = 'left';
+      ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = peakFlag ? 0.95 : 0.5;
       ctx.fillStyle = peakFlag ? '#ff6655' : '#8899aa';
-      // Position label outside the ring, following the angle
-      const labelOffset = diodeSize + 4;
-      ctx.fillText('Peak', peakX + labelOffset, peakY);
+      ctx.fillText('Peak', peakX - diodeSize - 4, peakY);
 
       ctx.restore();
     }
