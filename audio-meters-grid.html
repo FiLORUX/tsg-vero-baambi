@@ -232,6 +232,11 @@
       border-radius: 6px;
       font-size: 11px;
     }
+    .gonioSquare .msLegend {
+      font-size: 10px;
+      color: #7a8a9a;
+      letter-spacing: 0.5px;
+    }
 
     /* ===== NY LAYOUT: Loudness (höger kolumn) ===== */
     .loudnessModule {
@@ -878,7 +883,7 @@
             <div class="stereoLeftCol">
               <div class="gonioSquare" id="xyWrap">
                 <div class="canvasPad"><canvas id="xy"></canvas></div>
-                <div class="overlay">Mono = 45°</div>
+                <div class="overlay msLegend">M↑ mono · S↔ stereo · L⟍ R⟋</div>
               </div>
               <div class="phaseWidget corrWidget">
                 <div class="widgetLabel">Phase Correlation <span style="float:right">ρ = <b id="corrVal">+-.--</b></span></div>
@@ -1727,37 +1732,44 @@
   const VECTORSCOPE_GAIN = 3.5;
 
   /**
-   * drawXY - Goniometer/Vectorscope rendering
+   * drawXY - M/S Goniometer rendering (DK/RTW style)
    *
-   * CRITICAL: No DC offset removal - caused frame-to-frame jitter because
-   * buffer doesn't contain exact number of wave cycles (2048 samples at
-   * 400Hz/48kHz = 17.07 cycles). The mean varies → points "wander" → oval.
-   *
-   * Generator signal is AC-coupled (sine centered at 0), so no DC removal needed.
+   * Coordinate system:
+   *   - Vertical axis (Y) = Mid = (L+R)/2 = MONO content
+   *   - Horizontal axis (X) = Side = (L-R)/2 = STEREO difference
+   *   - Perfect mono signal = vertical line in center
+   *   - Out-of-phase signal = horizontal line
    */
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
+    const dpr = window.devicePixelRatio || 1;
 
-    // DEBUG: Full clear instead of fade to see if ovals are from accumulation
+    // Clear canvas
     xyCtx.fillStyle = '#0d0f11';
     xyCtx.fillRect(0,0,w,h);
 
-    // STEP 2: Only draw NEW samples if TransitionGuard allows
+    // Draw samples if TransitionGuard allows
     if (TransitionGuard.shouldRender()) {
       const n = Math.min(bufL.length, bufR.length);
 
       xyCtx.globalAlpha=0.85;
       xyCtx.globalCompositeOperation='lighter';
       xyCtx.fillStyle='rgba(105,191,255,.85)';
-      const px = Math.max(1, Math.floor((window.devicePixelRatio||1)));
+      const px = Math.max(1, Math.floor(dpr));
 
       let prevX=null, prevY=null;
       for(let i=0;i<n;i+=2){
-        // No DC offset removal - signal is already AC-coupled
-        const L = bufL[i] * VECTORSCOPE_GAIN;
-        const R = bufR[i] * VECTORSCOPE_GAIN;
-        const x = (L * w/2) + w/2;
-        const y = h - ((R * h/2) + h/2);
+        const L = bufL[i];
+        const R = bufR[i];
+
+        // M/S transform (DK/RTW standard)
+        const M = 0.5 * (L + R);  // Mid = mono content
+        const S = 0.5 * (L - R);  // Side = stereo difference
+
+        // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
+        const x = (S * VECTORSCOPE_GAIN * w/2) + w/2;
+        const y = h/2 - (M * VECTORSCOPE_GAIN * h/2);
+
         if(prevX!==null){
           xyCtx.globalAlpha=.35;
           xyCtx.strokeStyle='rgba(105,191,255,.35)';
@@ -1773,16 +1785,41 @@
       xyCtx.globalCompositeOperation='source-over';
     }
 
-    // STEP 3: Grid lines always drawn (unaffected by blanking)
+    // Grid lines: M/S cross + L/R diagonals
     xyCtx.globalAlpha=1;
     xyCtx.strokeStyle = '#3a4855';
     xyCtx.lineWidth = 1;
     xyCtx.beginPath();
+    // Vertical center line (MONO axis)
     xyCtx.moveTo(w/2,0); xyCtx.lineTo(w/2,h);
+    // Horizontal center line (SIDE axis)
     xyCtx.moveTo(0,h/2); xyCtx.lineTo(w,h/2);
-    xyCtx.moveTo(0,h); xyCtx.lineTo(w,0);
-    xyCtx.moveTo(0,0); xyCtx.lineTo(w,h);
+    // Diagonal lines (L and R directions)
+    xyCtx.moveTo(0,0); xyCtx.lineTo(w,h);      // L direction (top-left to bottom-right)
+    xyCtx.moveTo(w,0); xyCtx.lineTo(0,h);      // R direction (top-right to bottom-left)
     xyCtx.stroke();
+
+    // Axis labels (DK/RTW style)
+    const fontSize = Math.round(9 * dpr);
+    xyCtx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    xyCtx.fillStyle = '#6b7a8a';
+    xyCtx.textAlign = 'center';
+    xyCtx.textBaseline = 'middle';
+
+    // MONO label at top of vertical axis
+    xyCtx.fillText('M', w/2, 10 * dpr);
+
+    // Side labels on horizontal axis
+    xyCtx.textAlign = 'left';
+    xyCtx.fillText('+S', w - 20 * dpr, h/2);
+    xyCtx.textAlign = 'right';
+    xyCtx.fillText('−S', 20 * dpr, h/2);
+
+    // L/R labels on diagonals (discretely placed)
+    xyCtx.textAlign = 'center';
+    xyCtx.fillStyle = '#4a5560';
+    xyCtx.fillText('L', 18 * dpr, 18 * dpr);
+    xyCtx.fillText('R', w - 18 * dpr, 18 * dpr);
   }
 
   function corrNow(l,r){
