@@ -2326,12 +2326,14 @@
     const canvas = spectrumAnalyzer;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
     if (w === 0 || h === 0) return;
 
-    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
+    // Set backing store to match layout dimensions
+    const bw = Math.floor(w * dpr), bh = Math.floor(h * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
     }
 
     const ctx = spectrumCtx;
@@ -2425,12 +2427,14 @@
     if (!widthMeterCtx) return;
     const canvas = widthMeter;
     const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const w = canvas.offsetWidth, h = canvas.offsetHeight;
     if (w === 0 || h === 0) return;
 
-    if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
+    // Set backing store to match layout dimensions
+    const bw = Math.floor(w * dpr), bh = Math.floor(h * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
     }
 
     const ctx = widthMeterCtx;
