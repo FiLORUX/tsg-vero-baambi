@@ -1052,12 +1052,8 @@
   const LoudnessRadar = (function() {
     'use strict';
 
-    // ----- R A D A R  S C A L E  (Clarity-lik) -----
-    // 10 ringar, 6 dB mellanrum: -5, -11, -17, -23, -29, -35, -41, -47, -53, -59
-    const RADAR_MAX_LUFS = -5;
-    const RADAR_MIN_LUFS = -59;
-    const RADAR_RING_STEP = 6;
-    // LOUDNESS_TARGET is now a configurable global variable
+    // LOUDNESS_TARGET is a configurable global variable
+    // Radar scale now matches outer ring: -18 to +9 LU relative to target
 
     // ----- MOMENTARY RING SCALE (EBU +9 mode) -----
     // Dessa parametrar styr outer ring, ticks och siffror
@@ -1079,21 +1075,23 @@
       return '#4488cc';                     // Blå: under low level
     }
 
+    // Radar radius: LUFS → LU relativt LOUDNESS_TARGET, samma skala som outer ring (-18 till +9 LU)
     function lufsToRadius(lufs, rOuter, rInner) {
-      const clamped = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, lufs));
-      const t = (clamped - RADAR_MIN_LUFS) / (RADAR_MAX_LUFS - RADAR_MIN_LUFS); // 0..1
-      // Broadcast-standard: quiet (t=0) near center, loud (t=1) toward outer ring
+      const lu = lufs - LOUDNESS_TARGET;
+      const clampedLu = Math.max(MOMENTARY_LU_MIN, Math.min(MOMENTARY_LU_MAX, lu));
+      const t = (clampedLu - MOMENTARY_LU_MIN) / MOMENTARY_LU_RANGE; // 0..1
       return rInner + t * (rOuter - rInner);
     }
 
-    // Clarity-style färgzoner
+    // Radar färgzoner: LUFS → LU relativt LOUDNESS_TARGET
     function radarColorForLufs(lufs) {
-      if (lufs > -11) return '#ff4335';   // röd – för högt
-      if (lufs > -17) return '#ff9a2d';   // orange
-      if (lufs > -23) return '#ffd94a';   // gul – runt target
-      if (lufs > -29) return '#88d65c';   // ljusgrön
-      if (lufs > -41) return '#2fbf8f';   // turkos/grön
-      return '#1f2933';                   // mörk bakgrund för låg nivå
+      const lu = lufs - LOUDNESS_TARGET;
+      if (lu >= 3) return '#ff4335';    // röd – för högt (+3 och över)
+      if (lu >= 0) return '#ff9a2d';    // orange – över target (0 till +3)
+      if (lu >= -6) return '#ffd94a';   // gul – nära target (-6 till 0)
+      if (lu >= -12) return '#88d65c';  // ljusgrön – normal (-12 till -6)
+      if (lu >= -18) return '#2fbf8f';  // turkos – låg (-18 till -12)
+      return '#1f2933';                 // mörk – under skalan
     }
 
     function drawRadarBackground(ctx, cx, cy, rOuter, rInner) {
@@ -1118,19 +1116,21 @@
       ctx.restore();
     }
 
-    // Clarity-style grid med -23 target-ring
+    // Radar grid med target-ring vid LU=0, samma skala som outer ring (-18 till +9 LU)
     function drawRadarGrid(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       ctx.lineCap = 'round';
 
-      // Ringarna (var 6 dB)
-      for (let lu = RADAR_MIN_LUFS; lu <= RADAR_MAX_LUFS; lu += RADAR_RING_STEP) {
-        const r = lufsToRadius(lu, rOuter, rInner);
+      // Ringarna var 6 LU: -18, -12, -6, 0, +6 (5 ringar inom -18 till +9 span)
+      const GRID_STEP_LU = 6;
+      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
+        const lufs = lu + LOUDNESS_TARGET;  // Konvertera LU till LUFS för radie
+        const r = lufsToRadius(lufs, rOuter, rInner);
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
 
-        if (lu === LOUDNESS_TARGET) {
-          // "Target"-ringen (-23 LUFS) – streckad, blå, starkare
+        if (lu === 0) {
+          // Target-ringen (LU=0) – streckad, blå, starkare
           ctx.strokeStyle = '#40a0ff';
           ctx.setLineDash([4, 4]);
           ctx.lineWidth = 2.0;
@@ -1168,7 +1168,7 @@
         const normalizedAge = age / maxAge;
         const startAngle = (2 * Math.PI * normalizedAge) - Math.PI / 2;
         const endAngle = startAngle + anglePerSegment;
-        const lufs = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, point.v));
+        const lufs = point.v;  // lufsToRadius och radarColorForLufs hanterar LU-konvertering
         const r = lufsToRadius(lufs, rOuter, rInner);
         const color = radarColorForLufs(lufs);
         const opacity = 0.85 * (1 - normalizedAge * 0.3);
