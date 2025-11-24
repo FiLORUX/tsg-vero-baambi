@@ -259,16 +259,7 @@
     }
 
     .radar-lufs-value {
-      position: absolute;
-      left: 0; right: 0; top: 0; bottom: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      font-size: clamp(1rem, 3vw, 1.8rem);
-      font-weight: 800;
-      color: var(--cyan);
-      text-shadow: 0 2px 12px #000, 0 0 2px #69bfff;
+      display: none; /* Dold - LUFS visas i R128-panelen under radarn */
     }
 
     /* R128 värde-panel under radar */
@@ -1069,17 +1060,15 @@
         ctx.stroke();
       }
 
-      // Spokes var 30° (12 "klockslag")
+      // Spokes var 30° (12 "klockslag") - börjar vid rInner (donut-hålet)
       ctx.setLineDash([]);
       ctx.strokeStyle = '#374151';
       ctx.lineWidth = 1.0;
       for (let deg = 0; deg < 360; deg += 30) {
         const a = (deg - 90) * Math.PI / 180;   // 0° = kl 12
-        const r1 = rInner * 0.6;
-        const r2 = rOuter;
         ctx.beginPath();
-        ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
-        ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a));
+        ctx.moveTo(cx + rInner * Math.cos(a), cy + rInner * Math.sin(a));
+        ctx.lineTo(cx + rOuter * Math.cos(a), cy + rOuter * Math.sin(a));
         ctx.stroke();
       }
 
@@ -1101,9 +1090,11 @@
         const r = lufsToRadius(lufs, rOuter, rInner);
         const color = radarColorForLufs(lufs);
         const opacity = 0.85 * (1 - normalizedAge * 0.3);
+
+        // DONUT: Rita arc från rInner till r, inte från centrum
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, r, startAngle, endAngle);
+        ctx.arc(cx, cy, rInner, startAngle, endAngle);
+        ctx.arc(cx, cy, r, endAngle, startAngle, true);
         ctx.closePath();
         ctx.fillStyle = color;
         ctx.globalAlpha = opacity;
@@ -1120,7 +1111,8 @@
         ctx.shadowColor = '#69bfff';
         ctx.shadowBlur = 8;
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
+        // Sweep line från rInner till rOuter
+        ctx.moveTo(cx + rInner * Math.cos(sweepAngle), cy + rInner * Math.sin(sweepAngle));
         ctx.lineTo(cx + rOuter * Math.cos(sweepAngle), cy + rOuter * Math.sin(sweepAngle));
         ctx.stroke();
         ctx.shadowBlur = 0;
@@ -1161,6 +1153,80 @@
       ctx.restore();
     }
 
+    // RTW-style yttre tick-ring med LU-skala och zonfärger
+    function drawOuterTickRing(ctx, cx, cy, rOuter, canvasWidth) {
+      ctx.save();
+      const tickRingRadius = rOuter * 1.12;  // Lite utanför radarn
+      const tickLength = rOuter * 0.06;
+      const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
+
+      // LU-skala: 0 vid kl 12, negativa moturs (vänster), positiva medurs (höger)
+      // Totalt spann: -18 till +9 LU (27 LU), varje LU = 360/27 ≈ 13.3°
+      const LU_MIN = -18;
+      const LU_MAX = 9;
+      const LU_RANGE = LU_MAX - LU_MIN; // 27
+
+      // Färgzoner (LU relativt target)
+      function tickColorForLU(lu) {
+        if (lu >= 3) return '#ff4444';      // Röd: +3 till +9
+        if (lu >= 0) return '#ffd700';      // Gul: 0 till +3
+        if (lu >= -12) return '#44bb66';    // Grön: -12 till 0
+        return '#4488cc';                    // Blå: -18 till -12
+      }
+
+      // Rita ticks runt hela ringen
+      for (let lu = LU_MIN; lu <= LU_MAX; lu++) {
+        // Vinkel: 0 LU = kl 12 (-90°), negativa moturs, positiva medurs
+        const angle = (-90 + (lu / LU_RANGE) * 360) * Math.PI / 180;
+        const color = tickColorForLU(lu);
+
+        const isMajor = (lu % 3 === 0);
+        const len = isMajor ? tickLength * 1.5 : tickLength;
+        const width = isMajor ? 2 : 1;
+
+        const x1 = cx + (tickRingRadius - len) * Math.cos(angle);
+        const y1 = cy + (tickRingRadius - len) * Math.sin(angle);
+        const x2 = cx + tickRingRadius * Math.cos(angle);
+        const y2 = cy + tickRingRadius * Math.sin(angle);
+
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Siffror vid större tick-markeringar
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const labelRadius = tickRingRadius + fontSize * 0.8;
+      const majorTicks = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
+
+      majorTicks.forEach(lu => {
+        const angle = (-90 + (lu / LU_RANGE) * 360) * Math.PI / 180;
+        const x = cx + labelRadius * Math.cos(angle);
+        const y = cy + labelRadius * Math.sin(angle);
+
+        // Färg baserat på zon
+        if (lu >= 3) {
+          ctx.fillStyle = '#ff6666';
+        } else if (lu >= 0) {
+          ctx.fillStyle = '#ffdd44';
+        } else {
+          ctx.fillStyle = '#8899aa';
+        }
+
+        const label = lu === 0 ? '0' : lu.toString();
+        ctx.fillText(label, x, y);
+      });
+
+      ctx.restore();
+    }
+
     function drawCenterLUFS(ctx, cx, cy, rInner, momentaryLufs) {
       ctx.save();
       const fontSize = Math.max(14, rInner * 0.35);
@@ -1183,17 +1249,13 @@
     function drawEmptyRadar(ctx, w, h) {
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.42;
-      const rInner = rOuter * 0.12;
+      const rOuter = Math.min(w, h) * 0.36;  // Mindre för yttre ring
+      const rInner = rOuter * 0.30;  // DONUT: 30% hål
+      drawOuterTickRing(ctx, cx, cy, rOuter, w);
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
-      ctx.save();
-      ctx.font = '600 12px ui-sans-serif, Arial';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#6b7280';
-      ctx.fillText('Waiting for audio...', cx, cy);
-      ctx.restore();
+      // Ingen text i mitten - hålet ska vara rent
     }
 
     function render(canvas, ctx, history, momentaryLufs, maxSeconds) {
@@ -1207,14 +1269,15 @@
       }
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.42;
-      const rInner = rOuter * 0.12;
+      const rOuter = Math.min(w, h) * 0.36;  // Mindre för att ge plats åt yttre ring
+      const rInner = rOuter * 0.30;  // DONUT: 30% hål i mitten
       const maxAge = maxSeconds * 1000;
+      drawOuterTickRing(ctx, cx, cy, rOuter, w);  // Yttre LU-skala först (i bakgrunden)
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
-      drawCenterLUFS(ctx, cx, cy, rInner, momentaryLufs);
+      // Ingen drawCenterLUFS - siffrorna visas i DOM utanför radarn
     }
 
     return { render: render };
