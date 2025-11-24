@@ -1192,7 +1192,7 @@
       ctx.save();
 
       // Geometri för ringen
-      const ringOuterRadius = rOuter * 1.08;
+      const ringOuterRadius = rOuter * 1.12;
       const ringThickness = rOuter * 0.07;
       const ringInnerRadius = ringOuterRadius - ringThickness;
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
@@ -1264,7 +1264,7 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const labelRadius = ringOuterRadius + fontSize * 1.3;
+      const labelRadius = ringOuterRadius + fontSize * 0.9;
       const majorLabels = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
 
       majorLabels.forEach(lu => {
@@ -1276,10 +1276,10 @@
         const x = cx + labelRadius * Math.cos(angleRad);
         const y = cy + labelRadius * Math.sin(angleRad);
 
-        // Färg baserat på zon
+        // Färg baserat på zon (0 är grå som negativa)
         if (lu >= 3) {
           ctx.fillStyle = '#ff6666';
-        } else if (lu >= 0) {
+        } else if (lu > 0) {
           ctx.fillStyle = '#ffdd44';
         } else {
           ctx.fillStyle = '#8899aa';
@@ -1350,7 +1350,7 @@
       ctx.save();
 
       // Use same outer radius as momentary ring
-      const ringOuterRadius = rOuter * 1.08;
+      const ringOuterRadius = rOuter * 1.12;
 
       // Position: upper-right corner of imaginary bounding square
       // Square tangent to circle at 12, 3, 6, 9 o'clock → corner at (cx + r, cy - r)
