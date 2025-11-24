@@ -1752,12 +1752,11 @@
     if (TransitionGuard.shouldRender()) {
       const n = Math.min(bufL.length, bufR.length);
 
-      xyCtx.globalAlpha=0.85;
       xyCtx.globalCompositeOperation='lighter';
-      xyCtx.fillStyle='rgba(105,191,255,.85)';
-      const px = Math.max(1, Math.floor(dpr));
 
-      let prevX=null, prevY=null;
+      // Build continuous path for smooth connected line
+      xyCtx.beginPath();
+      let first = true;
       for(let i=0;i<n;i+=2){
         const L = bufL[i];
         const R = bufR[i];
@@ -1770,18 +1769,22 @@
         const x = (S * VECTORSCOPE_GAIN * w/2) + w/2;
         const y = h/2 - (M * VECTORSCOPE_GAIN * h/2);
 
-        if(prevX!==null){
-          xyCtx.globalAlpha=.35;
-          xyCtx.strokeStyle='rgba(105,191,255,.35)';
-          xyCtx.beginPath();
-          xyCtx.moveTo(prevX,prevY);
-          xyCtx.lineTo(x,y);
-          xyCtx.stroke();
-        }
-        xyCtx.globalAlpha=.85;
-        xyCtx.fillRect(x,y,px,px);
-        prevX=x; prevY=y;
+        if(first){ xyCtx.moveTo(x,y); first=false; }
+        else { xyCtx.lineTo(x,y); }
       }
+
+      // Stroke entire path once - no double alpha!
+      xyCtx.globalAlpha = 0.5;
+      xyCtx.strokeStyle = '#69bfff';
+      xyCtx.lineWidth = 1.5 * dpr;
+      xyCtx.lineCap = 'round';
+      xyCtx.lineJoin = 'round';
+      xyCtx.stroke();
+
+      // Subtle glow layer for phosphor effect
+      xyCtx.globalAlpha = 0.25;
+      xyCtx.lineWidth = 3 * dpr;
+      xyCtx.stroke();
       xyCtx.globalCompositeOperation='source-over';
     }
 
