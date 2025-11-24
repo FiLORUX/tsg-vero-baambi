@@ -2811,7 +2811,7 @@
   layoutTPScale(tpScale);
 
   // ------- R128 – EBU R128 Loudness med broadcast target −23 LUFS -------
-  const LOUDNESS_TARGET = -23; // Europa broadcast target (EBU R128)
+  // LOUDNESS_TARGET is now a configurable global variable (defined at top)
   const frameDur = 2048 / 48000; const mLen = Math.max(1, Math.round(0.4 / frameDur)); const sLen = Math.max(1, Math.round(3.0 / frameDur));
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
 
