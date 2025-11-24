@@ -1009,6 +1009,26 @@
     const RADAR_RING_STEP = 6;
     const RADAR_TARGET_LUFS = -23; // EBU R128 broadcast target
 
+    // ----- MOMENTARY RING SCALE (EBU +9 mode) -----
+    // Dessa parametrar styr outer ring, ticks och siffror
+    const MOMENTARY_LU_MIN = -18;  // Lägsta LU (relativt target)
+    const MOMENTARY_LU_MAX = 9;    // Högsta LU
+    const MOMENTARY_LU_RANGE = MOMENTARY_LU_MAX - MOMENTARY_LU_MIN; // 27 LU
+    const LOW_LEVEL_BELOW = -12;   // Under denna nivå = blå (under brusgolv)
+
+    // Gemensam normaliseringsfunktion för LU → 0..1
+    function luToNormalized(lu, minLu, maxLu) {
+      return Math.max(0, Math.min(1, (lu - minLu) / (maxLu - minLu)));
+    }
+
+    // TC/RTW färglogik för momentary ring
+    function colorForLu(lu) {
+      if (lu >= 3) return '#ff4444';       // Röd: +3 till +9 (för högt)
+      if (lu >= 0) return '#ffd700';       // Gul: 0 till +3 (över target)
+      if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Grön: normal nivå
+      return '#4488cc';                     // Blå: under low level
+    }
+
     function lufsToRadius(lufs, rOuter, rInner) {
       const clamped = Math.max(RADAR_MIN_LUFS, Math.min(RADAR_MAX_LUFS, lufs));
       const t = (clamped - RADAR_MIN_LUFS) / (RADAR_MAX_LUFS - RADAR_MIN_LUFS); // 0..1
@@ -1165,61 +1185,94 @@
       ctx.restore();
     }
 
-    // RTW-style yttre tick-ring med LU-skala och zonfärger
-    function drawOuterTickRing(ctx, cx, cy, rOuter, canvasWidth) {
+    // TC/RTW-style outer ring med momentary bargraph ("diod-segment")
+    // Använder MOMENTARY_LU_MIN/MAX från toppen - ingen lokal hårdkodning
+    function drawOuterMomentaryRing(ctx, cx, cy, rOuter, canvasWidth, momentaryLufs) {
       ctx.save();
-      const tickRingRadius = rOuter * 1.12;  // Lite utanför radarn
-      const tickLength = rOuter * 0.06;
+
+      // Geometri för ringen
+      const ringOuterRadius = rOuter * 1.08;
+      const ringThickness = rOuter * 0.08;
+      const ringInnerRadius = ringOuterRadius - ringThickness;
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
 
-      // LU-skala: 0 vid kl 12, negativa moturs (vänster), positiva medurs (höger)
-      // Totalt spann: -18 till +9 LU (27 LU), varje LU = 360/27 ≈ 13.3°
-      const LU_MIN = -18;
-      const LU_MAX = 9;
-      const LU_RANGE = LU_MAX - LU_MIN; // 27
+      // Antal segment i bargraphen
+      const NUM_SEGMENTS = 54;  // 54 segment för snygg upplösning
 
-      // Färgzoner (LU relativt target)
-      function tickColorForLU(lu) {
-        if (lu >= 3) return '#ff4444';      // Röd: +3 till +9
-        if (lu >= 0) return '#ffd700';      // Gul: 0 till +3
-        if (lu >= -12) return '#44bb66';    // Grön: -12 till 0
-        return '#4488cc';                    // Blå: -18 till -12
+      // Vinklar: 0 LU vid kl 12 (-90°/−π/2)
+      // -18 LU vid vänster (kl 7-8), +9 LU vid höger (kl 4-5)
+      // Totalt ca 270° av cirkeln
+      const START_ANGLE = -Math.PI * 0.75;  // -135° (kl 7:30, -18 LU)
+      const END_ANGLE = Math.PI * 0.25;     // +45° (kl 4:30, +9 LU)
+      const TOTAL_ARC = END_ANGLE - START_ANGLE;
+      const anglePerSegment = TOTAL_ARC / NUM_SEGMENTS;
+      const segmentGap = 0.008; // Liten gap mellan segment
+
+      // Beräkna momentary LU relativt target
+      const momentaryLu = (typeof momentaryLufs === 'number' && isFinite(momentaryLufs))
+        ? momentaryLufs - RADAR_TARGET_LUFS
+        : MOMENTARY_LU_MIN - 1;  // Under skalan om inget värde
+
+      // Normalisera och beräkna antal tända segment
+      const normalized = luToNormalized(momentaryLu, MOMENTARY_LU_MIN, MOMENTARY_LU_MAX);
+      const litSegments = Math.round(normalized * NUM_SEGMENTS);
+
+      // Rita alla segment (tända och släckta)
+      for (let i = 0; i < NUM_SEGMENTS; i++) {
+        const t = i / NUM_SEGMENTS;
+        const segmentStartAngle = START_ANGLE + i * anglePerSegment + segmentGap;
+        const segmentEndAngle = START_ANGLE + (i + 1) * anglePerSegment - segmentGap;
+
+        // LU-värde vid detta segment (för färgberäkning)
+        const luAtSegment = MOMENTARY_LU_MIN + t * MOMENTARY_LU_RANGE;
+        const isLit = i < litSegments;
+
+        // Färg: tänd = zonbaserad, släckt = mörk
+        const color = isLit ? colorForLu(luAtSegment) : '#1a1e22';
+        const alpha = isLit ? 0.95 : 0.3;
+
+        // Rita arc-segment
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringInnerRadius, segmentStartAngle, segmentEndAngle);
+        ctx.arc(cx, cy, ringOuterRadius, segmentEndAngle, segmentStartAngle, true);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.fill();
       }
 
-      // Rita ticks runt hela ringen
-      for (let lu = LU_MIN; lu <= LU_MAX; lu++) {
-        // Vinkel: 0 LU = kl 12 (-90°), negativa moturs, positiva medurs
-        const angle = (-90 + (lu / LU_RANGE) * 360) * Math.PI / 180;
-        const color = tickColorForLU(lu);
+      // Rita små tick-markeringar vid större LU-värden
+      ctx.globalAlpha = 1;
+      const tickRadius = ringOuterRadius + 3;
+      const tickLength = rOuter * 0.04;
 
-        const isMajor = (lu % 3 === 0);
-        const len = isMajor ? tickLength * 1.5 : tickLength;
-        const width = isMajor ? 2 : 1;
-
-        const x1 = cx + (tickRingRadius - len) * Math.cos(angle);
-        const y1 = cy + (tickRingRadius - len) * Math.sin(angle);
-        const x2 = cx + tickRingRadius * Math.cos(angle);
-        const y2 = cy + tickRingRadius * Math.sin(angle);
+      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += 3) {
+        const t = (lu - MOMENTARY_LU_MIN) / MOMENTARY_LU_RANGE;
+        const angle = START_ANGLE + t * TOTAL_ARC;
 
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
+        ctx.moveTo(cx + tickRadius * Math.cos(angle), cy + tickRadius * Math.sin(angle));
+        ctx.lineTo(cx + (tickRadius + tickLength) * Math.cos(angle), cy + (tickRadius + tickLength) * Math.sin(angle));
+        ctx.strokeStyle = colorForLu(lu);
+        ctx.lineWidth = lu === 0 ? 2 : 1;
         ctx.lineCap = 'round';
         ctx.stroke();
       }
 
-      // Siffror vid större tick-markeringar
+      // Siffror runt ringen
       ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      const labelRadius = tickRingRadius + fontSize * 0.8;
+      const labelRadius = ringOuterRadius + tickLength + fontSize * 0.7;
       const majorTicks = [-18, -15, -12, -9, -6, -3, 0, 3, 6, 9];
 
       majorTicks.forEach(lu => {
-        const angle = (-90 + (lu / LU_RANGE) * 360) * Math.PI / 180;
+        // Kontrollera att LU är inom range
+        if (lu < MOMENTARY_LU_MIN || lu > MOMENTARY_LU_MAX) return;
+
+        const t = (lu - MOMENTARY_LU_MIN) / MOMENTARY_LU_RANGE;
+        const angle = START_ANGLE + t * TOTAL_ARC;
         const x = cx + labelRadius * Math.cos(angle);
         const y = cy + labelRadius * Math.sin(angle);
 
@@ -1263,7 +1316,7 @@
       const cy = h / 2;
       const rOuter = Math.min(w, h) * 0.36;  // Mindre för yttre ring
       const rInner = rOuter * 0.30;  // DONUT: 30% hål
-      drawOuterTickRing(ctx, cx, cy, rOuter, w);
+      drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, null);  // Ingen momentary = alla släckta
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
@@ -1284,7 +1337,7 @@
       const rOuter = Math.min(w, h) * 0.36;  // Mindre för att ge plats åt yttre ring
       const rInner = rOuter * 0.30;  // DONUT: 30% hål i mitten
       const maxAge = maxSeconds * 1000;
-      drawOuterTickRing(ctx, cx, cy, rOuter, w);  // Yttre LU-skala först (i bakgrunden)
+      drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs);  // TC/RTW momentary bargraph
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
