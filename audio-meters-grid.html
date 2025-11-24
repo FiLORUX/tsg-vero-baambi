@@ -1752,11 +1752,16 @@
     if (TransitionGuard.shouldRender()) {
       const n = Math.min(bufL.length, bufR.length);
 
+      xyCtx.globalAlpha=0.85;
       xyCtx.globalCompositeOperation='lighter';
+      xyCtx.fillStyle='rgba(105,191,255,.85)';
+      const px = Math.max(1, Math.floor(dpr));
 
-      // Build continuous path for smooth connected line
-      xyCtx.beginPath();
-      let first = true;
+      // Line settings - thicker with round caps
+      xyCtx.lineCap = 'round';
+      xyCtx.lineJoin = 'round';
+
+      let prevX=null, prevY=null;
       for(let i=0;i<n;i+=2){
         const L = bufL[i];
         const R = bufR[i];
@@ -1769,22 +1774,29 @@
         const x = (S * VECTORSCOPE_GAIN * w/2) + w/2;
         const y = h/2 - (M * VECTORSCOPE_GAIN * h/2);
 
-        if(first){ xyCtx.moveTo(x,y); first=false; }
-        else { xyCtx.lineTo(x,y); }
+        if(prevX!==null){
+          // Glow layer first (wider, more transparent)
+          xyCtx.globalAlpha=.15;
+          xyCtx.strokeStyle='rgba(105,191,255,.5)';
+          xyCtx.lineWidth = 3 * dpr;
+          xyCtx.beginPath();
+          xyCtx.moveTo(prevX,prevY);
+          xyCtx.lineTo(x,y);
+          xyCtx.stroke();
+
+          // Main line (thicker than before)
+          xyCtx.globalAlpha=.35;
+          xyCtx.strokeStyle='rgba(105,191,255,.35)';
+          xyCtx.lineWidth = 1.5 * dpr;
+          xyCtx.beginPath();
+          xyCtx.moveTo(prevX,prevY);
+          xyCtx.lineTo(x,y);
+          xyCtx.stroke();
+        }
+        xyCtx.globalAlpha=.85;
+        xyCtx.fillRect(x,y,px,px);
+        prevX=x; prevY=y;
       }
-
-      // Stroke entire path once - no double alpha!
-      xyCtx.globalAlpha = 0.5;
-      xyCtx.strokeStyle = '#69bfff';
-      xyCtx.lineWidth = 1.5 * dpr;
-      xyCtx.lineCap = 'round';
-      xyCtx.lineJoin = 'round';
-      xyCtx.stroke();
-
-      // Subtle glow layer for phosphor effect
-      xyCtx.globalAlpha = 0.25;
-      xyCtx.lineWidth = 3 * dpr;
-      xyCtx.stroke();
       xyCtx.globalCompositeOperation='source-over';
     }
 
