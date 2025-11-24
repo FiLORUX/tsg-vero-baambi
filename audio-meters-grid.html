@@ -1116,41 +1116,42 @@
       ctx.restore();
     }
 
-    // Radar grid med target-ring vid LU=0, samma skala som outer ring (-18 till +9 LU)
+    // Radar grid - bara spokes (ritas före segment)
     function drawRadarGrid(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       ctx.lineCap = 'round';
-
-      // Ringarna var 6 LU: -18, -12, -6, 0, +6 (5 ringar inom -18 till +9 span)
-      const GRID_STEP_LU = 6;
-      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
-        const lufs = lu + LOUDNESS_TARGET;  // Konvertera LU till LUFS för radie
-        const r = lufsToRadius(lufs, rOuter, rInner);
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-
-        if (lu === 0) {
-          // Target-ringen (LU=0) – streckad, blå, starkare
-          ctx.strokeStyle = '#40a0ff';
-          ctx.setLineDash([4, 4]);
-          ctx.lineWidth = 2.0;
-        } else {
-          ctx.strokeStyle = '#4b5563';
-          ctx.setLineDash([2, 6]);
-          ctx.lineWidth = 1.0;
-        }
-        ctx.stroke();
-      }
 
       // Spokes var 30° (12 "klockslag") - börjar vid rInner (donut-hålet)
       ctx.setLineDash([]);
       ctx.strokeStyle = '#374151';
       ctx.lineWidth = 1.0;
       for (let deg = 0; deg < 360; deg += 30) {
-        const a = (deg - 90) * Math.PI / 180;   // 0° = kl 12
+        const a = (deg - 90) * Math.PI / 180;
         ctx.beginPath();
         ctx.moveTo(cx + rInner * Math.cos(a), cy + rInner * Math.sin(a));
         ctx.lineTo(cx + rOuter * Math.cos(a), cy + rOuter * Math.sin(a));
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // Grå stödlinjer (ritas OVANPÅ segment, semi-transparent)
+    function drawGridRings(ctx, cx, cy, rOuter, rInner) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.globalAlpha = 0.6;
+
+      const GRID_STEP_LU = 6;
+      for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
+        if (lu === 0) continue;  // Target-ringen ritas separat
+        const lufs = lu + LOUDNESS_TARGET;
+        const r = lufsToRadius(lufs, rOuter, rInner);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = '#6b7280';
+        ctx.setLineDash([2, 6]);
+        ctx.lineWidth = 1.0;
         ctx.stroke();
       }
 
@@ -1239,9 +1240,9 @@
       ctx.restore();
     }
 
-    // Radiella LUFS-labels längs kl 3-spaken (visar skalan för radie, inte vinkel)
-    // Visa endast nyckelringar för läsbarhet: -5, -11, -17, -23 (target), -35, -47, -59
-    const RADAR_SCALE_LABELS = [-5, -17, -23, -29, -41, -59];
+    // Radiella LU-labels längs kl 3-spaken (matchar grid-ringarna)
+    // LU-värden: -18, -12, -6, 0, +6 (var 6:e LU)
+    const RADAR_SCALE_LU = [-18, -12, -6, 0, 6];
 
     function drawRadarLabels(ctx, cx, cy, rOuter, rInner, canvasWidth) {
       ctx.save();
@@ -1250,23 +1251,25 @@
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
 
-      // Placera labels längs kl 3-spaken (0 radianer = höger)
-      const labelAngle = 0;
+      const labelAngle = 0;  // kl 3-spaken
 
-      RADAR_SCALE_LABELS.forEach(lufs => {
+      RADAR_SCALE_LU.forEach(lu => {
+        const lufs = lu + LOUDNESS_TARGET;
         const r = lufsToRadius(lufs, rOuter, rInner);
         const x = cx + r * Math.cos(labelAngle) + 3;
         const y = cy + r * Math.sin(labelAngle);
 
-        // Highlight target (-23 LUFS)
-        if (lufs === LOUDNESS_TARGET) {
+        // Highlight target (LU=0)
+        if (lu === 0) {
           ctx.fillStyle = '#40a0ff';
           ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         } else {
-          ctx.fillStyle = '#6b7280';
+          ctx.fillStyle = '#9ca3af';  // Ljusare grå
           ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         }
-        ctx.fillText(lufs.toString(), x, y);
+        // Visa LU-värde (med + för positiva)
+        const label = lu > 0 ? `+${lu}` : lu.toString();
+        ctx.fillText(label, x, y);
       });
 
       ctx.restore();
@@ -1406,6 +1409,7 @@
       drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, null);
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarGrid(ctx, cx, cy, rOuter, rInner);
+      drawGridRings(ctx, cx, cy, rOuter, rInner);
       drawTargetRing(ctx, cx, cy, rOuter, rInner);
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
     }
@@ -1426,10 +1430,11 @@
       const maxAge = maxSeconds * 1000;
       drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs);  // TC/RTW momentary bargraph
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
-      drawRadarGrid(ctx, cx, cy, rOuter, rInner);
+      drawRadarGrid(ctx, cx, cy, rOuter, rInner);      // Spokes (under segment)
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
-      drawTargetRing(ctx, cx, cy, rOuter, rInner);  // Ovanpå segmenten
-      drawRadarLabels(ctx, cx, cy, rOuter, rInner, w);
+      drawGridRings(ctx, cx, cy, rOuter, rInner);    // Grå ringar (ovanpå segment)
+      drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target-ring (ovanpå allt utom labels)
+      drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels högst upp
       drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
     }
 
