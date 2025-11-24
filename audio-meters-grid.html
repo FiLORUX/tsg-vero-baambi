@@ -650,6 +650,14 @@
     .kv small{display:block;font-size:11px;color:#a9b2c7}
     .kv .wide{grid-column:span 2}
 
+    /* Settings rows */
+    .setting-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--outline)}
+    .setting-row:last-child{border-bottom:none}
+    .setting-row label{font-size:12px;color:var(--muted);flex-shrink:0}
+    .setting-row select{background:#0f1214;border:1px solid var(--outline);border-radius:6px;color:var(--ink);padding:6px 10px;font-size:12px;cursor:pointer;min-width:140px}
+    .setting-row select:hover{border-color:var(--cyan)}
+    .setting-row select:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(105,191,255,0.2)}
+
     input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
     .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
     .brand{flex:1 1 60%;min-width:480px}
@@ -845,6 +853,41 @@
         </div>
       </section>
 
+      <section class="card">
+        <h2>Metering Settings</h2>
+
+        <!-- LUFS Target -->
+        <div class="setting-row">
+          <label for="targetPreset">Loudness Target</label>
+          <select id="targetPreset">
+            <option value="-23">−23 LUFS (EBU R128)</option>
+            <option value="-24">−24 LUFS (ATSC A/85)</option>
+            <option value="-16">−16 LUFS (Streaming)</option>
+            <option value="-14">−14 LUFS (Podcast)</option>
+          </select>
+        </div>
+
+        <!-- TP Limit -->
+        <div class="setting-row">
+          <label for="tpLimit">True Peak Limit</label>
+          <select id="tpLimit">
+            <option value="-1">−1 dBTP (Broadcast)</option>
+            <option value="-2">−2 dBTP (Streaming)</option>
+            <option value="-3">−3 dBTP (Safe)</option>
+          </select>
+        </div>
+
+        <!-- Radar Sweep -->
+        <div class="setting-row">
+          <label for="radarSweep">Radar Sweep Time</label>
+          <select id="radarSweep">
+            <option value="30">30 seconds</option>
+            <option value="60" selected>60 seconds</option>
+            <option value="120">120 seconds</option>
+          </select>
+        </div>
+      </section>
+
       <section class="card leftFooter">
         <h2>Status & live data</h2>
         <div class="kv">
@@ -997,6 +1040,13 @@
 (async function(){
 
   // =====================================================
+  // CONFIGURABLE METERING SETTINGS
+  // =====================================================
+  let LOUDNESS_TARGET = -23;  // EBU R128 default, changeable via UI
+  let TP_LIMIT = -1;          // True Peak limit in dBTP
+  let radarMaxSeconds = 60;   // Radar sweep time
+
+  // =====================================================
   // LOUDNESS RADAR MODULE (Clarity-style)
   // =====================================================
   const LoudnessRadar = (function() {
@@ -1007,7 +1057,7 @@
     const RADAR_MAX_LUFS = -5;
     const RADAR_MIN_LUFS = -59;
     const RADAR_RING_STEP = 6;
-    const RADAR_TARGET_LUFS = -23; // EBU R128 broadcast target
+    // LOUDNESS_TARGET is now a configurable global variable
 
     // ----- MOMENTARY RING SCALE (EBU +9 mode) -----
     // Dessa parametrar styr outer ring, ticks och siffror
@@ -1079,7 +1129,7 @@
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
 
-        if (lu === RADAR_TARGET_LUFS) {
+        if (lu === LOUDNESS_TARGET) {
           // "Target"-ringen (-23 LUFS) – streckad, blå, starkare
           ctx.strokeStyle = '#40a0ff';
           ctx.setLineDash([4, 4]);
@@ -1172,7 +1222,7 @@
         const y = cy + r * Math.sin(labelAngle);
 
         // Highlight target (-23 LUFS)
-        if (lufs === RADAR_TARGET_LUFS) {
+        if (lufs === LOUDNESS_TARGET) {
           ctx.fillStyle = '#40a0ff';
           ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         } else {
@@ -1212,7 +1262,7 @@
 
       // Beräkna momentary LU relativt target
       const momentaryLu = (typeof momentaryLufs === 'number' && isFinite(momentaryLufs))
-        ? momentaryLufs - RADAR_TARGET_LUFS
+        ? momentaryLufs - LOUDNESS_TARGET
         : MOMENTARY_LU_MIN - 1;
 
       // Normalisera momentary → vinkel
@@ -1551,7 +1601,7 @@
   // --- Radar Data Buffer ---
   // Holds the last 60s of short-term loudness (or as much as fits)
   const radarHistory = [];
-  const radarMaxSeconds = 60;
+  // radarMaxSeconds is now a configurable global variable
   const RADAR_NORMAL_INTERVAL = 100;  // Normal push interval ~100ms
   let lastRadarTime = 0;
   let lastRadarValue = -Infinity;
@@ -2709,7 +2759,7 @@
   let tpOverFlag = false; // OVER-indikator
 
   // Peak indicator state (for radar diode) - current TP with short hold
-  const PEAK_INDICATOR_THRESHOLD = -1.0;  // dBTP threshold
+  // PEAK_INDICATOR_THRESHOLD now uses TP_LIMIT (configurable global)
   const PEAK_INDICATOR_HOLD_MS = 500;     // 500ms hold to avoid flicker
   let peakIndicatorOn = false;
   let peakIndicatorLastTrigger = 0;
@@ -2726,14 +2776,14 @@
     if (tpSmoothR > tpPeakHoldR) { tpPeakHoldR = tpSmoothR; tpPeakTimeR = now; }
     else if (now - tpPeakTimeR > TP_PEAK_HOLD_SEC) { tpPeakHoldR = tpSmoothR; tpPeakTimeR = now; }
 
-    // OVER-indikator om TP >= -1.0 dBTP
+    // OVER-indikator om TP >= TP_LIMIT
     const maxPeak = Math.max(tpPeakHoldL, tpPeakHoldR);
-    if (maxPeak >= -1.0) tpOverFlag = true;
+    if (maxPeak >= TP_LIMIT) tpOverFlag = true;
 
     // Peak indicator for radar (current True Peak with short hold)
     const currentTruePeak = Math.max(tpSmoothL, tpSmoothR);
     const nowMs = performance.now();
-    if (currentTruePeak >= PEAK_INDICATOR_THRESHOLD) {
+    if (currentTruePeak >= TP_LIMIT) {
       peakIndicatorOn = true;
       peakIndicatorLastTrigger = nowMs;
     } else if (nowMs - peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
@@ -2852,7 +2902,7 @@
       if (currentTpMax > r128TpMax) r128TpMax = currentTpMax;
       if (isFinite(r128TpMax) && r128TpMax > -60) {
         r128TpMaxEl.textContent = formatDb(r128TpMax, 1, 5) + ' dBTP';
-        r128TpMaxEl.style.color = r128TpMax >= -1.0 ? getCss('--hot') : getCss('--ok');
+        r128TpMaxEl.style.color = r128TpMax >= TP_LIMIT ? getCss('--hot') : getCss('--ok');
       } else {
         r128TpMaxEl.textContent = '--.- dBTP';
         r128TpMaxEl.style.color = '';
@@ -3652,6 +3702,58 @@
   initSidebarToggle();
   initDragAndDrop();
   initMeterSwitcher();
+
+  // --- Metering Settings ---
+  const targetPresetEl = document.getElementById('targetPreset');
+  const tpLimitEl = document.getElementById('tpLimit');
+  const radarSweepEl = document.getElementById('radarSweep');
+
+  const SETTINGS_KEYS = {
+    target: 'tsg-loudness-target',
+    tpLimit: 'tsg-tp-limit',
+    sweep: 'tsg-radar-sweep'
+  };
+
+  function loadSettings() {
+    const savedTarget = localStorage.getItem(SETTINGS_KEYS.target);
+    const savedTpLimit = localStorage.getItem(SETTINGS_KEYS.tpLimit);
+    const savedSweep = localStorage.getItem(SETTINGS_KEYS.sweep);
+
+    if (savedTarget) {
+      LOUDNESS_TARGET = parseFloat(savedTarget);
+      targetPresetEl.value = savedTarget;
+    }
+    if (savedTpLimit) {
+      TP_LIMIT = parseFloat(savedTpLimit);
+      tpLimitEl.value = savedTpLimit;
+    }
+    if (savedSweep) {
+      radarMaxSeconds = parseInt(savedSweep);
+      radarSweepEl.value = savedSweep;
+    }
+  }
+
+  targetPresetEl.addEventListener('change', () => {
+    LOUDNESS_TARGET = parseFloat(targetPresetEl.value);
+    localStorage.setItem(SETTINGS_KEYS.target, targetPresetEl.value);
+    resetR128();
+  });
+
+  tpLimitEl.addEventListener('change', () => {
+    TP_LIMIT = parseFloat(tpLimitEl.value);
+    localStorage.setItem(SETTINGS_KEYS.tpLimit, tpLimitEl.value);
+    tpOverFlag = false;
+  });
+
+  radarSweepEl.addEventListener('change', () => {
+    radarMaxSeconds = parseInt(radarSweepEl.value);
+    localStorage.setItem(SETTINGS_KEYS.sweep, radarSweepEl.value);
+    radarHistory.length = 0;
+    lastRadarTime = 0;
+    lastRadarValue = -Infinity;
+  });
+
+  loadSettings();
   
   // **BEST PRACTICE 2025: Cleanup Functions for Memory Management**
   // Proper cleanup prevents memory leaks in long-running applications
