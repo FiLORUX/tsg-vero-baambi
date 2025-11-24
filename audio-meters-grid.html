@@ -1552,10 +1552,39 @@
   // Holds the last 60s of short-term loudness (or as much as fits)
   const radarHistory = [];
   const radarMaxSeconds = 60;
+  const RADAR_NORMAL_INTERVAL = 100;  // Normal push interval ~100ms
+  let lastRadarTime = 0;
+  let lastRadarValue = -Infinity;
+
   // Called from updateR128()
   function pushRadarLoudness(val) {
     const now = Date.now();
+
+    // Gap-filling: if more than 2x normal interval has passed, interpolate
+    if (lastRadarTime > 0 && isFinite(lastRadarValue) && isFinite(val)) {
+      const gap = now - lastRadarTime;
+      if (gap > RADAR_NORMAL_INTERVAL * 2) {
+        // Calculate how many interpolated points we need
+        const numPoints = Math.floor(gap / RADAR_NORMAL_INTERVAL) - 1;
+        if (numPoints > 0) {
+          const timeStep = gap / (numPoints + 1);
+          for (let i = 1; i <= numPoints; i++) {
+            const t = lastRadarTime + i * timeStep;
+            const alpha = i / (numPoints + 1);
+            const v = lastRadarValue + alpha * (val - lastRadarValue);
+            radarHistory.push({ t, v });
+          }
+        }
+      }
+    }
+
+    // Push the actual new point
     radarHistory.push({ t: now, v: val });
+
+    // Update last values
+    lastRadarTime = now;
+    lastRadarValue = val;
+
     // Remove old
     while (radarHistory.length > 2 && (now - radarHistory[0].t) > radarMaxSeconds*1000) radarHistory.shift();
   }
@@ -2755,6 +2784,8 @@
     r128StartTime = performance.now();
     // Reset radar
     radarHistory.length = 0;
+    lastRadarTime = 0;
+    lastRadarValue = -Infinity;
     // Update display (fixed-width placeholders)
     lufsM.textContent = '--.- LUFS'; lufsS.textContent = '--.- LUFS'; lufsI.textContent = '--.- LUFS';
     lraEl.textContent = '--.- LU';
