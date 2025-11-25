@@ -86,9 +86,10 @@
       flex-shrink: 0;
     }
 
-    /* Phase correlation and L/R balance wraps */
+    /* Phase correlation, L/R balance and spectrum wraps */
     .phaseWidget .corrWrap,
-    .phaseWidget .monoDevWrap {
+    .phaseWidget .monoDevWrap,
+    .phaseWidget .spectrumWrap {
       flex: 1;
       min-height: 0;
       position: relative;
@@ -98,7 +99,8 @@
     }
 
     .phaseWidget .corrWrap .canvasPad,
-    .phaseWidget .monoDevWrap .canvasPad {
+    .phaseWidget .monoDevWrap .canvasPad,
+    .phaseWidget .spectrumWrap .canvasPad {
       width: 100%;
       height: 100%;
     }
@@ -965,10 +967,12 @@
                   </div>
                 </div>
               </div>
-              <!-- 4) Spectrum Analyzer -->
+              <!-- 4) Spectrum Analyser -->
               <div class="phaseWidget histogramWidget">
                 <div class="widgetLabel">Spectrum</div>
-                <canvas id="spectrumAnalyzer"></canvas>
+                <div class="spectrumWrap">
+                  <div class="canvasPad"><canvas id="spectrumAnalyzer"></canvas></div>
+                </div>
                 <div class="histogramAxis">
                   <span>Lo</span><span></span><span>Hi</span>
                 </div>
