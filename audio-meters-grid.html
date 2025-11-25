@@ -1585,7 +1585,9 @@
     // Configuration
     const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and width
     const PEAK_HOLD_SEC = 3;       // Peak hold for width meter
-    const ROTATION_HISTORY_LEN = 10;  // Trail length for rotation
+    const ROTATION_HISTORY_LEN = 25;   // Trail length for rotation (longer for drift)
+    const ROTATION_SMOOTH_ALPHA = 0.04; // Much slower smoothing for trend, not transients
+    const ROTATION_DEADZONE = 0.05;    // ±5% dead-zone around center
 
     // State
     let midLevel = -60, sideLevel = -60;
@@ -1641,8 +1643,15 @@
 
       // Rotation: covariance-based stereo centroid angle
       const angle = 0.5 * Math.atan2(2 * sumLR, sumLL - sumRR);
-      const newRotation = angle / (Math.PI / 4);  // Normalise to -1..+1
-      rotation += 0.2 * (newRotation - rotation);
+      let rawRotation = angle / (Math.PI / 4);  // Normalise to -1..+1
+
+      // Dead-zone: clamp to 0 if within ±DEADZONE (ignore small fluctuations)
+      if (Math.abs(rawRotation) < ROTATION_DEADZONE) {
+        rawRotation = 0;
+      }
+
+      // Slow smoothing for trend, not transients
+      rotation += ROTATION_SMOOTH_ALPHA * (rawRotation - rotation);
 
       // Trail history
       rotationHistory.push(rotation);
