@@ -2523,33 +2523,40 @@
       // Calculate bar geometry (apply visual boost for display)
       const displayDb = spectrumDisplayVal[b] + RTW_VISUAL_BOOST;
       const barX = paddingL + b * (barWidth + gap);
-      const barTopY = dbToY(displayDb);
-      const barH = bottomY - barTopY;
 
-      // Skip if bar would be invisible
-      if (barH <= 0) continue;
+      // LED-style rendering: 45 cells (1 dB each, from -36 to +9)
+      const LED_CELLS = 45;
+      const LED_GAP = Math.max(1, Math.round(1 * dpr));  // Gap between cells
+      const cellH = (barAreaH - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
 
-      // Draw yellow bar (below 0 dB portion)
-      const yellowTop = Math.max(barTopY, zeroLineY);
-      const yellowH = bottomY - yellowTop;
-      if (yellowH > 0) {
-        ctx.fillStyle = '#f2c74e';
-        ctx.fillRect(barX, yellowTop, barWidth, yellowH);
+      // Draw LED cells from bottom to top
+      for (let cell = 0; cell < LED_CELLS; cell++) {
+        const cellDb = RTW_VISIBLE_BOTTOM_DB + cell;  // -36 + cell = dB value for this cell
+        const cellY = bottomY - (cell + 1) * (cellH + LED_GAP) + LED_GAP;
+
+        // Only draw lit cells (up to displayDb)
+        if (cellDb < displayDb) {
+          // Color based on dB level
+          if (cellDb >= 0) {
+            ctx.fillStyle = '#ff3b2f';  // Red: above 0 dB
+          } else if (cellDb >= -6) {
+            ctx.fillStyle = '#ff9500';  // Orange: -6 to 0 dB
+          } else {
+            ctx.fillStyle = '#f2c74e';  // Yellow: below -6 dB
+          }
+          ctx.fillRect(barX, cellY, barWidth, cellH);
+        }
       }
 
-      // Draw red portion (above 0 dB) - continues the bar, not just a cap
-      if (displayDb > 0 && barTopY < zeroLineY) {
-        const redH = zeroLineY - barTopY;
-        ctx.fillStyle = '#ff3b2f';
-        ctx.fillRect(barX, barTopY, barWidth, redH);
-      }
-
-      // White peak marker (floating dash, also boosted)
+      // Peak-hold marker (white LED cell at peak position)
       const peakDb = spectrumPeakMarker[b] + RTW_VISUAL_BOOST;
       if (peakDb > RTW_VISIBLE_BOTTOM_DB) {
-        const peakY = dbToY(peakDb);
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.fillRect(barX, peakY - 1 * dpr, barWidth, 2 * dpr);
+        const peakCell = Math.floor(peakDb - RTW_VISIBLE_BOTTOM_DB);
+        if (peakCell >= 0 && peakCell < LED_CELLS) {
+          const peakCellY = bottomY - (peakCell + 1) * (cellH + LED_GAP) + LED_GAP;
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.fillRect(barX, peakCellY, barWidth, cellH);
+        }
       }
     }
 
