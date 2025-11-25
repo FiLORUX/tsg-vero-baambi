@@ -2474,35 +2474,49 @@
       return 'rgb(90,170,170)';                     // Teal: normal
     }
 
+    // Broadcast-standard display constants (UI only, no backend changes)
+    const SPECTRUM_VISUAL_BOOST = 9;  // RTW-style boost (6-12 dB, 9 is most RTW-like)
+    const SPECTRUM_GAMMA = 0.65;       // Gamma compression for RTW/TC look
+
     // Draw bars and peaks
     for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
-      const db = Math.max(SPECTRUM_DB_MIN, Math.min(SPECTRUM_DB_MAX, spectrumSmooth[b]));
-      const norm = (db - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
-      const barH = norm * maxH;
+      // 1. Broadcast-standard visual boost (display only)
+      const bandDb = spectrumSmooth[b] + SPECTRUM_VISUAL_BOOST;
+
+      // 2. Clamp to RTA display range
+      const dbVis = Math.max(-60, Math.min(0, bandDb));
+
+      // 3. Gamma compression (RTW/TC look)
+      const displayNorm = Math.pow((dbVis + 60) / 60, SPECTRUM_GAMMA);
+
+      // 4. Draw bar using displayNorm
+      const barH = displayNorm * maxH;
       const x = padding + b * (barWidth + gap);
       const y = h - padding - barH;
 
-      // Bar color based on level
-      ctx.fillStyle = getRTWColor(db);
+      // Bar color based on boosted level
+      ctx.fillStyle = getRTWColor(dbVis);
       ctx.fillRect(x, y, barWidth, barH);
 
-      // Peak hold marker (red line)
-      const peakDb = Math.max(SPECTRUM_DB_MIN, Math.min(SPECTRUM_DB_MAX, spectrumPeakHold[b]));
-      const peakNorm = (peakDb - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
-      const peakY = h - padding - peakNorm * maxH;
+      // Peak hold marker (same display transform)
+      const peakBoosted = spectrumPeakHold[b] + SPECTRUM_VISUAL_BOOST;
+      const peakDbVis = Math.max(-60, Math.min(0, peakBoosted));
+      const peakDisplayNorm = Math.pow((peakDbVis + 60) / 60, SPECTRUM_GAMMA);
+      const peakY = h - padding - peakDisplayNorm * maxH;
       const peakHeight = Math.max(1, 2 * dpr);
 
       ctx.fillStyle = 'rgb(255,60,60)';
       ctx.fillRect(x, peakY - peakHeight, barWidth, peakHeight);
     }
 
-    // Draw dB scale labels on left side
+    // Draw dB scale labels on left side (with gamma-corrected positions)
     ctx.fillStyle = '#6b7280';
     ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
     ctx.textAlign = 'right';
     const dbMarks = [0, -12, -24, -36, -48, -60];
     for (const mark of dbMarks) {
-      const normY = (mark - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
+      // Apply same gamma compression to scale positions
+      const normY = Math.pow((mark + 60) / 60, SPECTRUM_GAMMA);
       const y = h - padding - normY * maxH;
       ctx.fillText(`${mark}`, padding - 3 * dpr, y + 3 * dpr);
       // Grid line
