@@ -1826,33 +1826,7 @@
       }
     }
 
-    // Width meter canvas
-    const widthMeterEl = document.getElementById('widthMeter');
-    if (widthMeterEl) {
-      const parent = widthMeterEl.parentElement;
-      const rect = parent.getBoundingClientRect();
-      const rw = Math.floor((rect.width - 16) * dpr);
-      const rh = Math.floor((rect.height - 30) * dpr);
-      if (widthMeterEl.width !== rw || widthMeterEl.height !== rh) {
-        widthMeterEl.width = Math.max(10, rw);
-        widthMeterEl.height = Math.max(10, rh);
-      }
-    }
-
-    // Spectrum analyzer canvas
-    const spectrumCanvas = document.getElementById('spectrumAnalyzer');
-    if (spectrumCanvas) {
-      const parent = spectrumCanvas.parentElement;
-      if (parent) {
-        const rect = parent.getBoundingClientRect();
-        const sw = Math.floor((rect.width - 16) * dpr);
-        const sh = Math.floor((rect.height - 30) * dpr);
-        if (spectrumCanvas.width !== sw || spectrumCanvas.height !== sh) {
-          spectrumCanvas.width = Math.max(10, sw);
-          spectrumCanvas.height = Math.max(10, sh);
-        }
-      }
-    }
+    // Width meter and Spectrum analyser canvas - sizing handled by their draw functions using getBoundingClientRect()
   }
 
   // Loudness Radar layout - beräkna och sätt storlekar
@@ -2426,26 +2400,32 @@
   function drawWidthMeter() {
     if (!widthMeterCtx) return;
     const canvas = widthMeter;
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.offsetWidth, h = canvas.offsetHeight;
-    if (w === 0 || h === 0) return;
+    if (!canvas) return;
 
-    // Set backing store to match layout dimensions
-    const bw = Math.floor(w * dpr), bh = Math.floor(h * dpr);
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw;
-      canvas.height = bh;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width;
+    const cssH = rect.height;
+
+    if (cssW < 1 || cssH < 1) return;
+
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
 
     const ctx = widthMeterCtx;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, w, h);
 
-    const width = StereoAnalysisEngine.getWidth();     // 0..1+
+    const widthVal = StereoAnalysisEngine.getWidth();     // 0..1+
     const widthPeak = StereoAnalysisEngine.getWidthPeak();
-    const padding = 6 * dpr;
-    const centerY = canvas.height / 2;
-    const trackW = canvas.width - padding * 2;
-    const trackH = 6 * dpr;
+    const padding = w * 0.02;
+    const centerY = h / 2;
+    const trackW = w - padding * 2;
+    const trackH = Math.max(4, h * 0.15);
 
     // Draw track background
     ctx.fillStyle = '#1a1f25';
@@ -2461,8 +2441,8 @@
     }
 
     // Draw fill bar
-    const fillW = Math.min(1.0, width) * trackW;
-    const fillColor = widthColor(width);
+    const fillW = Math.min(1.0, widthVal) * trackW;
+    const fillColor = widthColor(widthVal);
     ctx.fillStyle = fillColor;
     ctx.fillRect(padding, centerY - trackH / 2, fillW, trackH);
 
@@ -2472,7 +2452,7 @@
     ctx.fillRect(peakX - 1.5 * dpr, centerY - trackH, 3 * dpr, trackH * 2);
 
     // Current position indicator with glow
-    const indicatorX = padding + Math.min(1.0, width) * trackW;
+    const indicatorX = padding + Math.min(1.0, widthVal) * trackW;
     const gradient = ctx.createRadialGradient(indicatorX, centerY, 0, indicatorX, centerY, 8 * dpr);
     // Convert hex color to rgba with alpha
     function hexToRgba(hex, alpha) {
