@@ -2379,10 +2379,10 @@
   }
 
   // RTW/TC Visual Constants (UI only)
-  const RTW_VISIBLE_TOP_DB = 9;      // Top of visual range
-  const RTW_VISIBLE_BOTTOM_DB = -36; // Bottom of visual range
-  const RTW_RANGE_DB = RTW_VISIBLE_TOP_DB - RTW_VISIBLE_BOTTOM_DB; // 45 dB
-  const RTW_VISUAL_BOOST = 24;       // Boost to shift FFT values into visible range
+  const RTW_VISIBLE_TOP_DB = 9;       // Top of visual range
+  const RTW_VISIBLE_BOTTOM_DB = -48;  // Bottom of visual range
+  const RTW_RANGE_DB = RTW_VISIBLE_TOP_DB - RTW_VISIBLE_BOTTOM_DB; // 57 dB
+  const RTW_VISUAL_BOOST = 18;        // Boost to shift FFT values into visible range
   const RTW_FALL_RATE = 12;          // Bar fall: 12 dB/s
   const RTW_PEAK_HOLD_MS = 750;      // Peak hold: 600-900ms
   const RTW_PEAK_FALL_RATE = 18;     // Peak marker fall: 18 dB/s
@@ -2479,7 +2479,7 @@
     // Draw gridlines first (behind bars)
     ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth = 1;
-    const majorMarks = [6, 0, -6, -12, -18, -24, -30, -36];
+    const majorMarks = [6, 0, -6, -12, -18, -24, -30, -36, -42, -48];
     for (const mark of majorMarks) {
       const y = dbToY(mark);
       ctx.beginPath();
@@ -2524,8 +2524,8 @@
       const displayDb = spectrumDisplayVal[b] + RTW_VISUAL_BOOST;
       const barX = paddingL + b * (barWidth + gap);
 
-      // LED-style rendering: 45 cells (1 dB each, from -36 to +9)
-      const LED_CELLS = 45;
+      // LED-style rendering: 57 cells (1 dB each, from -48 to +9)
+      const LED_CELLS = 57;
       const LED_GAP = Math.max(1, Math.round(1 * dpr));  // Gap between cells
       const cellH = (barAreaH - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
 
@@ -2565,7 +2565,7 @@
     ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    const dbLabels = [6, 0, -12, -24, -36];
+    const dbLabels = [6, 0, -12, -24, -36, -48];
     for (const mark of dbLabels) {
       const y = dbToY(mark);
       const label = mark > 0 ? `+${mark}` : `${mark}`;
