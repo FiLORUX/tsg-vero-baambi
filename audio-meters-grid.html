@@ -959,13 +959,13 @@
                 <canvas id="widthMeter"></canvas>
                 <div class="rotationAxis"><span>M</span><span></span><span>S</span></div>
               </div>
-              <!-- Row 2, Col 1: Rotation Meter -->
+              <!-- Row 2, Col 1: Phase Axis Rotation Meter -->
               <div class="phaseWidget">
-                <div class="widgetLabel">Rotation</div>
+                <div class="widgetLabel">Phase Axis Rotation</div>
                 <div class="rotationWrap">
                   <div class="canvasPad"><canvas id="rotationCanvas"></canvas></div>
                 </div>
-                <div class="rotationAxis"><span>L</span><span>C</span><span>R</span></div>
+                <div class="rotationAxis"><span>L-Phase</span><span>Mono Axis</span><span>R-Phase</span></div>
               </div>
               <!-- Row 2, Col 2: M/S Meter -->
               <div class="phaseWidget">
@@ -2755,6 +2755,21 @@
     ctx.fillStyle = '#22d3ee';
     ctx.fill();
     ctx.shadowBlur = 0;
+
+    // 5. Degree scale at bottom (−45° 0° +45°)
+    const degreeY = h - 4 * dpr;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = `${Math.round(7 * dpr)}px ui-monospace, monospace`;
+    ctx.textBaseline = 'bottom';
+
+    ctx.textAlign = 'left';
+    ctx.fillText('−45°', padding, degreeY);
+
+    ctx.textAlign = 'center';
+    ctx.fillText('0°', centerX, degreeY);
+
+    ctx.textAlign = 'right';
+    ctx.fillText('+45°', w - padding, degreeY);
   }
 
   // Combined update function for all stereo analysis widgets
