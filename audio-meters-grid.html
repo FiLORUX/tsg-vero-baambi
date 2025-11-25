@@ -2347,12 +2347,17 @@
       const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
       const highBin = Math.min(spectrumFreqBufL.length - 1, Math.ceil(highFreq / binHz));
 
-      let sum = 0, count = 0;
+      // Sum linear power, not dB (dB are logarithmic - cannot be averaged directly)
+      // 10^(dB/10) converts to power; -Infinity dB becomes 0 power (correct)
+      let powerSum = 0, count = 0;
       for (let i = lowBin; i <= highBin; i++) {
-        sum += (spectrumFreqBufL[i] + spectrumFreqBufR[i]) * 0.5;
+        const powerL = Math.pow(10, spectrumFreqBufL[i] / 10);
+        const powerR = Math.pow(10, spectrumFreqBufR[i] / 10);
+        powerSum += 0.5 * (powerL + powerR);
         count++;
       }
-      bandValues[b] = count > 0 ? sum / count : -100;
+      const avgPower = count > 0 ? powerSum / count : 0;
+      bandValues[b] = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
     }
 
     const smoothAlpha = 0.3;
