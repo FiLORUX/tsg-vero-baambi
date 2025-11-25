@@ -3046,29 +3046,31 @@
   }
 
   // True Peak (dBTP) – LED-style rendering med peak-hold markör
-  // Range: -60 dBTP till 0 dBTP = 60 LED cells
+  // Range: -60 dBTP till 0 dBTP = 120 LED cells (2x upplösning)
   function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h); ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
 
-    // LED cell constants
-    const LED_CELLS = 60;  // 60 cells for 60 dB range (-60 to 0)
+    // LED cell constants - 2x resolution
+    const LED_CELLS = 120;  // 120 cells for 60 dB range (-60 to 0), 0.5 dB per cell
     const LED_GAP = Math.max(1, Math.round(1 * dpr));  // 1px gap between cells
     const cellW = (w - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
     const barH = Math.round(h * 0.12);
 
     function segColor(db){ if(db>=-1) return getCss('--hot'); if(db>=-3) return getCss('--caution'); if(db>=-6) return getCss('--warn'); return getCss('--ok'); }
+    // Brighter version for peak-hold
+    function peakColor(db){ if(db>=-1) return '#ff6b5b'; if(db>=-3) return '#ffb74d'; if(db>=-6) return '#ffe066'; return '#7dff7d'; }
 
     function drawChannel(yTop, val, peakHold){
       const displayDb = Math.max(-60, Math.min(0, val));
       const peakDb = (peakHold !== undefined) ? Math.max(-60, Math.min(0, peakHold)) : -61;
-      const peakCell = Math.round((peakDb + 60));  // Which cell for peak-hold
+      const peakCell = Math.round((peakDb + 60) * 2);  // 2x scale for 120 cells
 
       for (let cell = 0; cell < LED_CELLS; cell++) {
-        const cellDb = -60 + cell;  // dB value for this cell
+        const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell
         const cellX = cell * (cellW + LED_GAP);
-        const col = segColor(cellDb + 0.5);  // Color based on cell center
+        const col = segColor(cellDb + 0.25);  // Color based on cell center
 
         // Background (dimmed) - all cells
         ctx.globalAlpha = 0.14;
@@ -3081,13 +3083,19 @@
           ctx.fillStyle = col;
           ctx.fillRect(cellX, yTop, cellW, barH);
         }
+      }
 
-        // Peak-hold cell - bright white outline
-        if (cell === peakCell && peakHold > -60) {
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(cellX, yTop, cellW, barH);
-        }
+      // Peak-hold cell - brighter same-zone color with subtle glow
+      if (peakCell >= 0 && peakCell < LED_CELLS && peakHold > -60) {
+        const peakCellDb = -60 + peakCell * 0.5;
+        const cellX = peakCell * (cellW + LED_GAP);
+        const pCol = peakColor(peakCellDb);
+        ctx.globalAlpha = 1;
+        ctx.shadowColor = pCol;
+        ctx.shadowBlur = 4 * dpr;
+        ctx.fillStyle = pCol;
+        ctx.fillRect(cellX, yTop, cellW, barH);
+        ctx.shadowBlur = 0;
       }
     }
     drawChannel(h*0.35, valueL, peakHoldL); drawChannel(h*0.55, valueR, peakHoldR);
