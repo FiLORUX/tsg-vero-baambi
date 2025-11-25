@@ -2364,16 +2364,25 @@
   // 1/3-octave factor: 2^(1/6) ≈ 1.1225
   const THIRD_OCT_FACTOR = Math.pow(2, 1/6);
 
-  // Smoothing: fast attack, slower release
-  const SPECTRUM_ATTACK = 0.5;
-  const SPECTRUM_RELEASE = 0.2;
+  // RTW/TC Visual Display State (UI only - does not affect DSP)
+  const spectrumDisplayVal = new Float32Array(SPECTRUM_NUM_BANDS);  // Smoothed display values
+  const spectrumPeakMarker = new Float32Array(SPECTRUM_NUM_BANDS);  // Peak marker positions
+  const spectrumPeakTimer = new Float32Array(SPECTRUM_NUM_BANDS);   // Peak hold timers
+  // Initialize to floor
+  for (let i = 0; i < SPECTRUM_NUM_BANDS; i++) {
+    spectrumDisplayVal[i] = -100;
+    spectrumPeakMarker[i] = -100;
+    spectrumPeakTimer[i] = 0;
+  }
 
-  // Peak hold falloff: 6 dB per second
-  const SPECTRUM_PEAK_FALL_RATE = 6;
-
-  // dB range
-  const SPECTRUM_DB_MIN = -60;
-  const SPECTRUM_DB_MAX = 0;
+  // RTW/TC Visual Constants (UI only)
+  const RTW_VISIBLE_TOP_DB = 9;      // Top of visual range
+  const RTW_VISIBLE_BOTTOM_DB = -36; // Bottom of visual range
+  const RTW_RANGE_DB = RTW_VISIBLE_TOP_DB - RTW_VISIBLE_BOTTOM_DB; // 45 dB
+  const RTW_FALL_RATE = 12;          // Bar fall: 12 dB/s
+  const RTW_PEAK_HOLD_MS = 750;      // Peak hold: 600-900ms
+  const RTW_PEAK_FALL_RATE = 18;     // Peak marker fall: 18 dB/s
+  const RTW_DISPLAY_SMOOTH = 0.15;   // Visual smoothing factor (0.85/0.15 blend)
 
   function drawSpectrum() {
     if (!spectrumCtx || !analyserL || !analyserR) return;
@@ -2437,95 +2446,161 @@
       const avgPower = count > 0 ? powerSum / count : 0;
       const bandDb = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
 
-      // Apply smoothing with asymmetric attack/release
-      const prev = spectrumSmooth[b];
-      if (bandDb > prev) {
-        // Attack: fast
-        spectrumSmooth[b] = prev + SPECTRUM_ATTACK * (bandDb - prev);
+      // Store raw band value (DSP untouched)
+      spectrumSmooth[b] = bandDb;
+    }
+
+    // =========================================================
+    // RTW/TC-GRADE VISUAL RENDERING (UI ONLY - NO DSP CHANGES)
+    // =========================================================
+
+    // Layout calculations
+    const paddingL = Math.round(28 * dpr);  // Left padding for dB labels
+    const paddingR = Math.round(6 * dpr);
+    const paddingT = Math.round(6 * dpr);
+    const paddingB = Math.round(18 * dpr);  // Bottom padding for freq labels
+    const barAreaW = w - paddingL - paddingR;
+    const barAreaH = h - paddingT - paddingB;
+    const gap = Math.round(1 * dpr);
+    const barWidth = Math.max(2 * dpr, (barAreaW - gap * (SPECTRUM_NUM_BANDS - 1)) / SPECTRUM_NUM_BANDS);
+
+    // Y-position helper: maps dB to pixel (top = +9dB, bottom = -36dB)
+    function dbToY(db) {
+      const clamped = Math.max(RTW_VISIBLE_BOTTOM_DB, Math.min(RTW_VISIBLE_TOP_DB, db));
+      return paddingT + ((RTW_VISIBLE_TOP_DB - clamped) / RTW_RANGE_DB) * barAreaH;
+    }
+    const zeroLineY = dbToY(0);
+    const bottomY = paddingT + barAreaH;
+
+    // Draw gridlines first (behind bars)
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    const majorMarks = [6, 0, -6, -12, -18, -24, -30, -36];
+    for (const mark of majorMarks) {
+      const y = dbToY(mark);
+      ctx.beginPath();
+      ctx.moveTo(paddingL, y);
+      ctx.lineTo(w - paddingR, y);
+      ctx.stroke();
+    }
+
+    // Draw 0 dB reference line (red, thicker)
+    ctx.strokeStyle = '#c5312f';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(paddingL, zeroLineY);
+    ctx.lineTo(w - paddingR, zeroLineY);
+    ctx.stroke();
+
+    // Process and draw each band
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const actualValue = spectrumSmooth[b];
+
+      // RTW Ballistics: instant rise, 12 dB/s fall
+      if (actualValue > spectrumDisplayVal[b]) {
+        spectrumDisplayVal[b] = actualValue;  // Instant rise
       } else {
-        // Release: slower
-        spectrumSmooth[b] = prev + SPECTRUM_RELEASE * (bandDb - prev);
+        spectrumDisplayVal[b] = Math.max(spectrumDisplayVal[b] - RTW_FALL_RATE * deltaTime, actualValue);
       }
 
-      // Peak hold with falloff
-      if (spectrumSmooth[b] > spectrumPeakHold[b]) {
-        spectrumPeakHold[b] = spectrumSmooth[b];
+      // Visual micro-jitter smoothing (0.85/0.15 blend)
+      spectrumDisplayVal[b] = spectrumDisplayVal[b] * (1 - RTW_DISPLAY_SMOOTH) + actualValue * RTW_DISPLAY_SMOOTH;
+
+      // Peak marker: hold then fall
+      if (actualValue > spectrumPeakMarker[b]) {
+        spectrumPeakMarker[b] = actualValue;
+        spectrumPeakTimer[b] = RTW_PEAK_HOLD_MS;
+      } else if (spectrumPeakTimer[b] > 0) {
+        spectrumPeakTimer[b] -= deltaTime * 1000;
       } else {
-        // Fall at 6 dB per second
-        spectrumPeakHold[b] -= SPECTRUM_PEAK_FALL_RATE * deltaTime;
-        if (spectrumPeakHold[b] < SPECTRUM_DB_MIN) {
-          spectrumPeakHold[b] = SPECTRUM_DB_MIN;
+        spectrumPeakMarker[b] -= RTW_PEAK_FALL_RATE * deltaTime;
+      }
+
+      // Calculate bar geometry
+      const displayDb = spectrumDisplayVal[b];
+      const barX = paddingL + b * (barWidth + gap);
+      const barTopY = dbToY(displayDb);
+      const barH = bottomY - barTopY;
+
+      // Skip if bar would be invisible
+      if (barH <= 0) continue;
+
+      // Floor fill (subtle density below 0 dB line)
+      if (barTopY < bottomY) {
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.fillRect(barX, zeroLineY, barWidth, bottomY - zeroLineY);
+      }
+
+      // Main bar fill (RTW yellow)
+      const barDrawTop = Math.max(barTopY, zeroLineY);  // Yellow part stops at 0 dB
+      const yellowH = bottomY - barDrawTop;
+      if (yellowH > 0) {
+        ctx.fillStyle = '#f2c74e';
+        ctx.fillRect(barX, barDrawTop, barWidth, yellowH);
+
+        // Shadow overlay on lower part
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.fillRect(barX, barDrawTop + yellowH * 0.6, barWidth, yellowH * 0.4);
+
+        // Edge highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(barX, barDrawTop, 1, yellowH);
+      }
+
+      // Red peak cap (if above 0 dB)
+      if (displayDb > 0) {
+        const redCapH = Math.min(3 * dpr, zeroLineY - barTopY);
+        if (redCapH > 0) {
+          ctx.fillStyle = '#ff3b2f';
+          ctx.fillRect(barX, barTopY, barWidth, redCapH);
         }
       }
+
+      // White peak marker (floating dash)
+      const peakDb = spectrumPeakMarker[b];
+      if (peakDb > RTW_VISIBLE_BOTTOM_DB) {
+        const peakY = dbToY(peakDb);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(barX, peakY - 1 * dpr, barWidth, 2 * dpr);
+      }
     }
 
-    // Drawing layout: narrow bars with minimal spacing
-    const padding = Math.round(4 * dpr);
-    const totalWidth = w - padding * 2;
-    const gap = Math.max(1, Math.round(1 * dpr));
-    const barWidth = Math.max(2 * dpr, (totalWidth - gap * (SPECTRUM_NUM_BANDS - 1)) / SPECTRUM_NUM_BANDS);
-    const maxH = h - padding * 2;
-
-    // RTW-style color function based on dB level
-    function getRTWColor(db) {
-      if (db >= -6) return 'rgb(255,80,80)';       // Red: hot
-      if (db >= -12) return 'rgb(255,160,0)';      // Orange: caution
-      if (db >= -24) return 'rgb(255,220,0)';      // Yellow: warm
-      return 'rgb(90,170,170)';                     // Teal: normal
-    }
-
-    // Broadcast-standard display constants (UI only, no backend changes)
-    const SPECTRUM_VISUAL_BOOST = 9;  // RTW-style boost (6-12 dB, 9 is most RTW-like)
-    const SPECTRUM_GAMMA = 0.65;       // Gamma compression for RTW/TC look
-
-    // Draw bars and peaks
-    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
-      // 1. Broadcast-standard visual boost (display only)
-      const bandDb = spectrumSmooth[b] + SPECTRUM_VISUAL_BOOST;
-
-      // 2. Clamp to RTA display range
-      const dbVis = Math.max(-60, Math.min(0, bandDb));
-
-      // 3. Gamma compression (RTW/TC look)
-      const displayNorm = Math.pow((dbVis + 60) / 60, SPECTRUM_GAMMA);
-
-      // 4. Draw bar using displayNorm
-      const barH = displayNorm * maxH;
-      const x = padding + b * (barWidth + gap);
-      const y = h - padding - barH;
-
-      // Bar color based on boosted level
-      ctx.fillStyle = getRTWColor(dbVis);
-      ctx.fillRect(x, y, barWidth, barH);
-
-      // Peak hold marker (same display transform)
-      const peakBoosted = spectrumPeakHold[b] + SPECTRUM_VISUAL_BOOST;
-      const peakDbVis = Math.max(-60, Math.min(0, peakBoosted));
-      const peakDisplayNorm = Math.pow((peakDbVis + 60) / 60, SPECTRUM_GAMMA);
-      const peakY = h - padding - peakDisplayNorm * maxH;
-      const peakHeight = Math.max(1, 2 * dpr);
-
-      ctx.fillStyle = 'rgb(255,60,60)';
-      ctx.fillRect(x, peakY - peakHeight, barWidth, peakHeight);
-    }
-
-    // Draw dB scale labels on left side (with gamma-corrected positions)
-    ctx.fillStyle = '#6b7280';
+    // Draw dB scale labels on left side
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
     ctx.textAlign = 'right';
-    const dbMarks = [0, -12, -24, -36, -48, -60];
-    for (const mark of dbMarks) {
-      // Apply same gamma compression to scale positions
-      const normY = Math.pow((mark + 60) / 60, SPECTRUM_GAMMA);
-      const y = h - padding - normY * maxH;
-      ctx.fillText(`${mark}`, padding - 3 * dpr, y + 3 * dpr);
-      // Grid line
-      ctx.strokeStyle = 'rgba(100,110,120,0.2)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(padding, y);
-      ctx.lineTo(w - padding, y);
-      ctx.stroke();
+    ctx.textBaseline = 'middle';
+    const dbLabels = [6, 0, -12, -24, -36];
+    for (const mark of dbLabels) {
+      const y = dbToY(mark);
+      const label = mark > 0 ? `+${mark}` : `${mark}`;
+      ctx.fillText(label, paddingL - 4 * dpr, y);
+    }
+
+    // Draw frequency axis labels (bottom)
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = `${Math.round(7 * dpr)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const freqLabels = [
+      { freq: 31.5, label: '31' },
+      { freq: 63, label: '63' },
+      { freq: 125, label: '125' },
+      { freq: 250, label: '250' },
+      { freq: 500, label: '500' },
+      { freq: 1000, label: '1k' },
+      { freq: 2000, label: '2k' },
+      { freq: 4000, label: '4k' },
+      { freq: 8000, label: '8k' },
+      { freq: 16000, label: '16k' }
+    ];
+    for (const fl of freqLabels) {
+      // Find band index for this frequency
+      let bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
+      if (bandIdx >= 0) {
+        const x = paddingL + bandIdx * (barWidth + gap) + barWidth / 2;
+        ctx.fillText(fl.label, x, bottomY + 3 * dpr);
+      }
     }
   }
 
