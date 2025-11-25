@@ -52,14 +52,20 @@
       min-height: 0;
     }
 
-    /* Right column: L/R Balance, Rotation, M/S, Histogram (stacked) */
+    /* Right column: 2x2 grid + spectrum spanning full width */
     .stereoRightCol {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr 2fr;
       gap: 6px;
       flex: 1;
       min-height: 0;
       min-width: 180px;
+    }
+
+    /* Spectrum spans both columns and double height */
+    .stereoRightCol .histogramWidget {
+      grid-column: 1 / -1;
     }
 
     /* Individual widgets in right column */
@@ -86,9 +92,10 @@
       flex-shrink: 0;
     }
 
-    /* Phase correlation, L/R balance and spectrum wraps */
+    /* Phase correlation, L/R balance, rotation and spectrum wraps */
     .phaseWidget .corrWrap,
     .phaseWidget .monoDevWrap,
+    .phaseWidget .rotationWrap,
     .phaseWidget .spectrumWrap {
       flex: 1;
       min-height: 0;
@@ -100,6 +107,7 @@
 
     .phaseWidget .corrWrap .canvasPad,
     .phaseWidget .monoDevWrap .canvasPad,
+    .phaseWidget .rotationWrap .canvasPad,
     .phaseWidget .spectrumWrap .canvasPad {
       width: 100%;
       height: 100%;
@@ -931,9 +939,9 @@
                 </div>
               </div>
             </div>
-            <!-- Höger kolumn: Balance, Width, M/S, Spectrum -->
+            <!-- Höger kolumn: 2x2 grid + Spectrum (full width, double height) -->
             <div class="stereoRightCol">
-              <!-- 1) Balance Meter -->
+              <!-- Row 1, Col 1: Balance Meter -->
               <div class="phaseWidget">
                 <div class="widgetLabel">Balance</div>
                 <div class="monoDevWrap">
@@ -945,13 +953,21 @@
                   <span>R</span>
                 </div>
               </div>
-              <!-- 2) Width Meter -->
+              <!-- Row 1, Col 2: Width Meter -->
               <div class="phaseWidget">
                 <div class="widgetLabel">Width</div>
                 <canvas id="widthMeter"></canvas>
                 <div class="rotationAxis"><span>M</span><span></span><span>S</span></div>
               </div>
-              <!-- 3) M/S Meter -->
+              <!-- Row 2, Col 1: Rotation Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Rotation</div>
+                <div class="rotationWrap">
+                  <div class="canvasPad"><canvas id="rotationCanvas"></canvas></div>
+                </div>
+                <div class="rotationAxis"><span>L</span><span>C</span><span>R</span></div>
+              </div>
+              <!-- Row 2, Col 2: M/S Meter -->
               <div class="phaseWidget">
                 <div class="widgetLabel">M/S Meter</div>
                 <div class="msCompact">
@@ -967,7 +983,7 @@
                   </div>
                 </div>
               </div>
-              <!-- 4) Spectrum Analyser -->
+              <!-- Row 3-4: Spectrum Analyser (full width, double height) -->
               <div class="phaseWidget histogramWidget">
                 <div class="widgetLabel">Spectrum</div>
                 <div class="spectrumWrap">
@@ -1512,7 +1528,7 @@
   const corr = document.getElementById('corr'), corrCtx = corr.getContext('2d');
   const corrVal = document.getElementById('corrVal');
 
-  // --- Stereo Analysis Strip (nya widgets) ---
+  // --- Stereo Analysis Strip (widgets) ---
   const spectrumAnalyzer = document.getElementById('spectrumAnalyzer');
   const spectrumCtx = spectrumAnalyzer ? spectrumAnalyzer.getContext('2d') : null;
   const msFillM = document.getElementById('msFillM');
@@ -1521,6 +1537,8 @@
   const msValueS = document.getElementById('msValueS');
   const widthMeter = document.getElementById('widthMeter');
   const widthMeterCtx = widthMeter ? widthMeter.getContext('2d') : null;
+  const rotationCanvas = document.getElementById('rotationCanvas');
+  const rotationCtx = rotationCanvas ? rotationCanvas.getContext('2d') : null;
 
   // =====================================================
   // STEREO ANALYSIS ENGINE
@@ -1559,7 +1577,7 @@
     };
   })();
 
-  // Computes: Width, M/S Levels, Spectrum
+  // Computes: Width, M/S Levels, Rotation
   // =====================================================
   const StereoAnalysisEngine = (function() {
     'use strict';
@@ -1567,12 +1585,15 @@
     // Configuration
     const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and width
     const PEAK_HOLD_SEC = 3;       // Peak hold for width meter
+    const ROTATION_HISTORY_LEN = 10;  // Trail length for rotation
 
     // State
     let midLevel = -60, sideLevel = -60;
     let width = 0;                 // 0..1+ (S / (M + S))
     let widthPeak = 0;             // Peak hold value
     let widthPeakTime = 0;         // Timestamp for peak hold
+    let rotation = 0;              // -1..+1 (stereo centroid angle)
+    const rotationHistory = [];    // Trail: recent values
 
     // Analyze a block of L/R samples
     function analyze(bufL, bufR) {
@@ -1580,6 +1601,7 @@
       if (n === 0) return;
 
       let sumM2 = 0, sumS2 = 0;
+      let sumLL = 0, sumRR = 0, sumLR = 0;
 
       for (let i = 0; i < n; i++) {
         const L = bufL[i], R = bufR[i];
@@ -1587,6 +1609,10 @@
         const S = (L - R) * 0.5;
         sumM2 += M * M;
         sumS2 += S * S;
+        // Covariance for rotation
+        sumLL += L * L;
+        sumRR += R * R;
+        sumLR += L * R;
       }
 
       const rmsM = Math.sqrt(sumM2 / n);
@@ -1612,14 +1638,27 @@
       const newSideDb = rmsS > eps ? 20 * Math.log10(rmsS) : -60;
       midLevel += SMOOTH_ALPHA * (newMidDb - midLevel);
       sideLevel += SMOOTH_ALPHA * (newSideDb - sideLevel);
+
+      // Rotation: covariance-based stereo centroid angle
+      const angle = 0.5 * Math.atan2(2 * sumLR, sumLL - sumRR);
+      const newRotation = angle / (Math.PI / 4);  // Normalise to -1..+1
+      rotation += 0.2 * (newRotation - rotation);
+
+      // Trail history
+      rotationHistory.push(rotation);
+      if (rotationHistory.length > ROTATION_HISTORY_LEN) {
+        rotationHistory.shift();
+      }
     }
 
     function getWidth() { return width; }
     function getWidthPeak() { return widthPeak; }
     function getMidLevel() { return midLevel; }
     function getSideLevel() { return sideLevel; }
+    function getRotation() { return rotation; }
+    function getRotationHistory() { return rotationHistory; }
 
-    return { analyze, getWidth, getWidthPeak, getMidLevel, getSideLevel };
+    return { analyze, getWidth, getWidthPeak, getMidLevel, getSideLevel, getRotation, getRotationHistory };
   })();
 
   const dbfs = document.getElementById('dbfs'), dbfsScale = document.getElementById('dbfsScale');
@@ -2513,11 +2552,80 @@
     ctx.fill();
   }
 
+  // 4) Rotation Meter - stereo centroid angle with trail
+  function drawRotation() {
+    if (!rotationCtx || !rotationCanvas) return;
+
+    // Use wrapper for dimensions
+    const rotationWrap = xyCard.querySelector('.rotationWrap');
+    if (!rotationWrap) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = rotationWrap.getBoundingClientRect();
+    const cssW = rect.width;
+    const cssH = rect.height;
+
+    if (cssW < 1 || cssH < 1) return;
+
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+
+    if (rotationCanvas.width !== w || rotationCanvas.height !== h) {
+      rotationCanvas.width = w;
+      rotationCanvas.height = h;
+    }
+
+    const ctx = rotationCtx;
+    ctx.clearRect(0, 0, w, h);
+
+    const padding = w * 0.04;
+    const trackY = h / 2;
+    const trackW = w - padding * 2;
+    const centerX = w / 2;
+    const trackH = Math.max(4, h * 0.12);
+
+    // 1. Draw track background
+    ctx.fillStyle = '#1a1f25';
+    ctx.fillRect(padding, trackY - trackH / 2, trackW, trackH);
+
+    // 2. Centre tick
+    ctx.fillStyle = '#4b5563';
+    ctx.fillRect(centerX - 1, trackY - trackH, 2, trackH * 2);
+
+    // 3. Trail (fading opacity)
+    const history = StereoAnalysisEngine.getRotationHistory();
+    const usableW = trackW / 2 - padding;
+    history.forEach((val, i) => {
+      const alpha = (i + 1) / history.length * 0.4;
+      const x = centerX + val * usableW;
+      const radius = Math.max(2, h * 0.06);
+
+      ctx.beginPath();
+      ctx.arc(x, trackY, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(34, 211, 238, ${alpha})`;
+      ctx.fill();
+    });
+
+    // 4. Main dot with glow
+    const rotation = StereoAnalysisEngine.getRotation();
+    const dotX = centerX + rotation * usableW;
+    const dotRadius = Math.max(3, h * 0.1);
+
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 8 * dpr;
+    ctx.beginPath();
+    ctx.arc(dotX, trackY, dotRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#22d3ee';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
   // Combined update function for all stereo analysis widgets
   function updateStereoAnalysis() {
     drawSpectrum();
     updateMSMeter();
     drawWidthMeter();
+    drawRotation();
   }
 
   // ------- Digital RMS (dBFS) – Average digital level, 0 dBFS = full-scale sine -------
