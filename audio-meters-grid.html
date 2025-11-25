@@ -1912,11 +1912,11 @@
   // CRITICAL: smoothingTimeConstant = 0 for sample-accurate goniometer
   // Default 0.8 causes temporal smearing during transitions → oval artifacts
   const analyserL = ac.createAnalyser();
-  analyserL.fftSize = 2048;
+  analyserL.fftSize = 4096;  // 4096 for better low-frequency resolution in RTA
   analyserL.smoothingTimeConstant = 0; // No smoothing for XY plot
 
   const analyserR = ac.createAnalyser();
-  analyserR.fftSize = 2048;
+  analyserR.fftSize = 4096;  // Must match L exactly
   analyserR.smoothingTimeConstant = 0; // Must match L exactly
 
   // CRITICAL: Route mixL/mixR to analysers for XY goniometer, spectrum, and time-domain metering
@@ -2337,27 +2337,34 @@
   // STEREO ANALYSIS WIDGETS - Draw Functions
   // =====================================================
 
-  // 1) Spectrum Analyser (10-band, 1/3 octave)
-  // Band centres: 31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
-  const SPECTRUM_BANDS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-  const spectrumFreqBufL = new Float32Array(1024);
-  const spectrumFreqBufR = new Float32Array(1024);
-  const spectrumSmooth = new Float32Array(SPECTRUM_BANDS.length);
-
-  // Visual compensation constants (display only, does not affect audio or other meters)
-  const SPECTRUM_VISUAL_BOOST_DB = 12;  // Display gain boost for visibility
-  const SPECTRUM_TILT_COMPENSATION = [  // Mild RTW-style tilt EQ (broadcast standard)
-    +4,   // 31 Hz
-    +2,   // 63 Hz
-     0,   // 125 Hz
-    -1,   // 250 Hz
-    -2,   // 500 Hz
-    -3,   // 1 kHz
-    -4,   // 2 kHz
-    -6,   // 4 kHz
-    -8,   // 8 kHz
-   -10    // 16 kHz
+  // 1) Spectrum Analyser - 31-band 1/3-octave RTA (ISO 266)
+  const SPECTRUM_CENTER_FREQS = [
+    20, 25, 31.5, 40, 50, 63, 80, 100,
+    125, 160, 200, 250, 315, 400, 500, 630,
+    800, 1000, 1250, 1600, 2000, 2500,
+    3150, 4000, 5000, 6300, 8000, 10000,
+    12500, 16000, 20000
   ];
+  const SPECTRUM_NUM_BANDS = SPECTRUM_CENTER_FREQS.length; // 31
+  const spectrumFreqBufL = new Float32Array(2048);
+  const spectrumFreqBufR = new Float32Array(2048);
+  const spectrumSmooth = new Float32Array(SPECTRUM_NUM_BANDS);
+  const spectrumPeakHold = new Float32Array(SPECTRUM_NUM_BANDS);
+  let spectrumLastTime = 0;
+
+  // 1/3-octave factor: 2^(1/6) ≈ 1.1225
+  const THIRD_OCT_FACTOR = Math.pow(2, 1/6);
+
+  // Smoothing: fast attack, slower release
+  const SPECTRUM_ATTACK = 0.5;
+  const SPECTRUM_RELEASE = 0.2;
+
+  // Peak hold falloff: 6 dB per second
+  const SPECTRUM_PEAK_FALL_RATE = 6;
+
+  // dB range
+  const SPECTRUM_DB_MIN = -60;
+  const SPECTRUM_DB_MAX = 0;
 
   function drawSpectrum() {
     if (!spectrumCtx || !analyserL || !analyserR) return;
@@ -2386,23 +2393,30 @@
     const ctx = spectrumCtx;
     ctx.clearRect(0, 0, w, h);
 
+    // Timing for peak falloff
+    const now = performance.now();
+    const deltaTime = spectrumLastTime > 0 ? (now - spectrumLastTime) / 1000 : 0.016;
+    spectrumLastTime = now;
+
+    // Get FFT data
     analyserL.getFloatFrequencyData(spectrumFreqBufL);
     analyserR.getFloatFrequencyData(spectrumFreqBufR);
 
     const sampleRate = ac.sampleRate || 48000;
-    const binHz = sampleRate / analyserL.fftSize;
-    const numBands = SPECTRUM_BANDS.length;
-    const bandValues = new Float32Array(numBands);
+    const fftSize = analyserL.fftSize;
+    const binHz = sampleRate / fftSize;
+    const numBins = spectrumFreqBufL.length;
 
-    for (let b = 0; b < numBands; b++) {
-      const centreFreq = SPECTRUM_BANDS[b];
-      const lowFreq = centreFreq / 1.26;
-      const highFreq = centreFreq * 1.26;
+    // Calculate band values using 1/3-octave boundaries
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const centerFreq = SPECTRUM_CENTER_FREQS[b];
+      const lowFreq = centerFreq / THIRD_OCT_FACTOR;
+      const highFreq = centerFreq * THIRD_OCT_FACTOR;
+
       const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
-      const highBin = Math.min(spectrumFreqBufL.length - 1, Math.ceil(highFreq / binHz));
+      const highBin = Math.min(numBins - 1, Math.ceil(highFreq / binHz));
 
-      // Sum linear power, not dB (dB are logarithmic - cannot be averaged directly)
-      // 10^(dB/10) converts to power; -Infinity dB becomes 0 power (correct)
+      // Sum linear power (not dB - logarithmic values cannot be averaged)
       let powerSum = 0, count = 0;
       for (let i = lowBin; i <= highBin; i++) {
         const powerL = Math.pow(10, spectrumFreqBufL[i] / 10);
@@ -2410,48 +2424,85 @@
         powerSum += 0.5 * (powerL + powerR);
         count++;
       }
+
       const avgPower = count > 0 ? powerSum / count : 0;
-      let bandDb = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
+      const bandDb = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
 
-      // Apply visual compensation (display only, does not affect audio analysis)
-      bandDb += SPECTRUM_VISUAL_BOOST_DB;           // +12 dB visibility boost
-      bandDb += SPECTRUM_TILT_COMPENSATION[b];      // RTW-style tilt EQ
-
-      bandValues[b] = bandDb;
-    }
-
-    const smoothAlpha = 0.3;
-    for (let b = 0; b < numBands; b++) {
-      spectrumSmooth[b] += smoothAlpha * (bandValues[b] - spectrumSmooth[b]);
-    }
-
-    const padding = w * 0.02;
-    const barGap = Math.max(1, w * 0.004);
-    const barW = (w - padding * 2) / numBands;
-    const maxH = h - padding * 2;
-
-    for (let b = 0; b < numBands; b++) {
-      const db = Math.max(-60, Math.min(0, spectrumSmooth[b]));
-      const norm = (db + 60) / 60;
-      const barH = norm * maxH;
-      const x = padding + b * barW;
-      const y = h - padding - barH;
-
-      const t = b / (numBands - 1);
-      let r, g, bl;
-      if (t < 0.5) {
-        r = Math.floor(34 + t * 2 * (68 - 34));
-        g = Math.floor(211 + t * 2 * (187 - 211));
-        bl = Math.floor(238 + t * 2 * (102 - 238));
+      // Apply smoothing with asymmetric attack/release
+      const prev = spectrumSmooth[b];
+      if (bandDb > prev) {
+        // Attack: fast
+        spectrumSmooth[b] = prev + SPECTRUM_ATTACK * (bandDb - prev);
       } else {
-        const t2 = (t - 0.5) * 2;
-        r = Math.floor(68 + t2 * (168 - 68));
-        g = Math.floor(187 + t2 * (130 - 187));
-        bl = Math.floor(102 + t2 * (220 - 102));
+        // Release: slower
+        spectrumSmooth[b] = prev + SPECTRUM_RELEASE * (bandDb - prev);
       }
 
-      ctx.fillStyle = `rgb(${r},${g},${bl})`;
-      ctx.fillRect(x + barGap, y, barW - barGap * 2, barH);
+      // Peak hold with falloff
+      if (spectrumSmooth[b] > spectrumPeakHold[b]) {
+        spectrumPeakHold[b] = spectrumSmooth[b];
+      } else {
+        // Fall at 6 dB per second
+        spectrumPeakHold[b] -= SPECTRUM_PEAK_FALL_RATE * deltaTime;
+        if (spectrumPeakHold[b] < SPECTRUM_DB_MIN) {
+          spectrumPeakHold[b] = SPECTRUM_DB_MIN;
+        }
+      }
+    }
+
+    // Drawing layout: narrow bars with minimal spacing
+    const padding = Math.round(4 * dpr);
+    const totalWidth = w - padding * 2;
+    const gap = Math.max(1, Math.round(1 * dpr));
+    const barWidth = Math.max(2 * dpr, (totalWidth - gap * (SPECTRUM_NUM_BANDS - 1)) / SPECTRUM_NUM_BANDS);
+    const maxH = h - padding * 2;
+
+    // RTW-style color function based on dB level
+    function getRTWColor(db) {
+      if (db >= -6) return 'rgb(255,80,80)';       // Red: hot
+      if (db >= -12) return 'rgb(255,160,0)';      // Orange: caution
+      if (db >= -24) return 'rgb(255,220,0)';      // Yellow: warm
+      return 'rgb(90,170,170)';                     // Teal: normal
+    }
+
+    // Draw bars and peaks
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const db = Math.max(SPECTRUM_DB_MIN, Math.min(SPECTRUM_DB_MAX, spectrumSmooth[b]));
+      const norm = (db - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
+      const barH = norm * maxH;
+      const x = padding + b * (barWidth + gap);
+      const y = h - padding - barH;
+
+      // Bar color based on level
+      ctx.fillStyle = getRTWColor(db);
+      ctx.fillRect(x, y, barWidth, barH);
+
+      // Peak hold marker (red line)
+      const peakDb = Math.max(SPECTRUM_DB_MIN, Math.min(SPECTRUM_DB_MAX, spectrumPeakHold[b]));
+      const peakNorm = (peakDb - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
+      const peakY = h - padding - peakNorm * maxH;
+      const peakHeight = Math.max(1, 2 * dpr);
+
+      ctx.fillStyle = 'rgb(255,60,60)';
+      ctx.fillRect(x, peakY - peakHeight, barWidth, peakHeight);
+    }
+
+    // Draw dB scale labels on left side
+    ctx.fillStyle = '#6b7280';
+    ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
+    ctx.textAlign = 'right';
+    const dbMarks = [0, -12, -24, -36, -48, -60];
+    for (const mark of dbMarks) {
+      const normY = (mark - SPECTRUM_DB_MIN) / (SPECTRUM_DB_MAX - SPECTRUM_DB_MIN);
+      const y = h - padding - normY * maxH;
+      ctx.fillText(`${mark}`, padding - 3 * dpr, y + 3 * dpr);
+      // Grid line
+      ctx.strokeStyle = 'rgba(100,110,120,0.2)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding, y);
+      ctx.lineTo(w - padding, y);
+      ctx.stroke();
     }
   }
 
