@@ -116,10 +116,12 @@
 
     /* Canvas in widgets */
     .phaseWidget canvas {
-      flex: 1;
+      display: block;
       width: 100%;
-      min-height: 0;
-      border-radius: 4px;
+      height: 100%;
+      flex: 1;
+      min-height: clamp(2em, 8%, 4em);
+      border-radius: 0.25em;
       background: #0a0c0e;
     }
 
@@ -198,9 +200,6 @@
     /* Histogram widget */
     .histogramWidget {
       flex: 1.2;
-    }
-    .histogramWidget canvas {
-      min-height: 50px;
     }
     .histogramAxis {
       display: flex;
@@ -2317,8 +2316,8 @@
   // STEREO ANALYSIS WIDGETS - Draw Functions
   // =====================================================
 
-  // 1) Spectrum Analyzer (10-band, 1/3 octave)
-  // Band centers: 31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
+  // 1) Spectrum Analyser (10-band, 1/3 octave)
+  // Band centres: 31, 63, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz
   const SPECTRUM_BANDS = [31, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
   const spectrumFreqBufL = new Float32Array(1024);
   const spectrumFreqBufR = new Float32Array(1024);
@@ -2328,21 +2327,25 @@
     if (!spectrumCtx || !analyserL || !analyserR) return;
     const canvas = spectrumAnalyzer;
     if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.offsetWidth, h = canvas.offsetHeight;
-    if (w === 0 || h === 0) return;
 
-    // Set backing store to match layout dimensions
-    const bw = Math.floor(w * dpr), bh = Math.floor(h * dpr);
-    if (canvas.width !== bw || canvas.height !== bh) {
-      canvas.width = bw;
-      canvas.height = bh;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width;
+    const cssH = rect.height;
+
+    if (cssW < 1 || cssH < 1) return;
+
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
 
     const ctx = spectrumCtx;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, w, h);
 
-    // Get frequency data (dB values, -100 to 0)
     analyserL.getFloatFrequencyData(spectrumFreqBufL);
     analyserR.getFloatFrequencyData(spectrumFreqBufR);
 
@@ -2351,59 +2354,53 @@
     const numBands = SPECTRUM_BANDS.length;
     const bandValues = new Float32Array(numBands);
 
-    // Calculate average dB for each band
     for (let b = 0; b < numBands; b++) {
-      const centerFreq = SPECTRUM_BANDS[b];
-      const lowFreq = centerFreq / 1.26;  // ~1/3 octave below
-      const highFreq = centerFreq * 1.26; // ~1/3 octave above
+      const centreFreq = SPECTRUM_BANDS[b];
+      const lowFreq = centreFreq / 1.26;
+      const highFreq = centreFreq * 1.26;
       const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
       const highBin = Math.min(spectrumFreqBufL.length - 1, Math.ceil(highFreq / binHz));
 
       let sum = 0, count = 0;
       for (let i = lowBin; i <= highBin; i++) {
-        // Sum L+R (mono spectrum)
-        sum += (spectrumFreqBufL[i] + spectrumFreqBufR[i]) / 2;
+        sum += (spectrumFreqBufL[i] + spectrumFreqBufR[i]) * 0.5;
         count++;
       }
       bandValues[b] = count > 0 ? sum / count : -100;
     }
 
-    // Smooth the values
     const smoothAlpha = 0.3;
     for (let b = 0; b < numBands; b++) {
       spectrumSmooth[b] += smoothAlpha * (bandValues[b] - spectrumSmooth[b]);
     }
 
-    const padding = 4 * dpr;
-    const barW = (canvas.width - padding * 2) / numBands;
-    const maxH = canvas.height - padding * 2;
+    const padding = w * 0.02;
+    const barGap = Math.max(1, w * 0.004);
+    const barW = (w - padding * 2) / numBands;
+    const maxH = h - padding * 2;
 
-    // Draw bars
     for (let b = 0; b < numBands; b++) {
-      // Map -60dB..0dB to 0..1
       const db = Math.max(-60, Math.min(0, spectrumSmooth[b]));
       const norm = (db + 60) / 60;
       const barH = norm * maxH;
       const x = padding + b * barW;
-      const y = canvas.height - padding - barH;
+      const y = h - padding - barH;
 
-      // Gradient color: bass=cyan, mid=green, treble=purple
       const t = b / (numBands - 1);
       let r, g, bl;
       if (t < 0.5) {
-        // Cyan to green
         r = Math.floor(34 + t * 2 * (68 - 34));
         g = Math.floor(211 + t * 2 * (187 - 211));
         bl = Math.floor(238 + t * 2 * (102 - 238));
       } else {
-        // Green to purple
         const t2 = (t - 0.5) * 2;
         r = Math.floor(68 + t2 * (168 - 68));
         g = Math.floor(187 + t2 * (130 - 187));
         bl = Math.floor(102 + t2 * (220 - 102));
       }
+
       ctx.fillStyle = `rgb(${r},${g},${bl})`;
-      ctx.fillRect(x + 2, y, barW - 4, barH);
+      ctx.fillRect(x + barGap, y, barW - barGap * 2, barH);
     }
   }
 
