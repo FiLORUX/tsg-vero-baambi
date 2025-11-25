@@ -2305,6 +2305,21 @@
   const spectrumFreqBufR = new Float32Array(1024);
   const spectrumSmooth = new Float32Array(SPECTRUM_BANDS.length);
 
+  // Visual compensation constants (display only, does not affect audio or other meters)
+  const SPECTRUM_VISUAL_BOOST_DB = 12;  // Display gain boost for visibility
+  const SPECTRUM_TILT_COMPENSATION = [  // Mild RTW-style tilt EQ (broadcast standard)
+    +4,   // 31 Hz
+    +2,   // 63 Hz
+     0,   // 125 Hz
+    -1,   // 250 Hz
+    -2,   // 500 Hz
+    -3,   // 1 kHz
+    -4,   // 2 kHz
+    -6,   // 4 kHz
+    -8,   // 8 kHz
+   -10    // 16 kHz
+  ];
+
   function drawSpectrum() {
     if (!spectrumCtx || !analyserL || !analyserR) return;
     const canvas = spectrumAnalyzer;
@@ -2357,7 +2372,13 @@
         count++;
       }
       const avgPower = count > 0 ? powerSum / count : 0;
-      bandValues[b] = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
+      let bandDb = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
+
+      // Apply visual compensation (display only, does not affect audio analysis)
+      bandDb += SPECTRUM_VISUAL_BOOST_DB;           // +12 dB visibility boost
+      bandDb += SPECTRUM_TILT_COMPENSATION[b];      // RTW-style tilt EQ
+
+      bandValues[b] = bandDb;
     }
 
     const smoothAlpha = 0.3;
