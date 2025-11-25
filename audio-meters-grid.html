@@ -2306,8 +2306,12 @@
     const canvas = spectrumAnalyzer;
     if (!canvas) return;
 
+    // Use wrapper for dimensions (canvas itself may report 0 in flex)
+    const spectrumWrap = xyCard.querySelector('.spectrumWrap');
+    if (!spectrumWrap) return;
+
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
+    const rect = spectrumWrap.getBoundingClientRect();
     const cssW = rect.width;
     const cssH = rect.height;
 
