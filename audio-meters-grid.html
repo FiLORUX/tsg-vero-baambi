@@ -2379,6 +2379,7 @@
   const RTW_VISIBLE_TOP_DB = 9;      // Top of visual range
   const RTW_VISIBLE_BOTTOM_DB = -36; // Bottom of visual range
   const RTW_RANGE_DB = RTW_VISIBLE_TOP_DB - RTW_VISIBLE_BOTTOM_DB; // 45 dB
+  const RTW_VISUAL_BOOST = 24;       // Boost to shift FFT values into visible range
   const RTW_FALL_RATE = 12;          // Bar fall: 12 dB/s
   const RTW_PEAK_HOLD_MS = 750;      // Peak hold: 600-900ms
   const RTW_PEAK_FALL_RATE = 18;     // Peak marker fall: 18 dB/s
@@ -2516,8 +2517,8 @@
         spectrumPeakMarker[b] -= RTW_PEAK_FALL_RATE * deltaTime;
       }
 
-      // Calculate bar geometry
-      const displayDb = spectrumDisplayVal[b];
+      // Calculate bar geometry (apply visual boost for display)
+      const displayDb = spectrumDisplayVal[b] + RTW_VISUAL_BOOST;
       const barX = paddingL + b * (barWidth + gap);
       const barTopY = dbToY(displayDb);
       const barH = bottomY - barTopY;
@@ -2525,39 +2526,23 @@
       // Skip if bar would be invisible
       if (barH <= 0) continue;
 
-      // Floor fill (subtle density below 0 dB line)
-      if (barTopY < bottomY) {
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
-        ctx.fillRect(barX, zeroLineY, barWidth, bottomY - zeroLineY);
-      }
-
-      // Main bar fill (RTW yellow)
-      const barDrawTop = Math.max(barTopY, zeroLineY);  // Yellow part stops at 0 dB
-      const yellowH = bottomY - barDrawTop;
+      // Draw yellow bar (below 0 dB portion)
+      const yellowTop = Math.max(barTopY, zeroLineY);
+      const yellowH = bottomY - yellowTop;
       if (yellowH > 0) {
         ctx.fillStyle = '#f2c74e';
-        ctx.fillRect(barX, barDrawTop, barWidth, yellowH);
-
-        // Shadow overlay on lower part
-        ctx.fillStyle = 'rgba(0,0,0,0.15)';
-        ctx.fillRect(barX, barDrawTop + yellowH * 0.6, barWidth, yellowH * 0.4);
-
-        // Edge highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(barX, barDrawTop, 1, yellowH);
+        ctx.fillRect(barX, yellowTop, barWidth, yellowH);
       }
 
-      // Red peak cap (if above 0 dB)
-      if (displayDb > 0) {
-        const redCapH = Math.min(3 * dpr, zeroLineY - barTopY);
-        if (redCapH > 0) {
-          ctx.fillStyle = '#ff3b2f';
-          ctx.fillRect(barX, barTopY, barWidth, redCapH);
-        }
+      // Draw red portion (above 0 dB) - continues the bar, not just a cap
+      if (displayDb > 0 && barTopY < zeroLineY) {
+        const redH = zeroLineY - barTopY;
+        ctx.fillStyle = '#ff3b2f';
+        ctx.fillRect(barX, barTopY, barWidth, redH);
       }
 
-      // White peak marker (floating dash)
-      const peakDb = spectrumPeakMarker[b];
+      // White peak marker (floating dash, also boosted)
+      const peakDb = spectrumPeakMarker[b] + RTW_VISUAL_BOOST;
       if (peakDb > RTW_VISIBLE_BOTTOM_DB) {
         const peakY = dbToY(peakDb);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
