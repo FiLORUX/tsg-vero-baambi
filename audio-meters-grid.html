@@ -3055,7 +3055,9 @@
     // LED cell constants - 2x resolution
     const LED_CELLS = 120;  // 120 cells for 60 dB range (-60 to 0), 0.5 dB per cell
     const LED_GAP = Math.max(1, Math.round(1 * dpr));  // 1px gap between cells
-    const cellW = (w - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
+    const marginX = Math.round(6 * dpr);  // Left/right margin
+    const barAreaW = w - marginX * 2;  // Available width for LED cells
+    const cellW = (barAreaW - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
     const barH = Math.round(h * 0.12);
 
     function segColor(db){ if(db>=-1) return getCss('--hot'); if(db>=-3) return getCss('--caution'); if(db>=-6) return getCss('--warn'); return getCss('--ok'); }
@@ -3069,7 +3071,7 @@
 
       for (let cell = 0; cell < LED_CELLS; cell++) {
         const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell
-        const cellX = cell * (cellW + LED_GAP);
+        const cellX = marginX + cell * (cellW + LED_GAP);
         const col = segColor(cellDb + 0.25);  // Color based on cell center
 
         // Background (dimmed) - all cells
@@ -3088,7 +3090,7 @@
       // Peak-hold cell - brighter same-zone color with subtle glow
       if (peakCell >= 0 && peakCell < LED_CELLS && peakHold > -60) {
         const peakCellDb = -60 + peakCell * 0.5;
-        const cellX = peakCell * (cellW + LED_GAP);
+        const cellX = marginX + peakCell * (cellW + LED_GAP);
         const pCol = peakColor(peakCellDb);
         ctx.globalAlpha = 1;
         ctx.shadowColor = pCol;
