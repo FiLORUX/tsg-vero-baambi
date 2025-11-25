@@ -290,6 +290,45 @@
       display: none; /* Dold - LUFS visas i R128-panelen under radarn */
     }
 
+    /* Peak LED - DOM-baserad (utanför canvas border-radius) */
+    .peak-led {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px 2px 4px;
+      border-radius: 8px;
+      background: rgba(20, 24, 28, 0.7);
+      pointer-events: none;
+      z-index: 10;
+    }
+    .peak-led::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3a1c1c;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+      transition: all 0.1s;
+    }
+    .peak-led span {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      transition: color 0.1s;
+    }
+    .peak-led.on::before {
+      background: #ff4e2d;
+      box-shadow: 0 0 6px 2px rgba(255,78,45,0.7), inset 0 1px 2px rgba(255,255,255,0.3);
+    }
+    .peak-led.on span {
+      color: #ff6655;
+    }
+
     /* R128 värde-panel under radar */
     .r128-panel {
       flex: 1;
@@ -1039,6 +1078,7 @@
             <div class="radarWrap">
               <canvas id="loudnessRadar"></canvas>
               <div class="radar-lufs-value" id="radarLufsValue">—</div>
+              <div class="peak-led" id="peakLed"><span>Peak</span></div>
             </div>
             <div class="r128-panel">
               <div class="r128">
@@ -1448,7 +1488,8 @@
       drawGridOverlay(ctx, cx, cy, rOuter, rInner);  // Grå ringar + spokes (ovanpå segment)
       drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target-ring (ovanpå grid)
       drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels högst upp
-      drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);  // Peak diode in upper-right
+      // Peak LED now DOM-based (see .peak-led CSS) - canvas version disabled due to border-radius clipping
+      // drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);
     }
 
     // Peak indicator - LED at upper-right corner of bounding square around outer ring
@@ -1520,6 +1561,7 @@
   const loudnessRadar = document.getElementById('loudnessRadar');
   const loudnessRadarCtx = loudnessRadar.getContext('2d');
   const radarWrap = loudnessCard.querySelector('.radarWrap');
+  const peakLed = document.getElementById('peakLed');
   const r128Panel = loudnessCard.querySelector('.r128-panel');
   // --- Stereo Vectorscope ---
   const xyCard = document.getElementById('xyCard');
@@ -3152,6 +3194,9 @@
     } else if (nowMs - peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
       peakIndicatorOn = false;
     }
+
+    // Update DOM-based peak LED
+    if (peakLed) peakLed.classList.toggle('on', peakIndicatorOn);
 
     // Label med peak-hold max och OVER-indikator
     // Alltid samma bredd för att undvika "hopp" - använder visibility istället för att ta bort
