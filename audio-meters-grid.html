@@ -1608,7 +1608,7 @@
       for (let i = 0; i < n; i++) {
         const L = bufL[i], R = bufR[i];
         const M = (L + R) * 0.5;
-        const S = (L - R) * 0.5;
+        const S = (R - L) * 0.5;  // +S = more right, -S = more left
         sumM2 += M * M;
         sumS2 += S * S;
         // Covariance for rotation
@@ -1644,6 +1644,9 @@
       // Rotation: covariance-based stereo centroid angle
       const angle = 0.5 * Math.atan2(2 * sumLR, sumLL - sumRR);
       let rawRotation = angle / (Math.PI / 4);  // Normalise to -1..+1
+
+      // Clamp to -1..+1 for extreme L/R-dominant signals
+      rawRotation = Math.max(-1, Math.min(1, rawRotation));
 
       // Dead-zone: clamp to 0 if within ±DEADZONE (ignore small fluctuations)
       if (Math.abs(rawRotation) < ROTATION_DEADZONE) {
@@ -2075,7 +2078,7 @@
 
         // M/S transform (DK/RTW standard)
         const M = 0.5 * (L + R);  // Mid = mono content
-        const S = 0.5 * (L - R);  // Side = stereo difference
+        const S = 0.5 * (R - L);  // Side: +S = right, -S = left
 
         // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
         const x = (S * VECTORSCOPE_GAIN * w/2) + w/2;
