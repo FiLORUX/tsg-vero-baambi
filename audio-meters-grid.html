@@ -1880,7 +1880,11 @@
   analyserR.fftSize = 2048;
   analyserR.smoothingTimeConstant = 0; // Must match L exactly
 
-  mixL.connect(analyserL); mixR.connect(analyserR);
+  // CRITICAL: Route mixL/mixR to analysers for XY goniometer, spectrum, and time-domain metering
+  // All audio sources (tone generator, tab capture) must flow through mixL/mixR
+  mixL.connect(analyserL);
+  mixR.connect(analyserR);
+
   const bufL = new Float32Array(analyserL.fftSize); const bufR = new Float32Array(analyserR.fftSize);
 
   // K-weighting path (approx) för R128
