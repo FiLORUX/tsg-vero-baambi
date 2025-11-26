@@ -2719,6 +2719,17 @@
   }
 
   // 4) Rotation Meter - stereo centroid angle with trail
+  // Colors: M (center) = #3b82f6 (blue), S (edges) = #22d3ee (cyan)
+  function rotationColor(rotationValue) {
+    // |rotation| 0 = M color (blue), |rotation| 1 = S color (cyan)
+    const t = Math.abs(rotationValue);  // 0..1
+    // M color: rgb(59, 130, 246), S color: rgb(34, 211, 238)
+    const r = Math.round(59 + t * (34 - 59));
+    const g = Math.round(130 + t * (211 - 130));
+    const b = Math.round(246 + t * (238 - 246));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   function drawRotation() {
     if (!rotationCtx || !rotationCanvas) return;
 
@@ -2758,30 +2769,32 @@
     ctx.fillStyle = '#4b5563';
     ctx.fillRect(centerX - 1, trackY - trackH, 2, trackH * 2);
 
-    // 3. Trail (fading opacity)
+    // 3. Trail (fading opacity) with dynamic color
     const history = StereoAnalysisEngine.getRotationHistory();
     const usableW = trackW / 2 - padding;
     history.forEach((val, i) => {
       const alpha = (i + 1) / history.length * 0.4;
       const x = centerX + val * usableW;
       const radius = Math.max(2, h * 0.06);
+      const color = rotationColor(val);
 
       ctx.beginPath();
       ctx.arc(x, trackY, radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(34, 211, 238, ${alpha})`;
+      ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
       ctx.fill();
     });
 
-    // 4. Main dot with glow
+    // 4. Main dot with glow - dynamic color based on position
     const rotation = StereoAnalysisEngine.getRotation();
     const dotX = centerX + rotation * usableW;
     const dotRadius = Math.max(3, h * 0.1);
+    const dotColor = rotationColor(rotation);
 
-    ctx.shadowColor = '#22d3ee';
+    ctx.shadowColor = dotColor;
     ctx.shadowBlur = 8 * dpr;
     ctx.beginPath();
     ctx.arc(dotX, trackY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = '#22d3ee';
+    ctx.fillStyle = dotColor;
     ctx.fill();
     ctx.shadowBlur = 0;
 
