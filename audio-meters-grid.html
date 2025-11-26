@@ -2879,10 +2879,10 @@
       col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='25%'; col.style.height='50%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
       el.appendChild(col);
       let dbfsEq = '';
-      if(mk.v === -6) dbfsEq = '-9 dBFS';
-      if(mk.v === -3) dbfsEq = '-6 dBFS';
+      if(mk.v === -6) dbfsEq = '−9<br>dBFS';
+      if(mk.v === -3) dbfsEq = '−6<br>dBFS';
       const tag=document.createElement('div');
-      tag.innerHTML = `<div>${dbfsEq}</div>`;
+      tag.innerHTML = dbfsEq;
       tag.style.position='absolute';
       tag.style.left=`calc(${x}% - 32px)`;
       tag.style.bottom='8px';  // Samma luftiga spacing som blå TEST-text
@@ -2936,9 +2936,9 @@
     limitRef.style.background = getCss('--cyan');
     limitRef.style.opacity = '0.95';
     el.appendChild(limitRef);
-    // TP LIMIT label
+    // LIMIT label
     const limitTag = document.createElement('div');
-    limitTag.innerHTML = '<div>TP LIMIT</div><div>−1 dBTP</div>';
+    limitTag.innerHTML = '<div>LIMIT</div><div>−1 dBTP</div>';
     limitTag.style.position = 'absolute';
     limitTag.style.left = `calc(${xLimit}% - 40px)`;
     limitTag.style.bottom = '4px';
@@ -3067,9 +3067,21 @@
     const cellW = (w - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
     const barH = Math.round(h * 0.12);
 
-    function segColor(db){ if(db>=-1) return getCss('--hot'); if(db>=-3) return getCss('--caution'); if(db>=-6) return getCss('--warn'); return getCss('--ok'); }
+    function segColor(db){
+      if(db >= 0) return '#ff2020';   // Above 0 dBTP: aggressive bright red
+      if(db>=-1) return getCss('--hot');
+      if(db>=-3) return getCss('--caution');
+      if(db>=-6) return getCss('--warn');
+      return getCss('--ok');
+    }
     // Brighter version for peak-hold
-    function peakColor(db){ if(db>=-1) return '#ff6b5b'; if(db>=-3) return '#ffb74d'; if(db>=-6) return '#ffe066'; return '#7dff7d'; }
+    function peakColor(db){
+      if(db >= 0) return '#ff4040';   // Above 0 dBTP: extra bright red with glow
+      if(db>=-1) return '#ff6b5b';
+      if(db>=-3) return '#ffb74d';
+      if(db>=-6) return '#ffe066';
+      return '#7dff7d';
+    }
 
     function drawChannel(yTop, val, peakHold){
       const displayDb = Math.max(-60, Math.min(3, val));
@@ -3092,9 +3104,18 @@
 
         // Active cell - lit if below current value
         if (cellDb < displayDb) {
-          ctx.globalAlpha = 0.9;
+          // Extra aggressive for cells above 0 dBTP
+          if (cellDb >= 0) {
+            ctx.globalAlpha = 1.0;
+            ctx.shadowColor = '#ff2020';
+            ctx.shadowBlur = 6 * dpr;
+          } else {
+            ctx.globalAlpha = 0.9;
+            ctx.shadowBlur = 0;
+          }
           ctx.fillStyle = col;
           ctx.fillRect(cellX, yTop, cellW, barH);
+          ctx.shadowBlur = 0;
         }
       }
 
@@ -3105,16 +3126,16 @@
         const pCol = peakColor(peakCellDb);
         ctx.globalAlpha = 1;
         ctx.shadowColor = pCol;
-        ctx.shadowBlur = 4 * dpr;
+        ctx.shadowBlur = (peakCellDb >= 0) ? 8 * dpr : 4 * dpr;  // Extra glow above 0
         ctx.fillStyle = pCol;
         ctx.fillRect(cellX, yTop, cellW, barH);
         ctx.shadowBlur = 0;
       }
     }
     drawChannel(h*0.35, valueL, peakHoldL); drawChannel(h*0.55, valueR, peakHoldR);
-    // 0 dBTP fence at correct position in -60..+3 range
+    // 0 dBTP fence at correct position in -60..+3 range (red line)
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#2a3642';
+    ctx.fillStyle = getCss('--hot');
     const zeroX = ((0 + 60) / 63) * w;  // 0 dBTP position i -60..+3
     ctx.fillRect(Math.round(zeroX) - 1, 0, 2, h);
   }
