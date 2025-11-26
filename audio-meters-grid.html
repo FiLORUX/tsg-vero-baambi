@@ -2860,9 +2860,12 @@
     const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0,3];
     marks.forEach(m=>{
       const x = ((m - TP_MIN) / TP_SPAN) * 100;
-      const t=document.createElement('div');
-      t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='2px'; t.style.background='#2a3642';
-      el.appendChild(t);
+      // Skip gray tick at 0 dBTP (red line drawn in canvas instead)
+      if (m !== 0) {
+        const t=document.createElement('div');
+        t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='2px'; t.style.background='#2a3642';
+        el.appendChild(t);
+      }
       const lab=document.createElement('div');
       lab.innerHTML = (m > 0 ? '+' : '') + m + '<br>dBTP';
       lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='2px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; lab.style.lineHeight='1.1';
