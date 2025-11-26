@@ -2864,8 +2864,8 @@
       t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='2px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
-      lab.textContent = (m > 0 ? '+' : '') + m + ' dBTP';
-      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='6px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
+      lab.innerHTML = (m > 0 ? '+' : '') + m + '<br>dBTP';
+      lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='2px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf'; lab.style.lineHeight='1.1';
       el.appendChild(lab);
     });
     // warn zones (styled like VU Nordic, label at bottom, color-coded)
@@ -3133,11 +3133,11 @@
       }
     }
     drawChannel(h*0.35, valueL, peakHoldL); drawChannel(h*0.55, valueR, peakHoldR);
-    // 0 dBTP fence at correct position in -60..+3 range (red line)
-    ctx.globalAlpha = 1;
+    // 0 dBTP fence at correct position in -60..+3 range (red line, same style as warn zones)
+    ctx.globalAlpha = 0.95;
     ctx.fillStyle = getCss('--hot');
     const zeroX = ((0 + 60) / 63) * w;  // 0 dBTP position i -60..+3
-    ctx.fillRect(Math.round(zeroX) - 1, 0, 2, h);
+    ctx.fillRect(Math.round(zeroX) - 1, h * 0.25, 2, h * 0.5);  // 25% top, 50% height
   }
 
   // Nordic PPM – horisontell canvas rendering med RTW-style färgzoner
