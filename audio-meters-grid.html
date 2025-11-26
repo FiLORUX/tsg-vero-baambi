@@ -856,33 +856,81 @@
   <div class="sidebar-container">
     <div class="sidebar-content">
       <section class="card leftTop">
-        <h2>System / Chrome tab</h2>
-        <div class="row">
-          <button id="btnTab">Start capture</button>
-          <button id="btnStop" class="btn-ghost" disabled>Stop capture</button>
+        <h2>Input Sources</h2>
+
+        <!-- Input Mode Selector -->
+        <div class="row" style="margin-bottom:8px;gap:4px">
+          <button id="btnModeBrowser" class="btn-active" style="flex:1">Browser Source</button>
+          <button id="btnModeExternal" class="btn-ghost" style="flex:1">External Source</button>
         </div>
-        <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
-        <div class="row" style="margin-top:6px;align-items:center">
-          <label>System monitor:</label>
-          <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
-          <span id="sysMonVal" class="tiny">0.20</span>
-          <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
-          <span id="sysMonState" class="tiny">(muted)</span>
+
+        <!-- Browser Source Panel -->
+        <div id="browserSourcePanel">
+          <div class="row">
+            <button id="btnTab">Start capture</button>
+            <button id="btnStop" class="btn-ghost" disabled>Stop capture</button>
+          </div>
+          <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
+          <div class="row" style="margin-top:6px;align-items:center">
+            <label>System monitor:</label>
+            <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
+            <span id="sysMonVal" class="tiny">0.20</span>
+            <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
+            <span id="sysMonState" class="tiny">(muted)</span>
+          </div>
+          <div class="row" style="align-items:center">
+            <label>Line-up (Chrome, dB):</label>
+            <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
+            <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" />
+            <span class="tiny" id="sysTrimOut">-18.0 dB</span>
+            <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18 dB</button>
+          </div>
+          <div class="kv" id="info">
+            <div><small>Source</small><span id="srcKind">–</span></div>
+            <div><small>Channel count</small><span id="cc">–</span></div>
+            <div><small>Sample rate</small><span id="sr">–</span></div>
+            <div><small>Stereo OK?</small><span id="stOK">–</span></div>
+          </div>
+          <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you intend to enable the system monitor.</p>
         </div>
-        <div class="row" style="align-items:center">
-          <label>Line-up (Chrome, dB):</label>
-          <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
-          <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" />
-          <span class="tiny" id="sysTrimOut">-18.0 dB</span>
-          <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18 dB</button>
+
+        <!-- External Source Panel (hidden by default) -->
+        <div id="externalSourcePanel" style="display:none">
+          <div class="row" style="align-items:center;gap:8px">
+            <label>Device:</label>
+            <select id="extDeviceSelect" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+              <option value="">– Select audio input –</option>
+            </select>
+            <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="btnExtStart">Start capture</button>
+            <button id="btnExtStop" class="btn-ghost" disabled>Stop capture</button>
+          </div>
+          <p class="tiny">External audio input via <code class="small">getUserMedia</code>. Supports USB, Dante, and other OS audio devices.</p>
+          <div class="row" style="margin-top:6px;align-items:center">
+            <label>External monitor:</label>
+            <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
+            <span id="extMonVal" class="tiny">0.20</span>
+            <button id="btnExtMonMute" class="btn-ghost">Unmute external monitor</button>
+            <span id="extMonState" class="tiny">(muted)</span>
+          </div>
+          <div class="row" style="align-items:center">
+            <label>Line-up (Ext, dB):</label>
+            <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
+            <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" />
+            <span class="tiny" id="extTrimOut">0.0 dB</span>
+            <button id="extTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0 dB</button>
+          </div>
+          <div class="kv" id="extInfo">
+            <div><small>Device</small><span id="extDevice">–</span></div>
+            <div><small>Channel count</small><span id="extCc">–</span></div>
+            <div><small>Sample rate</small><span id="extSr">–</span></div>
+            <div><small>Status</small><span id="extStatus">–</span></div>
+          </div>
+          <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable. Check browser permissions.</p>
+          <p class="tiny">No AGC, no noise suppression, no echo cancellation. Clean signal path for broadcast metering.</p>
         </div>
-        <div class="kv" id="info">
-          <div><small>Source</small><span id="srcKind">–</span></div>
-          <div><small>Channel count</small><span id="cc">–</span></div>
-          <div><small>Sample rate</small><span id="sr">–</span></div>
-          <div><small>Stereo OK?</small><span id="stOK">–</span></div>
-        </div>
-        <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you intend to enable the system monitor.</p>
       </section>
 
       <section class="card leftBottom">
@@ -1768,6 +1816,26 @@
   const sysTrimReset = document.getElementById('sysTrimReset');
 
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
+
+  // External Source UI elements
+  const btnModeBrowser = document.getElementById('btnModeBrowser');
+  const btnModeExternal = document.getElementById('btnModeExternal');
+  const browserSourcePanel = document.getElementById('browserSourcePanel');
+  const externalSourcePanel = document.getElementById('externalSourcePanel');
+  const extDeviceSelect = document.getElementById('extDeviceSelect');
+  const btnExtRefresh = document.getElementById('btnExtRefresh');
+  const btnExtStart = document.getElementById('btnExtStart');
+  const btnExtStop = document.getElementById('btnExtStop');
+  const extMonGainEl = document.getElementById('extMonGain');
+  const extMonVal = document.getElementById('extMonVal');
+  const btnExtMonMute = document.getElementById('btnExtMonMute');
+  const extMonState = document.getElementById('extMonState');
+  const extTrimRange = document.getElementById('extTrimRange');
+  const extTrimInput = document.getElementById('extTrimInput');
+  const extTrimOut = document.getElementById('extTrimOut');
+  const extTrimReset = document.getElementById('extTrimReset');
+  const extInfo = { device: document.getElementById('extDevice'), cc: document.getElementById('extCc'), sr: document.getElementById('extSr'), status: document.getElementById('extStatus') };
+  const extWarning = document.getElementById('extWarning');
 
   const ppmCanvas = document.getElementById('ppmCanvas');
   const ppmScale = document.getElementById('ppmScale');
@@ -3498,6 +3566,316 @@
     updateMonitorStatusDisplay();
   }
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
+
+  // =====================================================
+  // EXTERNAL SOURCE - AudioWorklet + getUserMedia
+  // =====================================================
+
+  // State
+  let currentInputMode = 'browser'; // 'browser' or 'external'
+  let extStream = null, extSrc = null, extSplit = null, extMonGain = null, extTrimNode = null;
+  let extMonitorMuted = true;
+  let extTrimDb = 0;
+  let extWorkletNode = null;
+  let extWorkletLoaded = false;
+  let extAvailable = true; // Whether external input is available
+
+  const EXT_TRIM_DEFAULT = 0; // External: 0 dB default (professional level assumed)
+  const EXT_TRIM_STORAGE_KEY = 'tsg_extTrimDb';
+  const EXT_DEVICE_STORAGE_KEY = 'tsg_extDeviceId';
+
+  // --- Input Mode Switching ---
+  function setInputMode(mode) {
+    currentInputMode = mode;
+    if (mode === 'browser') {
+      btnModeBrowser.classList.add('btn-active');
+      btnModeBrowser.classList.remove('btn-ghost');
+      btnModeExternal.classList.remove('btn-active');
+      btnModeExternal.classList.add('btn-ghost');
+      browserSourcePanel.style.display = 'block';
+      externalSourcePanel.style.display = 'none';
+    } else {
+      btnModeBrowser.classList.remove('btn-active');
+      btnModeBrowser.classList.add('btn-ghost');
+      btnModeExternal.classList.add('btn-active');
+      btnModeExternal.classList.remove('btn-ghost');
+      browserSourcePanel.style.display = 'none';
+      externalSourcePanel.style.display = 'block';
+      // Enumerate devices when switching to external mode
+      enumerateAudioDevices();
+    }
+  }
+
+  btnModeBrowser.addEventListener('click', () => {
+    if (currentInputMode === 'external' && extStream) {
+      stopExternalCapture();
+    }
+    setInputMode('browser');
+  });
+
+  btnModeExternal.addEventListener('click', () => {
+    if (currentInputMode === 'browser' && sysStream) {
+      stopCapture();
+    }
+    setInputMode('external');
+  });
+
+  // --- Device Enumeration ---
+  async function enumerateAudioDevices() {
+    try {
+      // Request permission first (needed to get device labels)
+      try {
+        const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tempStream.getTracks().forEach(t => t.stop());
+      } catch (e) {
+        console.warn('Could not get initial audio permission:', e);
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+      extDeviceSelect.innerHTML = '<option value="">– Select audio input –</option>';
+      audioInputs.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Audio Input (${device.deviceId.slice(0, 8)}...)`;
+        extDeviceSelect.appendChild(option);
+      });
+
+      // Restore last used device
+      const storedDeviceId = localStorage.getItem(EXT_DEVICE_STORAGE_KEY);
+      if (storedDeviceId) {
+        const exists = audioInputs.some(d => d.deviceId === storedDeviceId);
+        if (exists) {
+          extDeviceSelect.value = storedDeviceId;
+        }
+      }
+
+      extAvailable = audioInputs.length > 0;
+      extWarning.style.display = extAvailable ? 'none' : 'block';
+      btnExtStart.disabled = !extAvailable;
+    } catch (e) {
+      console.error('Device enumeration failed:', e);
+      extAvailable = false;
+      extWarning.style.display = 'block';
+      extWarning.textContent = '⚠ Cannot enumerate devices: ' + e.message;
+      btnExtStart.disabled = true;
+    }
+  }
+
+  btnExtRefresh.addEventListener('click', enumerateAudioDevices);
+
+  // --- External Trim Control ---
+  function setExtTrim(dB, save = true) {
+    extTrimDb = clamp(parseFloat(dB) || EXT_TRIM_DEFAULT, -48, 24);
+    extTrimRange.value = extTrimDb;
+    extTrimInput.value = extTrimDb.toFixed(1);
+    extTrimOut.textContent = extTrimDb.toFixed(1) + ' dB';
+    if (extTrimNode) { extTrimNode.gain.value = dbToGain(extTrimDb); }
+    if (save) { try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch(e) {} }
+  }
+
+  // Load from localStorage or use default (0 dB)
+  const storedExtTrim = localStorage.getItem(EXT_TRIM_STORAGE_KEY);
+  setExtTrim(storedExtTrim !== null ? parseFloat(storedExtTrim) : EXT_TRIM_DEFAULT, false);
+
+  extTrimRange.addEventListener('input', e => setExtTrim(e.target.value));
+  extTrimInput.addEventListener('change', e => setExtTrim(e.target.value));
+  extTrimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setExtTrim(e.target.value); e.target.blur(); } });
+  extTrimReset.addEventListener('click', () => setExtTrim(EXT_TRIM_DEFAULT));
+
+  // --- AudioWorklet Loading ---
+  async function loadExternalWorklet() {
+    if (extWorkletLoaded) return true;
+    try {
+      await ac.audioWorklet.addModule('external-meter-processor.js');
+      extWorkletLoaded = true;
+      console.log('External meter processor loaded successfully');
+      return true;
+    } catch (e) {
+      console.error('Failed to load external meter processor:', e);
+      extWarning.style.display = 'block';
+      extWarning.textContent = '⚠ AudioWorklet unavailable: ' + e.message;
+      return false;
+    }
+  }
+
+  // --- External Capture ---
+  async function startExternalCapture() {
+    const deviceId = extDeviceSelect.value;
+    if (!deviceId) {
+      alert('Please select an audio input device.');
+      return;
+    }
+
+    try {
+      await ac.resume();
+
+      // Load AudioWorklet if not already loaded
+      const workletReady = await loadExternalWorklet();
+
+      // getUserMedia with strict constraints - NO processing
+      const constraints = {
+        audio: {
+          deviceId: { exact: deviceId },
+          channelCount: 2,
+          sampleRate: 48000,
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: false
+        }
+      };
+
+      extStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const track = extStream.getAudioTracks()[0];
+      if (!track) throw new Error('No audio track available.');
+
+      // Apply additional constraints to ensure no processing
+      try {
+        await track.applyConstraints({
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: false,
+          channelCount: 2
+        });
+      } catch (e) {
+        console.warn('Could not apply all constraints:', e);
+      }
+
+      track.contentHint = 'music';
+
+      // Create source
+      extSrc = ac.createMediaStreamSource(extStream);
+
+      // Create trim node
+      extTrimNode = ac.createGain();
+      extTrimNode.gain.value = dbToGain(extTrimDb);
+
+      // Route through AudioWorklet if available (for clean signal path)
+      if (workletReady) {
+        extWorkletNode = new AudioWorkletNode(ac, 'external-meter-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          channelCount: 2,
+          channelCountMode: 'explicit',
+          processorOptions: { sendPCM: false }
+        });
+        extSrc.connect(extWorkletNode);
+        extWorkletNode.connect(extTrimNode);
+      } else {
+        // Fallback: direct connection
+        extSrc.connect(extTrimNode);
+      }
+
+      // Connect to metering pipeline (same as browser source)
+      extSplit = connectStereoToMix(extTrimNode);
+
+      // Monitor output (muted by default)
+      extMonGain = ac.createGain();
+      extMonGain.gain.value = 0;
+      extTrimNode.connect(extMonGain).connect(ac.destination);
+
+      // Update UI
+      btnExtMonMute.classList.remove('btn-active');
+      btnExtMonMute.classList.add('btn-ghost');
+      btnExtMonMute.textContent = 'Unmute external monitor';
+      extMonState.textContent = '(muted)';
+      extMonitorMuted = true;
+
+      const settings = track.getSettings ? track.getSettings() : {};
+      const selectedOption = extDeviceSelect.options[extDeviceSelect.selectedIndex];
+      extInfo.device.textContent = selectedOption ? selectedOption.textContent.slice(0, 30) : 'Unknown';
+      extInfo.cc.textContent = settings.channelCount ?? 'unknown';
+      extInfo.sr.textContent = ac.sampleRate + ' Hz';
+      extInfo.status.textContent = 'Active';
+
+      btnExtStart.disabled = true;
+      btnExtStop.disabled = false;
+      extDeviceSelect.disabled = true;
+
+      // Save device selection
+      try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch(e) {}
+
+      console.log('External capture started:', deviceId);
+    } catch (e) {
+      console.error('External capture failed:', e);
+      alert('Failed to start external capture: ' + e.message);
+      extInfo.status.textContent = 'Error';
+    }
+  }
+
+  function stopExternalCapture() {
+    try { extStream && extStream.getTracks().forEach(t => t.stop()); } catch {}
+    try { extSrc && extSrc.disconnect(); } catch {}
+    try { extWorkletNode && extWorkletNode.disconnect(); } catch {}
+    try { extTrimNode && extTrimNode.disconnect(); } catch {}
+    try { extSplit && extSplit.disconnect(); } catch {}
+    try { extMonGain && extMonGain.disconnect(); } catch {}
+
+    extStream = null;
+    extSrc = null;
+    extWorkletNode = null;
+    extTrimNode = null;
+    extSplit = null;
+    extMonGain = null;
+    extMonitorMuted = true;
+
+    btnExtMonMute.textContent = 'Unmute external monitor';
+    extMonState.textContent = '(muted)';
+    btnExtMonMute.classList.remove('btn-active');
+    btnExtMonMute.classList.add('btn-ghost');
+    btnExtStart.disabled = false;
+    btnExtStop.disabled = true;
+    extDeviceSelect.disabled = false;
+
+    extInfo.device.textContent = '–';
+    extInfo.cc.textContent = '–';
+    extInfo.sr.textContent = '–';
+    extInfo.status.textContent = '–';
+
+    console.log('External capture stopped');
+  }
+
+  btnExtStart.addEventListener('click', startExternalCapture);
+  btnExtStop.addEventListener('click', stopExternalCapture);
+
+  // --- External Monitor Control ---
+  function toggleExtMonitorMute() {
+    if (!extMonGain) return;
+    extMonitorMuted = !extMonitorMuted;
+    extMonGain.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl.value);
+    extMonVal.textContent = extMonGainEl.value;
+    if (extMonitorMuted) {
+      btnExtMonMute.classList.remove('btn-active');
+      btnExtMonMute.classList.add('btn-ghost');
+      btnExtMonMute.textContent = 'Unmute external monitor';
+      extMonState.textContent = '(muted)';
+    } else {
+      btnExtMonMute.classList.add('btn-active');
+      btnExtMonMute.classList.remove('btn-ghost');
+      btnExtMonMute.textContent = 'Mute external monitor';
+      extMonState.textContent = '(on)';
+    }
+  }
+
+  btnExtMonMute.addEventListener('click', toggleExtMonitorMute);
+  extMonGainEl.addEventListener('input', () => {
+    extMonVal.textContent = extMonGainEl.value;
+    if (extMonGain && !extMonitorMuted) {
+      extMonGain.gain.value = parseFloat(extMonGainEl.value);
+    }
+  });
+
+  // --- Device change listener ---
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if (currentInputMode === 'external') {
+      enumerateAudioDevices();
+    }
+  });
+
+  // =====================================================
+  // END EXTERNAL SOURCE
+  // =====================================================
 
   // ------- Generator -------
   // Broadcast-alignment: −18 dBFS betyder PEAK/quasi-peak nivå (EBU R68)
