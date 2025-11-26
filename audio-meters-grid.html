@@ -2360,7 +2360,7 @@
     const absVal = Math.abs(monoDevHold);
     let balanceStr;
     if (absVal < 0.05) {
-      balanceStr = '  0.0 dB';  // Centrerad
+      balanceStr = 'C 0.0 dB';  // Centrerad
     } else if (monoDevHold > 0) {
       balanceStr = 'L ' + absVal.toFixed(1) + ' dB';
     } else {
