@@ -1,0 +1,173 @@
+<!doctype html>
+<!--
+ ═══════════════════════════════════════════════════════════════════════════════
+ TSG Suite – broadcast tools for alignment, metering, and signal verification
+ Maintained by David Thåst  ·  https://github.com/FiLORUX
+
+ Built with the assumption that behaviour should be predictable,
+ output should be verifiable, and silence should mean silence
+
+ david@thast.se  ·  +46 700 30 30 60
+ ═══════════════════════════════════════════════════════════════════════════════
+-->
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TSG Suite | VERO-BAAMBI</title>
+  <meta name="description" content="VERO-BAAMBI – Broadcast-grade audio metering with EBU R128, ITU-R BS.1770-4, and IEC 60268-10 Type I compliance" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       MODULAR ESM ENTRY POINT
+       ═══════════════════════════════════════════════════════════════════════════
+       This file loads the application via native ES modules.
+       No build step required – works directly from static file server.
+
+       For legacy fallback, use audio-meters-grid.html (monolithic version)
+       ═══════════════════════════════════════════════════════════════════════════ -->
+
+  <style>
+    /* ─────────────────────────────────────────────────────────────────────────
+       LOADING STATE
+       ─────────────────────────────────────────────────────────────────────────
+       Shown while ESM modules are loading. Replaced by app UI on init.
+       ───────────────────────────────────────────────────────────────────────── */
+
+    :root {
+      --bg-primary: #1a1a2e;
+      --text-primary: #e0e0e0;
+      --accent: #00d4aa;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    #app-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 1.5rem;
+    }
+
+    #app-loading h1 {
+      font-size: 1.5rem;
+      font-weight: 300;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+    }
+
+    #app-loading .loader {
+      width: 48px;
+      height: 48px;
+      border: 3px solid transparent;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    #app-loading .status {
+      font-size: 0.875rem;
+      opacity: 0.6;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Hide loading once app mounts */
+    #app-loading.hidden {
+      display: none;
+    }
+
+    /* App container */
+    #app {
+      display: none;
+      height: 100%;
+    }
+
+    #app.ready {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       LOADING INDICATOR
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div id="app-loading">
+    <h1>VERO-BAAMBI</h1>
+    <div class="loader"></div>
+    <p class="status">Loading modules...</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       APPLICATION MOUNT POINT
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div id="app"></div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       ESM BOOTSTRAP
+       ═══════════════════════════════════════════════════════════════════════════
+       Native ES modules with dynamic import for progressive loading.
+       Entry point: src/main.js
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <script type="module">
+    import { initApp } from './src/main.js';
+
+    // Initialize application when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bootstrap);
+    } else {
+      bootstrap();
+    }
+
+    async function bootstrap() {
+      try {
+        await initApp({
+          mountElement: document.getElementById('app'),
+          loadingElement: document.getElementById('app-loading')
+        });
+      } catch (error) {
+        console.error('[VERO-BAAMBI] Failed to initialize:', error);
+
+        // Show error state
+        const loading = document.getElementById('app-loading');
+        const status = loading?.querySelector('.status');
+        if (status) {
+          status.textContent = 'Failed to load. Check console for details.';
+          status.style.color = '#ff6b6b';
+        }
+
+        // Offer fallback
+        const fallbackLink = document.createElement('a');
+        fallbackLink.href = 'audio-meters-grid.html';
+        fallbackLink.textContent = 'Use legacy version';
+        fallbackLink.style.cssText = 'color: var(--accent); margin-top: 1rem; text-decoration: underline;';
+        loading?.appendChild(fallbackLink);
+      }
+    }
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       NO-JS FALLBACK
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <noscript>
+    <div style="padding: 2rem; text-align: center; color: #ff6b6b;">
+      <h2>JavaScript Required</h2>
+      <p>VERO-BAAMBI requires JavaScript for audio processing.</p>
+    </div>
+  </noscript>
+</body>
+</html>
