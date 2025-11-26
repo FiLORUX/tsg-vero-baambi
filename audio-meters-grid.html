@@ -2871,8 +2871,7 @@
     // warn zones (styled like VU Nordic, label at bottom, color-coded)
     const warn=[
       {v:-6,c:'var(--warn)',w:1,label:'−6 dBTP',color:getCss('--warn')},
-      {v:-3,c:'var(--caution)',w:1,label:'−3 dBTP',color:getCss('--caution')},
-      {v:-1,c:'var(--hot)',w:1,label:'−1 dBTP',color:getCss('--hot')}
+      {v:-3,c:'var(--caution)',w:1,label:'−3 dBTP',color:getCss('--caution')}
     ];
     for(const mk of warn){
       const x = ((mk.v - TP_MIN) / TP_SPAN) * 100;
@@ -2882,7 +2881,6 @@
       let dbfsEq = '';
       if(mk.v === -6) dbfsEq = '-9 dBFS';
       if(mk.v === -3) dbfsEq = '-6 dBFS';
-      if(mk.v === -1) dbfsEq = '-4 dBFS';
       const tag=document.createElement('div');
       tag.innerHTML = `<div>${dbfsEq}</div>`;
       tag.style.position='absolute';
@@ -2926,6 +2924,34 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
+
+    // TP LIMIT -1 dBTP reference line (same style as TEST line)
+    const xLimit = ((-1 - TP_MIN) / TP_SPAN) * 100;
+    const limitRef = document.createElement('div');
+    limitRef.style.position = 'absolute';
+    limitRef.style.left = `calc(${xLimit}% - 1px)`;
+    limitRef.style.top = '25%';
+    limitRef.style.height = '50%';
+    limitRef.style.width = '2px';
+    limitRef.style.background = getCss('--cyan');
+    limitRef.style.opacity = '0.95';
+    el.appendChild(limitRef);
+    // TP LIMIT label
+    const limitTag = document.createElement('div');
+    limitTag.innerHTML = '<div>TP LIMIT</div><div>−1 dBTP</div>';
+    limitTag.style.position = 'absolute';
+    limitTag.style.left = `calc(${xLimit}% - 40px)`;
+    limitTag.style.bottom = '4px';
+    limitTag.style.width = '80px';
+    limitTag.style.textAlign = 'center';
+    limitTag.style.fontSize = '9px';
+    limitTag.style.color = getCss('--cyan');
+    limitTag.style.fontWeight = 'bold';
+    limitTag.style.lineHeight = '1.2';
+    limitTag.style.background = 'none';
+    limitTag.style.borderRadius = '0';
+    limitTag.style.padding = '0';
+    el.appendChild(limitTag);
   }
 
   // Nordic PPM – klassisk Nordic N9 skala
@@ -3107,13 +3133,12 @@
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=0.5;  // 0.5 dB resolution → 90 "dioder"
-    // RTW-style färgzoner för Nordic PPM (PPM = dBu = dBFS + 18)
+    // Nordic PPM färgzoner (PPM = dBu = dBFS + 18)
     function segColor(db){
       const ppm = db + 18; // dBFS -> PPM/dBu
-      if(ppm >= 6) return getCss('--hot');        // +6 till +9 PPM: rött (nära PML)
-      if(ppm >= 0) return getCss('--warn');       // 0 till +6 PPM: amber (varning)
-      if(ppm >= -3) return getCss('--cyan');      // -3 till 0 PPM: cyan/teal (nominal)
-      return getCss('--ok');                       // Under -3 PPM: grönt (headroom)
+      if (ppm >= 6)  return getCss('--hot');      // +6..+9: rött (över PML)
+      if (ppm >= 0)  return getCss('--caution');  // 0..+6: amber (nominal / varning)
+      return getCss('--ok');                      // <0: grönt (allt under line-up)
     }
     function drawChannel(yTop, val, peakHold){
       // Bakgrund (dimmat)
@@ -3190,7 +3215,8 @@
 
   function drawTruePeak(){
     analyserL.getFloatTimeDomainData(bufL); analyserR.getFloatTimeDomainData(bufR);
-    const rawL = Math.min(0, truePeakDb(bufL)); const rawR = Math.min(0, truePeakDb(bufR));
+    // No clamp here - let drawDiodeBar_TP handle the -60..+3 range
+    const rawL = truePeakDb(bufL); const rawR = truePeakDb(bufR);
     const a = 0.25; tpSmoothL = tpSmoothL + a*(rawL - tpSmoothL); tpSmoothR = tpSmoothR + a*(rawR - tpSmoothR);
 
     // Peak-hold logik
