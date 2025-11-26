@@ -1092,6 +1092,7 @@
                 <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
                 <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
                 <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
+                <div class="row"><small>Crest</small><span class="big" id="r128Crest">--.- dB</span></div>
                 <div class="row"><small title="Time since start or reset">Elapsed</small><span class="big" id="r128Time">--:--:--</span></div>
                 <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
               </div>
@@ -3313,6 +3314,7 @@
   let r128TpMax = -Infinity;
   let r128StartTime = performance.now();
   const r128TpMaxEl = document.getElementById('r128TpMax');
+  const r128CrestEl = document.getElementById('r128Crest');
   const r128TimeEl = document.getElementById('r128Time');
   const r128ResetBtn = document.getElementById('r128Reset');
 
@@ -3334,6 +3336,7 @@
     lufsM.textContent = '--.- LUFS'; lufsS.textContent = '--.- LUFS'; lufsI.textContent = '--.- LUFS';
     lraEl.textContent = '--.- LU';
     r128TpMaxEl.textContent = '--.- dBTP';
+    r128CrestEl.textContent = '--.- dB';
     r128TimeEl.textContent = '--:--:--';
   }
   r128ResetBtn.addEventListener('click', resetR128);
@@ -3400,6 +3403,18 @@
       } else {
         r128TpMaxEl.textContent = '--.- dBTP';
         r128TpMaxEl.style.color = '';
+      }
+
+      // --- Crest: TP(dBTP) - RMS(dBFS) using 300ms smoothed values ---
+      const currentTp = Math.max(tpSmoothL, tpSmoothR);
+      const rmsDbL = 20 * Math.log10(rmsHoldL + 1e-12);
+      const rmsDbR = 20 * Math.log10(rmsHoldR + 1e-12);
+      const currentRms = Math.max(rmsDbL, rmsDbR);
+      const crest = currentTp - currentRms;
+      if (isFinite(crest) && currentTp > -60 && currentRms > -60) {
+        r128CrestEl.textContent = crest.toFixed(1) + ' dB';
+      } else {
+        r128CrestEl.textContent = '--.- dB';
       }
 
       // --- Elapsed time ---
