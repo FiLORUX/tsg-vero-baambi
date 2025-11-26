@@ -2853,14 +2853,18 @@
   // ------- True Peak (dBTP) – 4× oversampling, 0 dBTP = full scale -------
   function layoutTPScale(el){
     el.innerHTML='';
-    const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0];
+    // Scale constants for -60 to +3 dBTP range
+    const TP_MIN = -60;
+    const TP_MAX = 3;
+    const TP_SPAN = TP_MAX - TP_MIN;  // 63 dB
+    const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0,3];
     marks.forEach(m=>{
-      const x = ((m+60)/60)*100;
+      const x = ((m - TP_MIN) / TP_SPAN) * 100;
       const t=document.createElement('div');
       t.style.position='absolute'; t.style.left=`calc(${x}% - 1px)`; t.style.top='25%'; t.style.height='50%'; t.style.width='2px'; t.style.background='#2a3642';
       el.appendChild(t);
       const lab=document.createElement('div');
-      lab.textContent = m + ' dBTP';
+      lab.textContent = (m > 0 ? '+' : '') + m + ' dBTP';
       lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='6px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
@@ -2871,7 +2875,7 @@
       {v:-1,c:'var(--hot)',w:1,label:'−1 dBTP',color:getCss('--hot')}
     ];
     for(const mk of warn){
-      const x=((mk.v+60)/60)*100;
+      const x = ((mk.v - TP_MIN) / TP_SPAN) * 100;
       const col=document.createElement('div');
       col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='25%'; col.style.height='50%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
       el.appendChild(col);
@@ -2896,7 +2900,7 @@
       el.appendChild(tag);
     }
     // TEST -18 dBTP = -18 dBFS peak (broadcast alignment)
-    const xRef = ((-18+60)/60)*100;
+    const xRef = ((-18 - TP_MIN) / TP_SPAN) * 100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xRef}% - 1px)`;
@@ -2924,16 +2928,18 @@
     el.appendChild(tag);
   }
 
-  // Nordic PPM – RTW-style skala i PPM-steg
+  // Nordic PPM – klassisk Nordic N9 skala
   // PPM-skala: -36 till +9 där 0 PPM = 0 dBu = -18 dBFS peak
-  // RTW-operators standard axis-labels: −∞, −3, 0, +3, +6, +9 PPM
   const ppmMarks = [
-    {ppm: -36, label: '−∞'},    // Längst till vänster, visar −∞ för "floor"
-    {ppm: -3, label: '−3'},
-    {ppm: 0, label: '0'},
-    {ppm: 3, label: '+3'},
-    {ppm: 6, label: '+6'},
-    {ppm: 9, label: '+9'}
+    { ppm: -36, label: '−36' },
+    { ppm: -30, label: '−30' },
+    { ppm: -24, label: '−24' },
+    { ppm: -18, label: '−18' },
+    { ppm: -12, label: '−12' },
+    { ppm:  -6, label: '−6'  },
+    { ppm:   0, label: 'TEST' },  // 0 PPM / 0 dBu
+    { ppm:   6, label: '+6'  },
+    { ppm:   9, label: '+9'  }    // PML
   ];
   function layoutPPMScale(el){
     el.innerHTML='';
@@ -3012,25 +3018,25 @@
     function xFromDb(db){ const c=Math.max(-60,Math.min(0,db)); return Math.round((c+60)/60*w) }
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
-    const step=1;
+    const step=0.5;  // 0.5 dB resolution → 120 "dioder"
     function drawChannel(yTop, val){
-      for(let d=-60; d<0; d+=step){ const x0=xFromDb(d), x1=xFromDb(d+step); ctx.globalAlpha=.14; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      for(let d=-60; d<0; d+=step){ const x0=xFromDb(d), x1=xFromDb(d+step); if(x1<=x0) continue; ctx.globalAlpha=.14; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
       const tEnd = Math.min(0, val);
-      for(let d=-60; d<tEnd; d+=step){ const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd)); ctx.globalAlpha=.9; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
+      for(let d=-60; d<tEnd; d+=step){ const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd)); if(x1<=x0) continue; ctx.globalAlpha=.9; ctx.fillStyle=getCss('--ok'); ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12); }
     }
     drawChannel(h*0.35, valueL); drawChannel(h*0.55, valueR);
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBFS fence
   }
 
   // True Peak (dBTP) – LED-style rendering med peak-hold markör
-  // Range: -60 dBTP till 0 dBTP = 120 LED cells (2x upplösning)
+  // Range: -60 dBTP till +3 dBTP = 126 LED cells (0.5 dB per cell)
   function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
     const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,w,h); ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
 
-    // LED cell constants - 2x resolution
-    const LED_CELLS = 120;  // 120 cells for 60 dB range (-60 to 0), 0.5 dB per cell
+    // LED cell constants - 126 cells for 63 dB range (-60 to +3), 0.5 dB per cell
+    const LED_CELLS = 126;
     const LED_GAP = Math.max(1, Math.round(1 * dpr));  // 1px gap between cells
     const cellW = (w - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
     const barH = Math.round(h * 0.12);
@@ -3040,12 +3046,16 @@
     function peakColor(db){ if(db>=-1) return '#ff6b5b'; if(db>=-3) return '#ffb74d'; if(db>=-6) return '#ffe066'; return '#7dff7d'; }
 
     function drawChannel(yTop, val, peakHold){
-      const displayDb = Math.max(-60, Math.min(0, val));
-      const peakDb = (peakHold !== undefined) ? Math.max(-60, Math.min(0, peakHold)) : -61;
-      const peakCell = Math.round((peakDb + 60) * 2);  // 2x scale for 120 cells
+      const displayDb = Math.max(-60, Math.min(3, val));
+      const peakDbRaw = (peakHold !== undefined) ? peakHold : -61;
+      const peakDb = Math.max(-60, Math.min(3, peakDbRaw));
+      const peakCell = Math.max(
+        0,
+        Math.min(LED_CELLS - 1, Math.round((peakDb + 60) * 2))  // 0.5 dB per cell över 63 dB
+      );
 
       for (let cell = 0; cell < LED_CELLS; cell++) {
-        const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell
+        const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell, 126 celler → −60…+3 täcks
         const cellX = cell * (cellW + LED_GAP);
         const col = segColor(cellDb + 0.25);  // Color based on cell center
 
@@ -3076,7 +3086,11 @@
       }
     }
     drawChannel(h*0.35, valueL, peakHoldL); drawChannel(h*0.55, valueR, peakHoldR);
-    ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBTP fence (visual)
+    // 0 dBTP fence at correct position in -60..+3 range
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#2a3642';
+    const zeroX = ((0 + 60) / 63) * w;  // 0 dBTP position i -60..+3
+    ctx.fillRect(Math.round(zeroX) - 1, 0, 2, h);
   }
 
   // Nordic PPM – horisontell canvas rendering med RTW-style färgzoner
@@ -3092,7 +3106,7 @@
     function xFromDb(db){ const c=Math.max(dbMin,Math.min(dbMax,db)); return Math.round((c-dbMin)/dbSpan*w) }
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
-    const step=1;
+    const step=0.5;  // 0.5 dB resolution → 90 "dioder"
     // RTW-style färgzoner för Nordic PPM (PPM = dBu = dBFS + 18)
     function segColor(db){
       const ppm = db + 18; // dBFS -> PPM/dBu
@@ -3105,6 +3119,7 @@
       // Bakgrund (dimmat)
       for(let d=dbMin; d<dbMax; d+=step){
         const x0=xFromDb(d), x1=xFromDb(d+step);
+        if(x1<=x0) continue;  // aliasing protection
         ctx.globalAlpha=.14;
         ctx.fillStyle=segColor(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
@@ -3113,6 +3128,7 @@
       const tEnd = Math.min(dbMax, val);
       for(let d=dbMin; d<tEnd; d+=step){
         const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd));
+        if(x1<=x0) continue;  // aliasing protection
         ctx.globalAlpha=.9;
         ctx.fillStyle=segColor(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
