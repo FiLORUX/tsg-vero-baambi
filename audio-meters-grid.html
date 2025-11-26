@@ -160,6 +160,7 @@
       padding: 0 2px;
     }
     .balanceAxis span:nth-child(2) {
+      font-family: ui-monospace, 'SF Mono', monospace;
       font-weight: 600;
       opacity: 1;
       color: var(--cyan);
@@ -2355,16 +2356,17 @@
     }
     ctx.globalAlpha = 1;
 
-    // L och R labels
-    ctx.fillStyle = '#6b7280';
-    ctx.font = `${Math.round(9 * dpr)}px ui-sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText('L', barX + 2 * dpr, barY + barH + 3 * dpr);
-    ctx.textAlign = 'right';
-    ctx.fillText('R', barX + barW - 2 * dpr, barY + barH + 3 * dpr);
-
-    // Uppdatera display
-    monoDevVal.textContent = formatDbSigned(monoDevHold, 1, 5);
+    // Uppdatera display med L/R istället för +/-
+    const absVal = Math.abs(monoDevHold);
+    let balanceStr;
+    if (absVal < 0.05) {
+      balanceStr = '  0.0 dB';  // Centrerad
+    } else if (monoDevHold > 0) {
+      balanceStr = 'L ' + absVal.toFixed(1) + ' dB';
+    } else {
+      balanceStr = 'R ' + absVal.toFixed(1) + ' dB';
+    }
+    monoDevVal.textContent = balanceStr;
   }
 
   // =====================================================
