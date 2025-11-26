@@ -2900,6 +2900,23 @@
       tag.style.padding='0';
       el.appendChild(tag);
     }
+    // 0 dBTP = 0 dBFS label (red, same style as warn labels)
+    const xZero = ((0 - TP_MIN) / TP_SPAN) * 100;
+    const zeroTag = document.createElement('div');
+    zeroTag.innerHTML = '0<br>dBFS';
+    zeroTag.style.position = 'absolute';
+    zeroTag.style.left = `calc(${xZero}% - 32px)`;
+    zeroTag.style.bottom = '8px';
+    zeroTag.style.width = '64px';
+    zeroTag.style.textAlign = 'center';
+    zeroTag.style.fontSize = '10px';
+    zeroTag.style.color = getCss('--hot');
+    zeroTag.style.fontWeight = 'bold';
+    zeroTag.style.lineHeight = '1.2';
+    zeroTag.style.background = 'none';
+    zeroTag.style.borderRadius = '0';
+    zeroTag.style.padding = '0';
+    el.appendChild(zeroTag);
     // TEST -18 dBTP = -18 dBFS peak (broadcast alignment)
     const xRef = ((-18 - TP_MIN) / TP_SPAN) * 100;
     const ref=document.createElement('div');
