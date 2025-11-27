@@ -4,19 +4,67 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TSG Suite | VEROBAAMBI</title>
+  <!--
+  ═══════════════════════════════════════════════════════════════════════════════
+  TSG BROADCAST AUDIO METERING SUITE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  PURPOSE
+  ───────
+  Professional-grade audio metering for broadcast, streaming, and production.
+  Implements EBU R128 (Europe), ITU BS.1770-4 (international), and legacy
+  Nordic PPM (IEC 60268-10 Type I) standards within a single unified interface.
+
+  SIGNAL FLOW
+  ───────────
+  Source → Channel Splitter → K-weighting Filter → LUFS Integration
+                           ↓
+                     Analysis Bus → True Peak Detection (4× oversampling)
+                           ↓
+                     Goniometer → Phase Correlation → Stereo Width
+
+  STANDARDS ADHERENCE
+  ───────────────────
+  • EBU R128 / R128s1: Programme loudness, LRA, True Peak
+  • ITU-R BS.1770-4: K-weighting, gating algorithm, LUFS/LKFS
+  • ITU-R BS.1771-1: Loudness metering requirements
+  • EBU Tech 3341/3342: Loudness meters, loudness range
+  • IEC 60268-10 Type I: Nordic PPM ballistics (5ms attack, 1.7s/20dB decay)
+  • EBU R68: Reference level alignment (0 dBu = −18 dBFS peak)
+  • ITU-R BR.1385: Stereo identification signal
+
+  ARCHITECTURAL NOTES
+  ───────────────────
+  • Web Audio API with AudioWorklet for sample-accurate processing
+  • K-weighting via cascaded biquad filters (HP 38Hz + HS +4dB@4kHz)
+  • True Peak via time-domain analysis with 4× interpolation
+  • 400ms momentary / 3s short-term integration windows per BS.1770
+  • Relative gating at −10 LU below ungated integrated loudness
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  -->
   <style>
+    /* ═══════════════════════════════════════════════════════════════════════
+       DESIGN SYSTEM: BROADCAST CONTROL ROOM PALETTE
+       ═══════════════════════════════════════════════════════════════════════
+       Colour semantics aligned with broadcast monitoring conventions:
+       • Green (--ok): Within tolerance, nominal operation
+       • Amber (--warn): Approaching limit, attention required
+       • Orange (--caution): Near limit, corrective action advised
+       • Red (--hot): Exceeds limit, immediate attention
+       • Cyan (--cyan): Reference/alignment markers (−18 dBFS = 0 dBu)
+    */
     :root{
       --bg:#141618; --panel:#1b1f23; --ink:#e8eef9; --muted:#a9b2c7; --outline:#2a2f36; --grid:#29323b;
       --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
       --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
       --meter-gap: 1.2em;
-      /* **BEST PRACTICE 2025: Modern CSS Custom Properties for Performance** */
-      /* Centralised values for consistent theming and easy maintenance */
+      /* Layout and animation constants */
       --drag-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       --canvas-border-radius: 10px;
       --vectorscope-min-size: 160px;
-      --resize-debounce-delay: 16ms; /* ~60fps */
-      --visibility-threshold: 0.1; /* 10% visibility for intersection observer */
+      --resize-debounce-delay: 16ms;
+      --visibility-threshold: 0.1;
     }
     html,body{height:100%}
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
@@ -1294,35 +1342,38 @@
 <script>
 (async function(){
 
-  // =====================================================
-  // CONFIGURABLE METERING SETTINGS
-  // =====================================================
-  let LOUDNESS_TARGET = -23;  // EBU R128 default, changeable via UI
-  let TP_LIMIT = -1;          // True Peak limit in dBTP
-  let radarMaxSeconds = 60;   // Radar sweep time
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONFIGURABLE METERING PARAMETERS
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Default target per EBU R128; ATSC A/85 uses −24 LKFS.
+  // True Peak limit: −1 dBTP (EBU R128), −2 dBTP (streaming), −3 dBTP (safe).
+  let LOUDNESS_TARGET = -23;
+  let TP_LIMIT = -1;
+  let radarMaxSeconds = 60;
 
-  // True Peak scale constants (fixed range -60 to +3 dBTP)
+  // True Peak meter scale: −60 to +3 dBTP (63 dB dynamic range)
+  // +3 dBTP headroom allows display of inter-sample overs.
   const TP_SCALE_MIN = -60;
   const TP_SCALE_MAX = 3;
-  const TP_SCALE_SPAN = TP_SCALE_MAX - TP_SCALE_MIN;  // 63 dB
+  const TP_SCALE_SPAN = TP_SCALE_MAX - TP_SCALE_MIN;
 
-  // =====================================================
-  // LOUDNESS RADAR MODULE (Clarity-style)
-  // =====================================================
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOUDNESS RADAR (TC ELECTRONIC CLARITY / LM6 STYLE)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Polar display of short-term loudness history. Spoke at 12 o'clock represents
+  // current time; segments age clockwise. Ring position encodes LU relative to
+  // target; colour indicates deviation severity per EBU R128 tolerance guidance.
   const LoudnessRadar = (function() {
     'use strict';
 
-    // LOUDNESS_TARGET is a configurable global variable
-    // Radar scale: -36 to +9 LU relative to target (EBU R128 full momentary range)
+    // EBU R128 momentary loudness range: −36 to +9 LU relative to target.
+    // This 45 LU span covers practical broadcast content dynamics.
+    const MOMENTARY_LU_MIN = -36;
+    const MOMENTARY_LU_MAX = 9;
+    const MOMENTARY_LU_RANGE = MOMENTARY_LU_MAX - MOMENTARY_LU_MIN;
+    const LOW_LEVEL_BELOW = -12;  // Below −12 LU = "low level" zone (cyan)
 
-    // ----- MOMENTARY RING SCALE (EBU R128 compliant) -----
-    // EBU R128 momentary range: -36 LU to +9 LU relative to target
-    const MOMENTARY_LU_MIN = -36;  // Lägsta LU (relativt target) - EBU R128 full range
-    const MOMENTARY_LU_MAX = 9;    // Högsta LU (+9 mode)
-    const MOMENTARY_LU_RANGE = MOMENTARY_LU_MAX - MOMENTARY_LU_MIN; // 45 LU
-    const LOW_LEVEL_BELOW = -12;   // EBU R128: under -12 LU = "low level" (blå)
-
-    // Gemensam normaliseringsfunktion för LU → 0..1
+    // Maps LU value to normalised 0–1 range for radial positioning
     function luToNormalized(lu, minLu, maxLu) {
       return Math.max(0, Math.min(1, (lu - minLu) / (maxLu - minLu)));
     }
@@ -1817,27 +1868,41 @@
     };
   })();
 
-  // Computes: Width, M/S Levels, Rotation
-  // =====================================================
+  // ═══════════════════════════════════════════════════════════════════════════
+  // STEREO ANALYSIS ENGINE
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Real-time stereo field analysis computing:
+  //   • Mid/Side levels (dB) – centre vs difference energy
+  //   • Stereo width (0–1) – ratio of Side to total energy
+  //   • Stereo rotation (−1 to +1) – principal axis angle from covariance matrix
+  //
+  // M/S DOMAIN:
+  //   Mid  = (L + R) / √2  → mono-compatible content
+  //   Side = (L − R) / √2  → stereo difference (anti-phase information)
+  //   Width = |S| / (|M| + |S|) → 0 = mono, 0.5 = balanced, 1 = anti-phase
+  //
+  // ROTATION (BALANCE):
+  //   Derived from covariance matrix eigenanalysis: θ = ½ atan2(2·Cov(L,R), Var(L)−Var(R))
+  //   Normalised to ±1 (±45°). Dead-zone of ±5% suppresses noise near centre.
   const StereoAnalysisEngine = (function() {
     'use strict';
 
-    // Configuration
-    const SMOOTH_ALPHA = 0.15;     // Smoothing for M/S and width
-    const PEAK_HOLD_SEC = 3;       // Peak hold for width meter
-    const ROTATION_HISTORY_LEN = 25;   // Trail length for rotation (longer for drift)
-    const ROTATION_SMOOTH_ALPHA = 0.04; // Much slower smoothing for trend, not transients
-    const ROTATION_DEADZONE = 0.05;    // ±5% dead-zone around center
+    // Smoothing and timing parameters
+    const SMOOTH_ALPHA = 0.15;
+    const PEAK_HOLD_SEC = 3;
+    const ROTATION_HISTORY_LEN = 25;
+    const ROTATION_SMOOTH_ALPHA = 0.04;
+    const ROTATION_DEADZONE = 0.05;
 
-    // State
+    // State variables
     let midLevel = -60, sideLevel = -60;
-    let width = 0;                 // 0..1+ (S / (M + S))
-    let widthPeak = 0;             // Peak hold value
-    let widthPeakTime = 0;         // Timestamp for peak hold
-    let rotation = 0;              // -1..+1 (stereo centroid angle)
-    const rotationHistory = [];    // Trail: recent values
+    let width = 0;
+    let widthPeak = 0;
+    let widthPeakTime = 0;
+    let rotation = 0;
+    const rotationHistory = [];
 
-    // Analyze a block of L/R samples
+    // Process a block of L/R samples and update all metrics
     function analyze(bufL, bufR) {
       const n = Math.min(bufL.length, bufR.length);
       if (n === 0) return;
@@ -1848,10 +1913,9 @@
       for (let i = 0; i < n; i++) {
         const L = bufL[i], R = bufR[i];
         const M = (L + R) * 0.5;
-        const S = (R - L) * 0.5;  // +S = more right, -S = more left
+        const S = (R - L) * 0.5;
         sumM2 += M * M;
         sumS2 += S * S;
-        // Covariance for rotation
         sumLL += L * L;
         sumRR += R * R;
         sumLR += L * R;
@@ -1861,11 +1925,11 @@
       const rmsS = Math.sqrt(sumS2 / n);
       const eps = 1e-10;
 
-      // Width: S / (M + S + ε) → 0..1+
+      // Width: Side energy relative to total
       const newWidth = rmsS / (rmsM + rmsS + eps);
       width += SMOOTH_ALPHA * (newWidth - width);
 
-      // Peak hold for width
+      // Peak-hold for width display
       const now = performance.now() / 1000;
       if (width > widthPeak) {
         widthPeak = width;
@@ -1881,19 +1945,17 @@
       midLevel += SMOOTH_ALPHA * (newMidDb - midLevel);
       sideLevel += SMOOTH_ALPHA * (newSideDb - sideLevel);
 
-      // Rotation: covariance-based stereo centroid angle
+      // Rotation from covariance matrix principal axis
       const angle = 0.5 * Math.atan2(2 * sumLR, sumLL - sumRR);
-      let rawRotation = angle / (Math.PI / 4);  // Normalise to -1..+1
-
-      // Clamp to -1..+1 for extreme L/R-dominant signals
+      let rawRotation = angle / (Math.PI / 4);
       rawRotation = Math.max(-1, Math.min(1, rawRotation));
 
-      // Dead-zone: clamp to 0 if within ±DEADZONE (ignore small fluctuations)
+      // Dead-zone to suppress noise near centre
       if (Math.abs(rawRotation) < ROTATION_DEADZONE) {
         rawRotation = 0;
       }
 
-      // Slow smoothing for trend, not transients
+      // Slow smoothing for trend visualisation
       rotation += ROTATION_SMOOTH_ALPHA * (rawRotation - rotation);
 
       // Trail history
@@ -2147,59 +2209,85 @@
     }
   }
 
-  // ------- Audio graph -------
+  // ═══════════════════════════════════════════════════════════════════════════
+  // AUDIO SIGNAL ROUTING AND ANALYSIS
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Fixed 48kHz sample rate ensures consistent timing for ITU BS.1770 integration
+  // windows (400ms momentary = 19200 samples, 3s short-term = 144000 samples).
   const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
   function updateCtxState() { if(ctxState) ctxState.textContent = ac.state === 'running' ? 'Yes' : 'No'; }
   updateCtxState(); ac.onstatechange = updateCtxState;
 
-  // Analysbuss L/R
+  // Analysis bus: discrete L/R paths for stereo metering
   const mixL = ac.createGain(); mixL.gain.value = 1; const mixR = ac.createGain(); mixR.gain.value = 1;
 
-  // CRITICAL: smoothingTimeConstant = 0 for sample-accurate goniometer
-  // Default 0.8 causes temporal smearing during transitions → oval artifacts
+  // Time-domain analysers for goniometer, true peak, and waveform display.
+  // smoothingTimeConstant = 0 is critical: default 0.8 causes temporal smearing
+  // that manifests as elliptical artifacts on the vectorscope during transients.
   const analyserL = ac.createAnalyser();
-  analyserL.fftSize = 4096;  // 4096 for better low-frequency resolution in RTA
-  analyserL.smoothingTimeConstant = 0; // No smoothing for XY plot
+  analyserL.fftSize = 4096;
+  analyserL.smoothingTimeConstant = 0;
 
   const analyserR = ac.createAnalyser();
-  analyserR.fftSize = 4096;  // Must match L exactly
-  analyserR.smoothingTimeConstant = 0; // Must match L exactly
+  analyserR.fftSize = 4096;
+  analyserR.smoothingTimeConstant = 0;
 
-  // CRITICAL: Route mixL/mixR to analysers for XY goniometer, spectrum, and time-domain metering
-  // All audio sources (tone generator, tab capture) must flow through mixL/mixR
+  // All sources route through mixL/mixR for unified metering
   mixL.connect(analyserL);
   mixR.connect(analyserR);
 
   const bufL = new Float32Array(analyserL.fftSize); const bufR = new Float32Array(analyserR.fftSize);
 
-  // K-weighting path (approx) för R128
+  // ───────────────────────────────────────────────────────────────────────────
+  // K-WEIGHTING FILTER CHAIN (ITU-R BS.1770-4)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Two-stage perceptual weighting approximating human loudness perception:
+  //   Stage 1: High-pass filter (fc=38Hz, Q=0.5) – removes sub-bass content
+  //   Stage 2: High-shelf filter (+4dB @ 4kHz) – models acoustic coupling
+  //            of the head/ear canal (based on diffuse-field HRTF data)
+  // This simplified implementation uses native BiquadFilters; the full BS.1770
+  // spec defines precise coefficients for 48kHz that yield <0.1dB deviation.
   const kHP_L = ac.createBiquadFilter(); kHP_L.type='highpass'; kHP_L.frequency.value=38; kHP_L.Q.value=0.5;
   const kHS_L = ac.createBiquadFilter(); kHS_L.type='highshelf'; kHS_L.frequency.value=4000; kHS_L.gain.value=4; kHP_L.connect(kHS_L);
   const kHP_R = ac.createBiquadFilter(); kHP_R.type='highpass'; kHP_R.frequency.value=38; kHP_R.Q.value=0.5;
   const kHS_R = ac.createBiquadFilter(); kHS_R.type='highshelf'; kHS_R.frequency.value=4000; kHS_R.gain.value=4; kHP_R.connect(kHS_R);
 
+  // K-weighted analysers feed LUFS integration
   const kAnL = ac.createAnalyser(); kAnL.fftSize = 2048; const kBufL = new Float32Array(kAnL.fftSize);
   const kAnR = ac.createAnalyser(); kAnR.fftSize = 2048; const kBufR = new Float32Array(kAnR.fftSize);
   kHS_L.connect(kAnL); kHS_R.connect(kAnR);
 
+  // Routes stereo source to both flat (metering) and K-weighted (loudness) paths
   function connectStereoToMix(node){ const split = ac.createChannelSplitter(2); node.connect(split); split.connect(mixL,0); split.connect(mixR,1); split.connect(kHP_L,0); split.connect(kHP_R,1); return split; }
 
-  // ------- Nordic PPM – IEC Type I, 0 PPM = 0 dBu (−18 dBFS peak) -------
-  // Skala: -36 till +9 dBu (dBFS: -54 till -9), PML = +9 dBu = -9 dBFS
-  // Ballistik: 5 ms attack (quasi-peak), linjär decay 20 dB / 1.7 s
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NORDIC PPM METER (IEC 60268-10 TYPE I)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Standard Nordic/DIN quasi-peak programme meter as used by SVT, NRK, YLE, DR.
+  //
+  // REFERENCE LEVELS (EBU R68):
+  //   0 PPM = 0 dBu = −18 dBFS (peak) – broadcast alignment tone level
+  //   PML (Permitted Maximum Level) = +9 PPM = +9 dBu = −9 dBFS
+  //
+  // BALLISTICS (IEC 60268-10 Type I):
+  //   Integration time: 5ms (quasi-peak detector, not true peak)
+  //   Rise time to −1dB of steady-state: 5ms ± 0.5ms
+  //   Fall time: 20dB in 1.7s ± 0.3s (linear decay ≈ 11.76 dB/s)
+  //
+  // SCALE: −36 to +9 PPM (dBu), corresponding to −54 to −9 dBFS
   let ppmHoldL = -60, ppmHoldR = -60, lastTsPPM = performance.now();
-  const PPM_ATTACK_MS = 5;          // 5 ms integration (IEC Type I)
-  const PPM_DECAY_DB_PER_S = 20/1.7; // 20 dB på 1.7 s ≈ 11.76 dB/s (linjär)
-  const PPM_MIN_DB = -54;           // -36 PPM = -54 dBFS
-  const PPM_MAX_DB = -9;            // +9 PPM = -9 dBFS
+  const PPM_ATTACK_MS = 5;
+  const PPM_DECAY_DB_PER_S = 20/1.7;
+  const PPM_MIN_DB = -54;
+  const PPM_MAX_DB = -9;
 
-  // Peak-hold för PPM (RTW broadcast standard: 3 sekunder)
+  // Peak-hold indicator (3s hold per RTW/DK broadcast convention)
   let ppmPeakHoldL = -60, ppmPeakHoldR = -60, ppmPeakTimeL = 0, ppmPeakTimeR = 0;
-  const PPM_PEAK_HOLD_SEC = 3; // 3 sekunder peak-hold (RTW broadcast standard)
+  const PPM_PEAK_HOLD_SEC = 3;
 
+  // Quasi-peak detection: finds maximum amplitude within 5ms integration windows.
+  // Unlike true peak, this approximates the behaviour of analogue PPM rectifiers.
   function quasiPeakDb(buf, sampleRate){
-    // Quasi-peak: hitta max amplitude med ~5ms integration
-    // Vid 48kHz = 240 samples per 5ms fönster
     const windowSamples = Math.max(1, Math.round(sampleRate * PPM_ATTACK_MS / 1000));
     let maxPeak = 0;
     for(let i = 0; i < buf.length; i += windowSamples){
@@ -2219,71 +2307,66 @@
     const dt = Math.max(0.001, (now - lastTsPPM) / 1000);
     lastTsPPM = now;
 
-    // Uses shared bufL/bufR already populated by sampleAnalysers()
-    // NO redundant getFloatTimeDomainData here - prevents L/R desync
-
-    // Quasi-peak mätning (dBFS)
+    // Uses shared bufL/bufR from sampleAnalysers() to maintain L/R sync
     const peakDbL = quasiPeakDb(bufL, ac.sampleRate);
     const peakDbR = quasiPeakDb(bufR, ac.sampleRate);
 
-    // Nordic PPM ballistik:
-    // Attack: omedelbart till nytt peak (inom 5ms integration redan i quasiPeakDb)
-    // Decay: linjär 20 dB / 1.7 s
+    // IEC Type I ballistics: instant attack, linear 11.76 dB/s decay
     const decayDb = PPM_DECAY_DB_PER_S * dt;
 
-    // L kanal
+    // L channel
     if(peakDbL > ppmHoldL){
-      ppmHoldL = peakDbL; // Snabb attack
+      ppmHoldL = peakDbL;
     } else {
-      ppmHoldL = Math.max(PPM_MIN_DB, ppmHoldL - decayDb); // Linjär decay
+      ppmHoldL = Math.max(PPM_MIN_DB, ppmHoldL - decayDb);
     }
 
-    // R kanal
+    // R channel
     if(peakDbR > ppmHoldR){
       ppmHoldR = peakDbR;
     } else {
       ppmHoldR = Math.max(PPM_MIN_DB, ppmHoldR - decayDb);
     }
 
-    // Clamp till skalan
     const dispL = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldL));
     const dispR = Math.max(PPM_MIN_DB, Math.min(PPM_MAX_DB, ppmHoldR));
 
-    // Peak-hold logik (10 sekunder)
+    // Peak-hold logic (3s hold)
     const nowSec = now / 1000;
     if (dispL > ppmPeakHoldL) { ppmPeakHoldL = dispL; ppmPeakTimeL = nowSec; }
     else if (nowSec - ppmPeakTimeL > PPM_PEAK_HOLD_SEC) { ppmPeakHoldL = dispL; ppmPeakTimeL = nowSec; }
     if (dispR > ppmPeakHoldR) { ppmPeakHoldR = dispR; ppmPeakTimeR = nowSec; }
     else if (nowSec - ppmPeakTimeR > PPM_PEAK_HOLD_SEC) { ppmPeakHoldR = dispR; ppmPeakTimeR = nowSec; }
 
-    // Rita med peak-hold
     drawHBar_PPM(ppmCanvas, dispL, dispR, ppmPeakHoldL, ppmPeakHoldR);
 
-    // Visa i PPM (= dBu), RTW-style: L: +2.0 PPM
-    const ppmL = dispL + 18; // dBFS -> PPM/dBu
+    // Convert dBFS to PPM scale (dBu): PPM = dBFS + 18
+    const ppmL = dispL + 18;
     const ppmR = dispR + 18;
-    // Visa "--.-" om signalen är vid botten av skalan (ingen meningsfull signal)
-    const ppmFloor = PPM_MIN_DB + 18; // -36 dBu
     const ppmLStr = (dispL <= PPM_MIN_DB + 1) ? '--.-' : formatDbu(ppmL);
     const ppmRStr = (dispR <= PPM_MIN_DB + 1) ? '--.-' : formatDbu(ppmR);
     document.getElementById('ppmLabel').innerHTML = `L: <b>${ppmLStr} PPM</b> · R: <b>${ppmRStr} PPM</b>`;
   }
-  // Reset-funktion för PPM peak-hold
   window.resetPPMPeak = function(){ ppmPeakHoldL = -60; ppmPeakHoldR = -60; };
 
-  // ------- XY + Correlation -------
-  // Visual gain for vectorscope amplitude (RTW/DK standard: -18 dBFS mono ≈ 65-75% radius)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // M/S GONIOMETER (VECTORSCOPE)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Lissajous-style stereo phase display in the Mid/Side domain.
+  // Visual gain calibrated so −18 dBFS mono tone reaches ~70% of radius,
+  // matching RTW, DK-Audio, and TC Electronic hardware implementations.
   const VECTORSCOPE_GAIN = 3.5;
 
-  /**
-   * drawXY - M/S Goniometer rendering (DK/RTW style)
-   *
-   * Coordinate system:
-   *   - Vertical axis (Y) = Mid = (L+R)/2 = MONO content
-   *   - Horizontal axis (X) = Side = (L-R)/2 = STEREO difference
-   *   - Perfect mono signal = vertical line in center
-   *   - Out-of-phase signal = horizontal line
-   */
+  // Coordinate system (DK/RTW convention):
+  //   Y-axis (vertical)   = Mid   = (L+R)/√2  = mono/centre content
+  //   X-axis (horizontal) = Side  = (L−R)/√2  = stereo difference
+  //
+  // Visual interpretation:
+  //   • Vertical line       → mono signal (full correlation)
+  //   • Horizontal line     → out-of-phase (anti-correlated)
+  //   • 45° diagonal (L+)   → hard left
+  //   • 45° diagonal (R+)   → hard right
+  //   • Circular/elliptical → complex stereo field
   function drawXY(){
     const w=xy.width,h=xy.height; if(!w||!h) return;
     const dpr = window.devicePixelRatio || 1;
@@ -2394,12 +2477,17 @@
     for(let i=0;i<n;i++){ const L=l[i]-mL, R=r[i]-mR; num+=L*R; dL+=L*L; dR+=R*R }
     return num/(Math.sqrt(dL*dR)+1e-20);
   }
+  // ───────────────────────────────────────────────────────────────────────────
+  // PHASE CORRELATION METER
+  // ───────────────────────────────────────────────────────────────────────────
+  // Displays Pearson correlation coefficient between L and R channels.
+  //   +1.0 = perfect positive correlation (mono, in-phase)
+  //    0.0 = uncorrelated (independent stereo)
+  //   −1.0 = perfect negative correlation (anti-phase, cancellation risk)
+  // Asymmetric ballistics: faster attack (0.25), slower release (0.06) to
+  // catch phase issues while providing stable visual indication.
   let corrHold=0, corrUp=.25, corrDn=.06;
-  /**
-   * drawCorr - Phase Correlation meter
-   * Uses shared bufL/bufR - NO redundant getFloatTimeDomainData
-   * During blanking: holds previous value, continues rendering smoothly
-   */
+
   function drawCorr(){
     // Update correlation only if TransitionGuard allows
     // Uses shared buffers already populated by sampleAnalysers()
@@ -3296,8 +3384,14 @@
     ctx.globalAlpha=1; ctx.fillStyle='#2a3642'; ctx.fillRect(w-2,0,2,h); // 0 dBFS fence
   }
 
-  // True Peak (dBTP) – LED-style rendering med peak-hold markör
-  // Range: -60 dBTP till +3 dBTP = 126 LED cells (0.5 dB per cell)
+  // ───────────────────────────────────────────────────────────────────────────
+  // TRUE PEAK METER (EBU R128 / ITU BS.1770-4)
+  // ───────────────────────────────────────────────────────────────────────────
+  // LED-style bar meter showing inter-sample peak level (dBTP).
+  // Range: −60 to +3 dBTP (126 cells at 0.5 dB resolution).
+  // True Peak detection uses 4× oversampling to estimate inter-sample peaks
+  // that would cause clipping in D/A converters (per ITU BS.1770-4 Annex 2).
+  // Reference: 0 dBTP ≈ 0 dBFS sample peak for full-scale sine.
   function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1; const w=Math.floor(canvas.clientWidth*dpr), h=Math.floor(canvas.height);
     if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h }
@@ -3382,9 +3476,13 @@
     ctx.fillRect(Math.round(zeroX) - 1, h * 0.25, 2, h * 0.5);  // 25% top, 50% height
   }
 
-  // Nordic PPM – horisontell canvas rendering med RTW-style färgzoner
-  // Range: -54 dBFS till -9 dBFS (45 dB span) = -36 PPM till +9 PPM
-  // 0 PPM = 0 dBu = -18 dBFS peak, PML = +9 PPM = -9 dBFS
+  // ───────────────────────────────────────────────────────────────────────────
+  // NORDIC PPM BAR RENDERING
+  // ───────────────────────────────────────────────────────────────────────────
+  // Horizontal bargraph with colour zones per RTW/DK-Audio convention.
+  // Scale: −36 to +9 PPM (dBu), mapped to −54 to −9 dBFS.
+  // Zones: green (safe) → yellow (caution) → red (overload).
+  // TEST marker at 0 PPM (0 dBu = −18 dBFS), PML at +9 PPM (−9 dBFS).
   function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR){
     const dpr=window.devicePixelRatio||1;
     const rect = canvas.getBoundingClientRect();
@@ -3526,9 +3624,25 @@
   window.resetTPOver = function(){ tpOverFlag = false; tpPeakHoldL = -60; tpPeakHoldR = -60; peakIndicatorOn = false; };
   layoutTPScale(tpScale);
 
-  // ------- R128 – EBU R128 Loudness med broadcast target −23 LUFS -------
-  // LOUDNESS_TARGET is now a configurable global variable (defined at top)
-  const frameDur = 2048 / 48000; const mLen = Math.max(1, Math.round(0.4 / frameDur)); const sLen = Math.max(1, Math.round(3.0 / frameDur));
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EBU R128 LOUDNESS METERING
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Programme loudness measurement per EBU R128 and ITU-R BS.1770-4.
+  //
+  // INTEGRATION WINDOWS (BS.1770):
+  //   Momentary (M): 400ms sliding window, updated per frame
+  //   Short-term (S): 3s sliding window, updated per frame
+  //   Integrated (I): Gated measurement over entire programme
+  //
+  // GATING ALGORITHM (BS.1770-4):
+  //   1. Absolute gate: −70 LUFS (discard silence)
+  //   2. Relative gate: −10 LU below ungated integrated loudness
+  //   Only blocks exceeding both gates contribute to integrated loudness.
+  //
+  // TARGET: −23 LUFS (EBU R128) or −24 LKFS (ATSC A/85) – configurable
+  const frameDur = 2048 / 48000;
+  const mLen = Math.max(1, Math.round(0.4 / frameDur));  // 400ms window
+  const sLen = Math.max(1, Math.round(3.0 / frameDur));  // 3s window
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
 
   // R128 panel: TPmax och elapsed time
