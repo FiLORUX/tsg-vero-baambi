@@ -527,11 +527,18 @@
     .card.collapsible h2:hover::before {
       border-left-color: var(--ink);
     }
-    .card.collapsible .card-body {
-      display: block;
+    /* Smooth collapse animation using CSS Grid */
+    .card.collapsible .card-body-wrapper {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.25s ease-out;
     }
-    .card.collapsible.collapsed .card-body {
-      display: none;
+    .card.collapsible.collapsed .card-body-wrapper {
+      grid-template-rows: 0fr;
+    }
+    .card.collapsible .card-body {
+      overflow: hidden;
+      min-height: 0;
     }
     /* Collapsed summary text */
     .card.collapsible .collapse-summary {
@@ -559,6 +566,7 @@
     button:disabled{opacity:.5;cursor:not-allowed}
     .btn-ghost{background:var(--btn-ghost);color:var(--ink);border:1px solid #2a3a5f}
     .btn-active{background:var(--btn-dark)}
+    .btn-muted{background:var(--hot);color:white}
 
     label{font-size:12px;color:var(--muted)}
     code.small{font-size:12px;color:var(--muted)}
@@ -916,7 +924,7 @@
     <div class="sidebar-content">
       <section class="card collapsible" id="panelInputSources" data-panel="inputSources">
         <h2>Input Sources <span class="collapse-summary" id="inputSourceSummary">–</span></h2>
-        <div class="card-body">
+        <div class="card-body-wrapper"><div class="card-body">
           <!-- Source Mode Selector (3 buttons) -->
           <div class="row" style="margin-bottom:8px;gap:4px">
             <button id="btnModeBrowser" class="btn-active" style="flex:1;line-height:1.2">Browser<br>Tab</button>
@@ -937,15 +945,16 @@
               <label>Monitor:</label>
               <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
               <span id="sysMonVal" class="tiny">0.20</span>
-              <button id="btnSysMonMute" class="btn-ghost">Unmute</button>
-              <span id="sysMonState" class="tiny">(muted)</span>
+              <button id="btnSysMonMute" class="btn-muted">Mute</button>
             </div>
             <div class="row" style="align-items:center">
               <label>Line-up (dB):</label>
-              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
-              <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" style="width:60px" />
-              <span class="tiny" id="sysTrimOut">-18.0 dB</span>
-              <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18</button>
+              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" />
+              <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −12</button>
+            </div>
+            <div class="row" style="align-items:center">
+              <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-12.0" style="width:80px" />
+              <span class="tiny" id="sysTrimOut">−12.0 dB</span>
             </div>
             <div class="kv" id="info">
               <div><small>Source</small><span id="srcKind">–</span></div>
@@ -970,15 +979,16 @@
               <label>Monitor:</label>
               <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
               <span id="extMonVal" class="tiny">0.20</span>
-              <button id="btnExtMonMute" class="btn-ghost">Unmute</button>
-              <span id="extMonState" class="tiny">(muted)</span>
+              <button id="btnExtMonMute" class="btn-muted">Mute</button>
             </div>
             <div class="row" style="align-items:center">
               <label>Line-up (dB):</label>
               <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
-              <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" style="width:60px" />
-              <span class="tiny" id="extTrimOut">0.0 dB</span>
               <button id="extTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0</button>
+            </div>
+            <div class="row" style="align-items:center">
+              <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" style="width:80px" />
+              <span class="tiny" id="extTrimOut">0.0 dB</span>
             </div>
             <div class="kv" id="extInfo">
               <div><small>Device</small><span id="extDevice">–</span></div>
@@ -1009,16 +1019,15 @@
               <label>Monitor:</label>
               <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
               <span id="monVal" class="tiny">0.20</span>
-              <button id="btnMonMute" class="btn-ghost">Unmute</button>
-              <span id="monState" class="tiny">(muted)</span>
+              <button id="btnMonMute" class="btn-ghost">Mute</button>
             </div>
           </div>
-        </div>
+        </div></div>
       </section>
 
       <section class="card collapsible collapsed" id="panelMeteringSettings" data-panel="meteringSettings">
         <h2>Metering Settings <span class="collapse-summary">−23 LUFS / −1 dBTP</span></h2>
-        <div class="card-body">
+        <div class="card-body-wrapper"><div class="card-body">
           <!-- LUFS Target -->
           <div class="setting-row">
             <label for="targetPreset">Loudness Target</label>
@@ -1049,20 +1058,21 @@
               <option value="120">120 seconds</option>
             </select>
           </div>
-        </div>
+        </div></div>
       </section>
 
       <section class="card collapsible collapsed" id="panelStatus" data-panel="status">
         <h2>Status & Live Data <span class="collapse-summary" id="statusSummary">–</span></h2>
-        <div class="card-body">
+        <div class="card-body-wrapper"><div class="card-body">
           <div class="kv">
-            <div><small>Uptime (s)</small><span id="uptime">0.0</span></div>
-            <div><small>AudioContext</small><span id="ctxState">–</span></div>
-            <div><small>Tone running</small><span id="dbgGen">no</span></div>
-            <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
-            <div class="wide"><small>Monitor status</small><span id="monitorStatus" class="tiny">System monitor: <b>OFF</b> (default)<br>Generator monitor: <b>ON</b> (default)</span></div>
+            <div><small>Uptime</small><span id="uptime" style="font-family:monospace">00:00:00.0</span></div>
+            <div><small>AudioContext running</small><span id="ctxState">–</span></div>
+            <div><small>Tab Capture running</small><span id="dbgTab">No</span></div>
+            <div><small>External running</small><span id="dbgExt">No</span></div>
+            <div><small>Generator running</small><span id="dbgGen">No</span></div>
+            <div class="wide"><small>Monitor status</small><span id="monitorStatus" class="tiny">Tab: <b>OFF</b> · External: <b>OFF</b> · Generator: <b>ON</b></span></div>
           </div>
-        </div>
+        </div></div>
       </section>
     </div>
   </div>
@@ -1864,14 +1874,12 @@
 
   // Generator monitor controls
   const btnMonMute = document.getElementById('btnMonMute');
-  const monState = document.getElementById('monState');
   const muteLeft = document.getElementById('muteLeft');
   const monGainEl = document.getElementById('monGain');
   const monVal = document.getElementById('monVal');
 
   // Browser source controls
   const btnSysMonMute = document.getElementById('btnSysMonMute');
-  const sysMonState = document.getElementById('sysMonState');
   const sysMonGainEl = document.getElementById('sysMonGain');
   const sysMonVal = document.getElementById('sysMonVal');
   const sysTrimRange = document.getElementById('sysTrimRange');
@@ -1897,7 +1905,6 @@
   const extMonGainEl = document.getElementById('extMonGain');
   const extMonVal = document.getElementById('extMonVal');
   const btnExtMonMute = document.getElementById('btnExtMonMute');
-  const extMonState = document.getElementById('extMonState');
   const extTrimRange = document.getElementById('extTrimRange');
   const extTrimInput = document.getElementById('extTrimInput');
   const extTrimOut = document.getElementById('extTrimOut');
@@ -2075,7 +2082,8 @@
 
   // ------- Audio graph -------
   const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-  ctxState && (ctxState.textContent = ac.state); ac.onstatechange = () => { if(ctxState) ctxState.textContent = ac.state };
+  function updateCtxState() { if(ctxState) ctxState.textContent = ac.state === 'running' ? 'Yes' : 'No'; }
+  updateCtxState(); ac.onstatechange = updateCtxState;
 
   // Analysbuss L/R
   const mixL = ac.createGain(); mixL.gain.value = 1; const mixR = ac.createGain(); mixR.gain.value = 1;
@@ -3575,7 +3583,7 @@
 
   // ------- Capture -------
   let sysStream=null, sysSrc=null, sysSplit=null, sysMonGain=null, sysMonitorMuted=true, sysTrimNode=null; let sysTrimDb = 0;
-  const SYS_TRIM_DEFAULT = -18; // EBU broadcast standard: -18 dBFS = 0 dBu
+  const SYS_TRIM_DEFAULT = -12; // Browser tab default line-up
   const SYS_TRIM_STORAGE_KEY = 'tsg_sysTrimDb';
 
   function setSysTrim(dB, save = true) {
@@ -3597,28 +3605,33 @@
   sysTrimReset.addEventListener('click', () => setSysTrim(SYS_TRIM_DEFAULT));
 
   // Helper: Build monitor status text based on actual state
-  // Defaults: System monitor OFF, Generator monitor ON
+  // Defaults: Tab monitor OFF, External monitor OFF, Generator monitor ON
   function updateMonitorStatusDisplay() {
     const monitorStatus = document.getElementById('monitorStatus');
     if (!monitorStatus) return;
 
-    // System monitor: OFF is default, ON is active state
-    const sysActive = sysMonGain && !sysMonitorMuted;
-    const sysStatus = sysActive ? '<b>ON</b>' : '<b>OFF</b> (default)';
+    // Tab monitor: OFF is default
+    const tabActive = sysMonGain && !sysMonitorMuted;
+    const tabStatus = tabActive ? '<b>ON</b>' : '<b>OFF</b>';
 
-    // Generator monitor: ON is default, OFF is muted state
+    // External monitor: OFF is default
+    const extActive = extMonGain && !extMonitorMuted;
+    const extStatus = extActive ? '<b>ON</b>' : '<b>OFF</b>';
+
+    // Generator monitor: ON is default
     const genActive = genMonGain && !monitorMuted;
-    const genStatus = genActive ? '<b>ON</b> (default)' : '<b>OFF</b>';
+    const genStatus = genActive ? '<b>ON</b>' : '<b>OFF</b>';
 
-    monitorStatus.innerHTML = `System monitor: ${sysStatus}<br>Generator monitor: ${genStatus}`;
+    monitorStatus.innerHTML = `Tab: ${tabStatus} · External: ${extStatus} · Generator: ${genStatus}`;
   }
 
   function toggleSysMonitorMute(){
     if(!sysMonGain) return;
     sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
     sysMonVal.textContent = sysMonGainEl.value;
-    if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute'; sysMonState.textContent='(muted)'; }
-    else { btnSysMonMute.classList.add('btn-active'); btnSysMonMute.classList.remove('btn-ghost'); btnSysMonMute.textContent='Mute'; sysMonState.textContent='(on)'; }
+    // RED when muted, neutral when not muted
+    if (sysMonitorMuted){ btnSysMonMute.classList.add('btn-muted'); btnSysMonMute.classList.remove('btn-ghost'); }
+    else { btnSysMonMute.classList.remove('btn-muted'); btnSysMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
@@ -3761,18 +3774,17 @@
       sysMonGain = ac.createGain();
       sysMonGain.gain.value = 0;
       sysTrimNode.connect(sysMonGain).connect(ac.destination);
-      btnSysMonMute.classList.remove('btn-active');
-      btnSysMonMute.classList.add('btn-ghost');
-      btnSysMonMute.textContent = 'Unmute';
-      sysMonState.textContent = '(muted)';
+      // Default: muted (RED button)
+      btnSysMonMute.classList.add('btn-muted');
+      btnSysMonMute.classList.remove('btn-ghost');
       sysMonitorMuted = true;
       const set = track.getSettings ? track.getSettings() : {};
-      info.srcKind.textContent = track.kind || 'audio';
-      info.cc.textContent = set.channelCount ?? 'unknown';
+      info.srcKind.textContent = (track.kind || 'audio').charAt(0).toUpperCase() + (track.kind || 'audio').slice(1);
+      info.cc.textContent = set.channelCount ?? 'Unknown';
       info.sr.textContent = ac.sampleRate + ' Hz';
       info.stOK.textContent = (set.channelCount >= 2 ? 'Yes' : 'Uncertain/Mono?');
       activeCapture = 'browser';
-      dbgTab.textContent = 'yes';
+      dbgTab.textContent = 'Yes';
       updateCaptureButtons();
       updateInputSourceSummary();
     } catch (e) {
@@ -3788,11 +3800,9 @@
     try { sysMonGain && sysMonGain.disconnect(); } catch {}
     sysStream = null; sysSrc = null; sysTrimNode = null; sysSplit = null; sysMonGain = null;
     sysMonitorMuted = true;
-    btnSysMonMute.textContent = 'Unmute';
-    sysMonState.textContent = '(muted)';
-    btnSysMonMute.classList.remove('btn-active');
-    btnSysMonMute.classList.add('btn-ghost');
-    dbgTab.textContent = 'no';
+    btnSysMonMute.classList.add('btn-muted');
+    btnSysMonMute.classList.remove('btn-ghost');
+    dbgTab.textContent = 'No';
     if (activeCapture === 'browser') activeCapture = null;
     updateCaptureButtons();
     updateInputSourceSummary();
@@ -3909,17 +3919,17 @@
       extMonGain = ac.createGain();
       extMonGain.gain.value = 0;
       extTrimNode.connect(extMonGain).connect(ac.destination);
-      btnExtMonMute.classList.remove('btn-active');
-      btnExtMonMute.classList.add('btn-ghost');
-      btnExtMonMute.textContent = 'Unmute';
-      extMonState.textContent = '(muted)';
+      // Default: muted (RED button)
+      btnExtMonMute.classList.add('btn-muted');
+      btnExtMonMute.classList.remove('btn-ghost');
       extMonitorMuted = true;
       const settings = track.getSettings ? track.getSettings() : {};
       const selectedOption = extDeviceSelect.options[extDeviceSelect.selectedIndex];
       extInfo.device.textContent = selectedOption ? selectedOption.textContent.slice(0, 30) : 'Unknown';
-      extInfo.cc.textContent = settings.channelCount ?? 'unknown';
+      extInfo.cc.textContent = settings.channelCount ?? 'Unknown';
       extInfo.sr.textContent = ac.sampleRate + ' Hz';
       extInfo.status.textContent = 'Active';
+      document.getElementById('dbgExt').textContent = 'Yes';
       extDeviceSelect.disabled = true;
       try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch (e) {}
       activeCapture = 'external';
@@ -3941,15 +3951,14 @@
     try { extMonGain && extMonGain.disconnect(); } catch {}
     extStream = null; extSrc = null; extWorkletNode = null; extTrimNode = null; extSplit = null; extMonGain = null;
     extMonitorMuted = true;
-    btnExtMonMute.textContent = 'Unmute';
-    extMonState.textContent = '(muted)';
-    btnExtMonMute.classList.remove('btn-active');
-    btnExtMonMute.classList.add('btn-ghost');
+    btnExtMonMute.classList.add('btn-muted');
+    btnExtMonMute.classList.remove('btn-ghost');
     extDeviceSelect.disabled = false;
     extInfo.device.textContent = '–';
     extInfo.cc.textContent = '–';
     extInfo.sr.textContent = '–';
     extInfo.status.textContent = '–';
+    document.getElementById('dbgExt').textContent = 'No';
     if (activeCapture === 'external') activeCapture = null;
     updateCaptureButtons();
     updateInputSourceSummary();
@@ -3961,17 +3970,15 @@
     extMonitorMuted = !extMonitorMuted;
     extMonGain.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl.value);
     extMonVal.textContent = extMonGainEl.value;
+    // RED when muted, neutral when not muted
     if (extMonitorMuted) {
-      btnExtMonMute.classList.remove('btn-active');
-      btnExtMonMute.classList.add('btn-ghost');
-      btnExtMonMute.textContent = 'Unmute';
-      extMonState.textContent = '(muted)';
-    } else {
-      btnExtMonMute.classList.add('btn-active');
+      btnExtMonMute.classList.add('btn-muted');
       btnExtMonMute.classList.remove('btn-ghost');
-      btnExtMonMute.textContent = 'Mute';
-      extMonState.textContent = '(on)';
+    } else {
+      btnExtMonMute.classList.remove('btn-muted');
+      btnExtMonMute.classList.add('btn-ghost');
     }
+    updateMonitorStatusDisplay();
   }
 
   btnExtMonMute.addEventListener('click', toggleExtMonitorMute);
@@ -4117,8 +4124,11 @@
 
     genOsc.start();
     ebuModeActive = false;
-    dbgGen.textContent='yes';
-    btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute'; monState.textContent='(on)'; monitorMuted = false;
+    dbgGen.textContent='Yes';
+    // Generator monitor ON by default (neutral button)
+    btnMonMute.classList.remove('btn-muted');
+    btnMonMute.classList.add('btn-ghost');
+    monitorMuted = false;
   }
 
   async function stopGenerator(){
@@ -4130,14 +4140,15 @@
     merger = null; genMonGain = null; genSplit = null;
     ebuModeActive = false;
     TransitionGuard.reset();
-    dbgGen.textContent = 'no';
+    dbgGen.textContent = 'No';
   }
   function toggleGenMonitorMute(){
     if(!genMonGain) return;
     monitorMuted = !monitorMuted; genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value);
     monVal.textContent = monGainEl.value;
-    if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute'; monState.textContent='(muted)'; }
-    else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute'; monState.textContent='(on)'; }
+    // RED when muted, neutral when not muted
+    if (monitorMuted){ btnMonMute.classList.add('btn-muted'); btnMonMute.classList.remove('btn-ghost'); }
+    else { btnMonMute.classList.remove('btn-muted'); btnMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
@@ -4684,8 +4695,13 @@
     const mVal = parseFloat(lufsM && lufsM.dataset.v);
     drawLoudnessRadar(isFinite(mVal) ? mVal : undefined);
 
-    // Uptime display
-    uptimeEl.textContent = ((performance.now() - startTs) / 1000).toFixed(1);
+    // Uptime display (HH:MM:SS.M format)
+    const uptimeSec = (performance.now() - startTs) / 1000;
+    const h = Math.floor(uptimeSec / 3600);
+    const m = Math.floor((uptimeSec % 3600) / 60);
+    const s = Math.floor(uptimeSec % 60);
+    const ms = Math.floor((uptimeSec * 10) % 10);
+    uptimeEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms}`;
 
     requestAnimationFrame(renderLoop);
   }
