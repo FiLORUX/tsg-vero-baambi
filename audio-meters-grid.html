@@ -1224,6 +1224,11 @@
   let TP_LIMIT = -1;          // True Peak limit in dBTP
   let radarMaxSeconds = 60;   // Radar sweep time
 
+  // True Peak scale constants (fixed range -60 to +3 dBTP)
+  const TP_SCALE_MIN = -60;
+  const TP_SCALE_MAX = 3;
+  const TP_SCALE_SPAN = TP_SCALE_MAX - TP_SCALE_MIN;  // 63 dB
+
   // =====================================================
   // LOUDNESS RADAR MODULE (Clarity-style)
   // =====================================================
@@ -2982,13 +2987,10 @@
   // ------- True Peak (dBTP) – 4× oversampling, 0 dBTP = full scale -------
   function layoutTPScale(el){
     el.innerHTML='';
-    // Scale constants for -60 to +3 dBTP range
-    const TP_MIN = -60;
-    const TP_MAX = 3;
-    const TP_SPAN = TP_MAX - TP_MIN;  // 63 dB
+    // Use global scale constants (TP_SCALE_MIN, TP_SCALE_MAX, TP_SCALE_SPAN)
     const marks = [-60,-50,-40,-30,-24,-18,-12,-6,-3,0,3];
     marks.forEach(m=>{
-      const x = ((m - TP_MIN) / TP_SPAN) * 100;
+      const x = ((m - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
       // Skip gray tick at 0 dBTP (red line drawn in canvas instead)
       if (m !== 0) {
         const t=document.createElement('div');
@@ -3006,7 +3008,7 @@
       {v:-3,c:'var(--caution)',w:1,label:'−3 dBTP',color:getCss('--caution')}
     ];
     for(const mk of warn){
-      const x = ((mk.v - TP_MIN) / TP_SPAN) * 100;
+      const x = ((mk.v - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
       const col=document.createElement('div');
       col.style.position='absolute'; col.style.left=`calc(${x}% - 0.5px)`; col.style.top='25%'; col.style.height='50%'; col.style.width=`${mk.w}px`; col.style.background=`${mk.c}`; col.style.opacity='0.95';
       el.appendChild(col);
@@ -3030,7 +3032,7 @@
       el.appendChild(tag);
     }
     // 0 dBTP = 0 dBFS label (red, same style as warn labels)
-    const xZero = ((0 - TP_MIN) / TP_SPAN) * 100;
+    const xZero = ((0 - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
     const zeroTag = document.createElement('div');
     zeroTag.innerHTML = '0<br>dBFS';
     zeroTag.style.position = 'absolute';
@@ -3047,7 +3049,7 @@
     zeroTag.style.padding = '0';
     el.appendChild(zeroTag);
     // TEST -18 dBTP = -18 dBFS peak (broadcast alignment)
-    const xRef = ((-18 - TP_MIN) / TP_SPAN) * 100;
+    const xRef = ((-18 - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
     ref.style.left=`calc(${xRef}% - 1px)`;
@@ -3075,7 +3077,7 @@
     el.appendChild(tag);
 
     // TP LIMIT reference line (same style as TEST line)
-    const xLimit = ((TP_LIMIT - TP_MIN) / TP_SPAN) * 100;
+    const xLimit = ((TP_LIMIT - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
     const limitRef = document.createElement('div');
     limitRef.id = 'tpLimitLine';
     limitRef.style.position = 'absolute';
@@ -3107,7 +3109,7 @@
 
   // Update TP Limit line and label position when setting changes
   function updateTpLimitDisplay() {
-    const xLimit = ((TP_LIMIT - TP_MIN) / TP_SPAN) * 100;
+    const xLimit = ((TP_LIMIT - TP_SCALE_MIN) / TP_SCALE_SPAN) * 100;
     const limitLine = document.getElementById('tpLimitLine');
     const limitTag = document.getElementById('tpLimitTag');
     if (limitLine) {
