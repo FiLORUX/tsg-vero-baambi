@@ -1945,6 +1945,7 @@
   const btnStartCapture = document.getElementById('btnStartCapture');
   const btnStopCapture = document.getElementById('btnStopCapture');
   const inputSourceSummary = document.getElementById('inputSourceSummary');
+  const statusSummary = document.getElementById('statusSummary');
 
   // External source controls
   const extDeviceSelect = document.getElementById('extDeviceSelect');
@@ -3709,15 +3710,13 @@
   function updateInputSourceSummary() {
     if (!inputSourceSummary) return;
     if (!activeCapture) {
-      inputSourceSummary.textContent = '–';
+      inputSourceSummary.textContent = 'Inactive';
     } else if (activeCapture === 'browser') {
-      inputSourceSummary.textContent = 'Browser Tab';
+      inputSourceSummary.textContent = 'Browser Active';
     } else if (activeCapture === 'external') {
-      const opt = extDeviceSelect.options[extDeviceSelect.selectedIndex];
-      const name = opt && opt.value ? opt.textContent.slice(0, 20) : 'External';
-      inputSourceSummary.textContent = name;
+      inputSourceSummary.textContent = 'External Active';
     } else if (activeCapture === 'generator') {
-      inputSourceSummary.textContent = 'Internal Generator';
+      inputSourceSummary.textContent = 'Tone Active';
     }
   }
 
@@ -4751,7 +4750,9 @@
     const m = Math.floor((uptimeSec % 3600) / 60);
     const s = Math.floor(uptimeSec % 60);
     const ms = Math.floor((uptimeSec * 10) % 10);
-    uptimeEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms}`;
+    const uptimeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms}`;
+    uptimeEl.textContent = uptimeStr;
+    if (statusSummary) statusSummary.textContent = uptimeStr;
 
     requestAnimationFrame(renderLoop);
   }
