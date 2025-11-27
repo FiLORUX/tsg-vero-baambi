@@ -580,6 +580,9 @@
       font-size: 12px;
       font-family: monospace;
       padding: 2px 4px;
+      width: 44px;
+      text-align: center;
+      flex-shrink: 0;
       transition: border-color 0.15s ease, background 0.15s ease;
     }
     .inline-edit:hover {
@@ -590,6 +593,13 @@
       border-color: var(--cyan);
       background: rgba(0,0,0,0.3);
       outline: none;
+    }
+    /* Fixed-width control buttons for consistent alignment */
+    .btn-ctrl {
+      width: 56px;
+      flex-shrink: 0;
+      padding: 6px 0;
+      text-align: center;
     }
 
     /* Source panel smooth transitions */
@@ -980,17 +990,17 @@
           <div id="browserSourcePanel" class="source-panel">
             <div class="source-panel-content">
             <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
-            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center">
-              <label>Monitor:</label>
-              <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
-              <input type="text" id="sysMonVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
-              <button id="btnSysMonMute" class="btn-muted" style="margin-left:auto">Mute</button>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="sysMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="sysMonVal" class="inline-edit" value="20" />
+              <button id="btnSysMonMute" class="btn-muted btn-ctrl">Mute</button>
             </div>
-            <div class="row" style="margin-bottom:8px;align-items:center">
-              <label>Line-up (dB):</label>
-              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" />
-              <input type="text" id="sysTrimVal" class="inline-edit" value="-12" style="width:40px;text-align:center" />
-              <button id="sysTrimReset" class="btn-ghost" style="margin-left:auto">Reset</button>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" style="flex:1;min-width:60px" />
+              <input type="text" id="sysTrimVal" class="inline-edit" value="-12" />
+              <button id="sysTrimReset" class="btn-ghost btn-ctrl">Reset</button>
             </div>
             <div class="kv" id="info">
               <div><small>Source</small><span id="srcKind">–</span></div>
@@ -1013,17 +1023,17 @@
               <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
             </div>
             <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, Dante, etc.</p>
-            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center">
-              <label>Monitor:</label>
-              <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
-              <input type="text" id="extMonVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
-              <button id="btnExtMonMute" class="btn-muted" style="margin-left:auto">Mute</button>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="extMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="extMonVal" class="inline-edit" value="20" />
+              <button id="btnExtMonMute" class="btn-muted btn-ctrl">Mute</button>
             </div>
-            <div class="row" style="margin-bottom:8px;align-items:center">
-              <label>Line-up (dB):</label>
-              <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
-              <input type="text" id="extTrimVal" class="inline-edit" value="0" style="width:40px;text-align:center" />
-              <button id="extTrimReset" class="btn-ghost" style="margin-left:auto">Reset</button>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" style="flex:1;min-width:60px" />
+              <input type="text" id="extTrimVal" class="inline-edit" value="0" />
+              <button id="extTrimReset" class="btn-ghost btn-ctrl">Reset</button>
             </div>
             <div class="kv" id="extInfo">
               <div><small>Device</small><span id="extDevice">–</span></div>
@@ -1052,11 +1062,11 @@
               <label><input type="checkbox" id="muteLeft"> EBU stereo-ID (L pulsed)</label>
               <span class="tiny" style="margin-left:8px;opacity:0.7">ITU-R BR.1385</span>
             </div>
-            <div class="row" style="margin-top:6px;align-items:center">
-              <label>Monitor:</label>
-              <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
-              <input type="text" id="monVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
-              <button id="btnMonMute" class="btn-ghost" style="margin-left:auto">Mute</button>
+            <div class="row" style="margin-top:6px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="monGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="monVal" class="inline-edit" value="20" />
+              <button id="btnMonMute" class="btn-ghost btn-ctrl">Mute</button>
             </div>
             </div>
           </div>
@@ -3662,17 +3672,17 @@
 
   function toggleSysMonitorMute(){
     if(!sysMonGain) return;
-    sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
-    sysMonVal.value = sysMonGainEl.value;
+    sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value) / 100;
+    sysMonVal.value = Math.round(sysMonGainEl.value);
     // RED when muted, neutral when not muted
     if (sysMonitorMuted){ btnSysMonMute.classList.add('btn-muted'); btnSysMonMute.classList.remove('btn-ghost'); }
     else { btnSysMonMute.classList.remove('btn-muted'); btnSysMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
-  sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.value=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
-  sysMonVal.addEventListener('change', e => { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); sysMonVal.value = sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
-  sysMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); sysMonVal.value = sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } e.target.blur(); } });
+  sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.value=Math.round(sysMonGainEl.value); if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value)/100 } });
+  sysMonVal.addEventListener('change', e => { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); sysMonVal.value = Math.round(sysMonGainEl.value); if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value)/100 } });
+  sysMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); sysMonVal.value = Math.round(sysMonGainEl.value); if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value)/100 } e.target.blur(); } });
 
   // =====================================================
   // UNIFIED INPUT SOURCE SYSTEM
@@ -4004,8 +4014,8 @@
   function toggleExtMonitorMute() {
     if (!extMonGain) return;
     extMonitorMuted = !extMonitorMuted;
-    extMonGain.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl.value);
-    extMonVal.value = extMonGainEl.value;
+    extMonGain.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl.value) / 100;
+    extMonVal.value = Math.round(extMonGainEl.value);
     // RED when muted, neutral when not muted
     if (extMonitorMuted) {
       btnExtMonMute.classList.add('btn-muted');
@@ -4019,11 +4029,11 @@
 
   btnExtMonMute.addEventListener('click', toggleExtMonitorMute);
   extMonGainEl.addEventListener('input', () => {
-    extMonVal.value = extMonGainEl.value;
-    if (extMonGain && !extMonitorMuted) extMonGain.gain.value = parseFloat(extMonGainEl.value);
+    extMonVal.value = Math.round(extMonGainEl.value);
+    if (extMonGain && !extMonitorMuted) extMonGain.gain.value = parseFloat(extMonGainEl.value) / 100;
   });
-  extMonVal.addEventListener('change', e => { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); extMonVal.value = extMonGainEl.value; if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value) } });
-  extMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); extMonVal.value = extMonGainEl.value; if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value) } e.target.blur(); } });
+  extMonVal.addEventListener('change', e => { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); extMonVal.value = Math.round(extMonGainEl.value); if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value)/100 } });
+  extMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); extMonVal.value = Math.round(extMonGainEl.value); if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value)/100 } e.target.blur(); } });
 
   navigator.mediaDevices.addEventListener('devicechange', () => {
     if (selectedInputMode === 'external') enumerateAudioDevices();
@@ -4182,17 +4192,17 @@
   }
   function toggleGenMonitorMute(){
     if(!genMonGain) return;
-    monitorMuted = !monitorMuted; genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value);
-    monVal.value = monGainEl.value;
+    monitorMuted = !monitorMuted; genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value) / 100;
+    monVal.value = Math.round(monGainEl.value);
     // RED when muted, neutral when not muted
     if (monitorMuted){ btnMonMute.classList.add('btn-muted'); btnMonMute.classList.remove('btn-ghost'); }
     else { btnMonMute.classList.remove('btn-muted'); btnMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
-  monGainEl.addEventListener('input', ()=>{ monVal.value=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
-  monVal.addEventListener('change', e => { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); monVal.value = monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
-  monVal.addEventListener('keydown', e => { if (e.key === 'Enter') { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); monVal.value = monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } e.target.blur(); } });
+  monGainEl.addEventListener('input', ()=>{ monVal.value=Math.round(monGainEl.value); if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value)/100 } });
+  monVal.addEventListener('change', e => { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); monVal.value = Math.round(monGainEl.value); if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value)/100 } });
+  monVal.addEventListener('keydown', e => { if (e.key === 'Enter') { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100); monVal.value = Math.round(monGainEl.value); if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value)/100 } e.target.blur(); } });
 
   // ------- Meter Mode Switcher -------
   const METER_MODE_KEY = 'tsg-meter-mode';
