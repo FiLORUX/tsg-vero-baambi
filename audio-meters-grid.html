@@ -547,6 +547,8 @@
       color: var(--cyan);
       margin-left: auto;
       font-weight: 500;
+      font-family: monospace;
+      font-variant-numeric: tabular-nums;
     }
     .card.collapsible.collapsed .collapse-summary {
       display: inline;
@@ -4097,6 +4099,9 @@
   // Initialize collapsible panels
   initCollapsiblePanels();
 
+  // Set initial summary states
+  updateInputSourceSummary();
+
   // =====================================================
   // END UNIFIED INPUT SOURCE SYSTEM
   // =====================================================
@@ -4750,9 +4755,8 @@
     const m = Math.floor((uptimeSec % 3600) / 60);
     const s = Math.floor(uptimeSec % 60);
     const ms = Math.floor((uptimeSec * 10) % 10);
-    const uptimeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms}`;
-    uptimeEl.textContent = uptimeStr;
-    if (statusSummary) statusSummary.textContent = uptimeStr;
+    uptimeEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${ms}`;
+    if (statusSummary) statusSummary.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 
     requestAnimationFrame(renderLoop);
   }
