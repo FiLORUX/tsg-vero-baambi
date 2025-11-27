@@ -996,7 +996,7 @@
 
           <!-- Unified Start/Stop Capture -->
           <div class="row" style="margin-bottom:10px">
-            <button id="btnStartCapture" style="flex:1">Start Capture</button>
+            <button id="btnStartCapture" class="btn-ghost" style="flex:1">Start Capture</button>
             <button id="btnStopCapture" class="btn-ghost" style="flex:1" disabled>Stop Capture</button>
           </div>
 
@@ -3802,9 +3802,13 @@
     if (isActiveMode) {
       btnStartCapture.disabled = true;
       btnStopCapture.disabled = false;
+      // Blue when this mode is actively capturing
+      btnStartCapture.classList.remove('btn-ghost');
     } else {
       btnStartCapture.disabled = false;
       btnStopCapture.disabled = !isAnyCapture || activeCapture !== selectedInputMode;
+      // Ghost when not capturing
+      btnStartCapture.classList.add('btn-ghost');
     }
     // If viewing a different mode than active, show stop as disabled
     if (activeCapture && activeCapture !== selectedInputMode) {
