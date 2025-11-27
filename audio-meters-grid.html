@@ -542,16 +542,20 @@
     }
     /* Collapsed summary text */
     .card.collapsible .collapse-summary {
-      display: none;
       font-size: 11px;
       color: var(--cyan);
       margin-left: auto;
       font-weight: 500;
       font-family: monospace;
       font-variant-numeric: tabular-nums;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
     }
     .card.collapsible.collapsed .collapse-summary {
-      display: inline;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.15s ease 0.5s, visibility 0.15s ease 0.5s;
     }
 
     .visning{
@@ -604,21 +608,29 @@
       text-align: center;
     }
 
-    /* Source panel smooth transitions */
-    .source-panel {
+    /* Source panels container - collapse-swap-expand animation */
+    .source-panels-container {
       display: grid;
       grid-template-rows: 1fr;
-      transition: grid-template-rows 0.25s ease-out, opacity 0.2s ease;
       overflow: hidden;
+      transition: grid-template-rows 0.2s ease-out;
     }
-    .source-panel.source-panel-hidden {
+    .source-panels-container.collapsed {
       grid-template-rows: 0fr;
-      opacity: 0;
-      pointer-events: none;
     }
-    .source-panel-content {
+    .source-panels-container-inner {
       min-height: 0;
       overflow: hidden;
+    }
+    /* Individual source panels - simple show/hide */
+    .source-panel {
+      display: none;
+    }
+    .source-panel.source-panel-active {
+      display: block;
+    }
+    .source-panel-content {
+      /* Just a wrapper for content */
     }
 
     /* Visning */
@@ -988,8 +1000,11 @@
             <button id="btnStopCapture" class="btn-ghost" style="flex:1" disabled>Stop Capture</button>
           </div>
 
+          <!-- Source Panels Container (for collapse-swap-expand animation) -->
+          <div id="sourcePanelsContainer" class="source-panels-container">
+          <div class="source-panels-container-inner">
           <!-- Browser Source Panel -->
-          <div id="browserSourcePanel" class="source-panel">
+          <div id="browserSourcePanel" class="source-panel source-panel-active">
             <div class="source-panel-content">
             <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
             <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
@@ -1015,7 +1030,7 @@
           </div>
 
           <!-- External Source Panel (hidden by default) -->
-          <div id="externalSourcePanel" class="source-panel source-panel-hidden">
+          <div id="externalSourcePanel" class="source-panel">
             <div class="source-panel-content">
             <div class="row" style="margin-bottom:8px;align-items:center;gap:8px">
               <label>Device:</label>
@@ -1049,7 +1064,7 @@
           </div>
 
           <!-- Generator Source Panel (hidden by default) -->
-          <div id="generatorSourcePanel" class="source-panel source-panel-hidden">
+          <div id="generatorSourcePanel" class="source-panel">
             <div class="source-panel-content">
             <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
               <select id="genPreset" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
@@ -1072,6 +1087,8 @@
             </div>
             </div>
           </div>
+          </div><!-- /source-panels-container-inner -->
+          </div><!-- /sourcePanelsContainer -->
         </div></div>
       </section>
 
@@ -1944,6 +1961,7 @@
   const browserSourcePanel = document.getElementById('browserSourcePanel');
   const externalSourcePanel = document.getElementById('externalSourcePanel');
   const generatorSourcePanel = document.getElementById('generatorSourcePanel');
+  const sourcePanelsContainer = document.getElementById('sourcePanelsContainer');
   const btnStartCapture = document.getElementById('btnStartCapture');
   const btnStopCapture = document.getElementById('btnStopCapture');
   const inputSourceSummary = document.getElementById('inputSourceSummary');
@@ -3723,10 +3741,18 @@
   }
 
   // --- Input Mode Switching (UI only, does NOT stop/start capture) ---
+  // Uses collapse-swap-expand animation pattern for smooth transitions
+  let isAnimatingPanels = false;
+  const PANEL_ANIMATION_MS = 200;
+
   function setInputMode(mode) {
+    // Skip if already on this mode or currently animating
+    if (mode === selectedInputMode || isAnimatingPanels) return;
+
+    const previousMode = selectedInputMode;
     selectedInputMode = mode;
 
-    // Update button states
+    // Update button states immediately
     [btnModeBrowser, btnModeExternal, btnModeGenerator].forEach(btn => {
       btn.classList.remove('btn-active');
       btn.classList.add('btn-ghost');
@@ -3735,13 +3761,35 @@
     else if (mode === 'external') btnModeExternal.classList.add('btn-active'), btnModeExternal.classList.remove('btn-ghost');
     else if (mode === 'generator') btnModeGenerator.classList.add('btn-active'), btnModeGenerator.classList.remove('btn-ghost');
 
-    // Show/hide panels with animation
-    browserSourcePanel.classList.toggle('source-panel-hidden', mode !== 'browser');
-    externalSourcePanel.classList.toggle('source-panel-hidden', mode !== 'external');
-    generatorSourcePanel.classList.toggle('source-panel-hidden', mode !== 'generator');
+    // Collapse-swap-expand animation
+    isAnimatingPanels = true;
 
-    // Enumerate devices when switching to external mode
-    if (mode === 'external') enumerateAudioDevices();
+    // Step 1: Collapse the container
+    sourcePanelsContainer.classList.add('collapsed');
+
+    // Step 2: After collapse animation, swap panels
+    setTimeout(() => {
+      // Hide all panels
+      browserSourcePanel.classList.remove('source-panel-active');
+      externalSourcePanel.classList.remove('source-panel-active');
+      generatorSourcePanel.classList.remove('source-panel-active');
+
+      // Show the new panel
+      if (mode === 'browser') browserSourcePanel.classList.add('source-panel-active');
+      else if (mode === 'external') externalSourcePanel.classList.add('source-panel-active');
+      else if (mode === 'generator') generatorSourcePanel.classList.add('source-panel-active');
+
+      // Step 3: Expand to new height
+      sourcePanelsContainer.classList.remove('collapsed');
+
+      // Enumerate devices when switching to external mode
+      if (mode === 'external') enumerateAudioDevices();
+
+      // Animation complete after expand
+      setTimeout(() => {
+        isAnimatingPanels = false;
+      }, PANEL_ANIMATION_MS);
+    }, PANEL_ANIMATION_MS);
 
     // Update start/stop button state based on whether THIS mode is capturing
     updateCaptureButtons();
