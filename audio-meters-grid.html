@@ -1032,12 +1032,12 @@
           <!-- External Source Panel (hidden by default) -->
           <div id="externalSourcePanel" class="source-panel">
             <div class="source-panel-content">
-            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px">
-              <label>Device:</label>
-              <select id="extDeviceSelect" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Device:</label>
+              <select id="extDeviceSelect" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
                 <option value="">– Select audio input –</option>
               </select>
-              <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
+              <button id="btnExtRefresh" class="btn-ghost btn-ctrl" title="Refresh device list">↻</button>
             </div>
             <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, Dante, etc.</p>
             <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
