@@ -571,6 +571,44 @@
     label{font-size:12px;color:var(--muted)}
     code.small{font-size:12px;color:var(--muted)}
 
+    /* Inline editable value fields */
+    .inline-edit {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--ink);
+      font-size: 12px;
+      font-family: monospace;
+      padding: 2px 4px;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .inline-edit:hover {
+      border-color: var(--outline);
+      background: rgba(255,255,255,0.05);
+    }
+    .inline-edit:focus {
+      border-color: var(--cyan);
+      background: rgba(0,0,0,0.3);
+      outline: none;
+    }
+
+    /* Source panel smooth transitions */
+    .source-panel {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.25s ease-out, opacity 0.2s ease;
+      overflow: hidden;
+    }
+    .source-panel.source-panel-hidden {
+      grid-template-rows: 0fr;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .source-panel-content {
+      min-height: 0;
+      overflow: hidden;
+    }
+
     /* Visning */
     .meters{
       display:grid;
@@ -940,21 +978,19 @@
 
           <!-- Browser Source Panel -->
           <div id="browserSourcePanel" class="source-panel">
+            <div class="source-panel-content">
             <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
-            <div class="row" style="margin-top:6px;align-items:center">
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center">
               <label>Monitor:</label>
               <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
-              <span id="sysMonVal" class="tiny">0.20</span>
-              <button id="btnSysMonMute" class="btn-muted">Mute</button>
+              <input type="text" id="sysMonVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
+              <button id="btnSysMonMute" class="btn-muted" style="margin-left:auto">Mute</button>
             </div>
-            <div class="row" style="align-items:center">
+            <div class="row" style="margin-bottom:8px;align-items:center">
               <label>Line-up (dB):</label>
               <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" />
-              <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −12</button>
-            </div>
-            <div class="row" style="align-items:center">
-              <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-12.0" style="width:80px" />
-              <span class="tiny" id="sysTrimOut">−12.0 dB</span>
+              <input type="text" id="sysTrimVal" class="inline-edit" value="-12" style="width:40px;text-align:center" />
+              <button id="sysTrimReset" class="btn-ghost" style="margin-left:auto">Reset</button>
             </div>
             <div class="kv" id="info">
               <div><small>Source</small><span id="srcKind">–</span></div>
@@ -963,11 +999,13 @@
               <div><small>Stereo OK?</small><span id="stOK">–</span></div>
             </div>
             <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you enable the monitor.</p>
+            </div>
           </div>
 
           <!-- External Source Panel (hidden by default) -->
-          <div id="externalSourcePanel" class="source-panel" style="display:none">
-            <div class="row" style="align-items:center;gap:8px">
+          <div id="externalSourcePanel" class="source-panel source-panel-hidden">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px">
               <label>Device:</label>
               <select id="extDeviceSelect" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
                 <option value="">– Select audio input –</option>
@@ -975,20 +1013,17 @@
               <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
             </div>
             <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, Dante, etc.</p>
-            <div class="row" style="margin-top:6px;align-items:center">
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center">
               <label>Monitor:</label>
               <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
-              <span id="extMonVal" class="tiny">0.20</span>
-              <button id="btnExtMonMute" class="btn-muted">Mute</button>
+              <input type="text" id="extMonVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
+              <button id="btnExtMonMute" class="btn-muted" style="margin-left:auto">Mute</button>
             </div>
-            <div class="row" style="align-items:center">
+            <div class="row" style="margin-bottom:8px;align-items:center">
               <label>Line-up (dB):</label>
               <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
-              <button id="extTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0</button>
-            </div>
-            <div class="row" style="align-items:center">
-              <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" style="width:80px" />
-              <span class="tiny" id="extTrimOut">0.0 dB</span>
+              <input type="text" id="extTrimVal" class="inline-edit" value="0" style="width:40px;text-align:center" />
+              <button id="extTrimReset" class="btn-ghost" style="margin-left:auto">Reset</button>
             </div>
             <div class="kv" id="extInfo">
               <div><small>Device</small><span id="extDevice">–</span></div>
@@ -998,11 +1033,13 @@
             </div>
             <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable.</p>
             <p class="tiny">No AGC, no noise suppression, no echo cancellation.</p>
+            </div>
           </div>
 
           <!-- Generator Source Panel (hidden by default) -->
-          <div id="generatorSourcePanel" class="source-panel" style="display:none">
-            <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+          <div id="generatorSourcePanel" class="source-panel source-panel-hidden">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
               <select id="genPreset" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
                 <option value="400" selected>400 Hz · EBU broadcast line-up</option>
                 <option value="1000">1 kHz · digital test tone (AES-style)</option>
@@ -1011,15 +1048,16 @@
               </select>
             </div>
             <p class="tiny"><span class="badge" id="genBadge">400 Hz · −18 dBFS peak (0 dBu / 0 PPM)</span></p>
-            <div class="row" style="margin-top:6px;align-items:center">
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center">
               <label><input type="checkbox" id="muteLeft"> EBU stereo-ID (L pulsed)</label>
               <span class="tiny" style="margin-left:8px;opacity:0.7">ITU-R BR.1385</span>
             </div>
             <div class="row" style="margin-top:6px;align-items:center">
               <label>Monitor:</label>
               <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
-              <span id="monVal" class="tiny">0.20</span>
-              <button id="btnMonMute" class="btn-ghost">Mute</button>
+              <input type="text" id="monVal" class="inline-edit" value="0.20" style="width:40px;text-align:center" />
+              <button id="btnMonMute" class="btn-ghost" style="margin-left:auto">Mute</button>
+            </div>
             </div>
           </div>
         </div></div>
@@ -1065,7 +1103,7 @@
         <h2>Status & Live Data <span class="collapse-summary" id="statusSummary">–</span></h2>
         <div class="card-body-wrapper"><div class="card-body">
           <div class="kv">
-            <div><small>Uptime</small><span id="uptime" style="font-family:monospace">00:00:00.0</span></div>
+            <div class="wide"><small>Uptime</small><span id="uptime" style="font-family:monospace">00:00:00.0</span></div>
             <div><small>AudioContext running</small><span id="ctxState">–</span></div>
             <div><small>Tab Capture running</small><span id="dbgTab">No</span></div>
             <div><small>External running</small><span id="dbgExt">No</span></div>
@@ -1883,8 +1921,7 @@
   const sysMonGainEl = document.getElementById('sysMonGain');
   const sysMonVal = document.getElementById('sysMonVal');
   const sysTrimRange = document.getElementById('sysTrimRange');
-  const sysTrimInput = document.getElementById('sysTrimInput');
-  const sysTrimOut = document.getElementById('sysTrimOut');
+  const sysTrimVal = document.getElementById('sysTrimVal');
   const sysTrimReset = document.getElementById('sysTrimReset');
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
@@ -1906,8 +1943,7 @@
   const extMonVal = document.getElementById('extMonVal');
   const btnExtMonMute = document.getElementById('btnExtMonMute');
   const extTrimRange = document.getElementById('extTrimRange');
-  const extTrimInput = document.getElementById('extTrimInput');
-  const extTrimOut = document.getElementById('extTrimOut');
+  const extTrimVal = document.getElementById('extTrimVal');
   const extTrimReset = document.getElementById('extTrimReset');
   const extInfo = { device: document.getElementById('extDevice'), cc: document.getElementById('extCc'), sr: document.getElementById('extSr'), status: document.getElementById('extStatus') };
   const extWarning = document.getElementById('extWarning');
@@ -3589,19 +3625,18 @@
   function setSysTrim(dB, save = true) {
     sysTrimDb = clamp(parseFloat(dB) || SYS_TRIM_DEFAULT, -48, 24);
     sysTrimRange.value = sysTrimDb;
-    sysTrimInput.value = sysTrimDb.toFixed(1);
-    sysTrimOut.textContent = sysTrimDb.toFixed(1) + ' dB';
+    sysTrimVal.value = Math.round(sysTrimDb);
     if (sysTrimNode) { sysTrimNode.gain.value = dbToGain(sysTrimDb); }
     if (save) { try { localStorage.setItem(SYS_TRIM_STORAGE_KEY, sysTrimDb.toFixed(1)); } catch(e) {} }
   }
 
-  // Load from localStorage or use default (-18 dB)
+  // Load from localStorage or use default (-12 dB)
   const storedSysTrim = localStorage.getItem(SYS_TRIM_STORAGE_KEY);
   setSysTrim(storedSysTrim !== null ? parseFloat(storedSysTrim) : SYS_TRIM_DEFAULT, false);
 
   sysTrimRange.addEventListener('input', e => setSysTrim(e.target.value));
-  sysTrimInput.addEventListener('change', e => setSysTrim(e.target.value));
-  sysTrimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setSysTrim(e.target.value); e.target.blur(); } });
+  sysTrimVal.addEventListener('change', e => setSysTrim(e.target.value));
+  sysTrimVal.addEventListener('keydown', e => { if (e.key === 'Enter') { setSysTrim(e.target.value); e.target.blur(); } });
   sysTrimReset.addEventListener('click', () => setSysTrim(SYS_TRIM_DEFAULT));
 
   // Helper: Build monitor status text based on actual state
@@ -3628,14 +3663,16 @@
   function toggleSysMonitorMute(){
     if(!sysMonGain) return;
     sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
-    sysMonVal.textContent = sysMonGainEl.value;
+    sysMonVal.value = sysMonGainEl.value;
     // RED when muted, neutral when not muted
     if (sysMonitorMuted){ btnSysMonMute.classList.add('btn-muted'); btnSysMonMute.classList.remove('btn-ghost'); }
     else { btnSysMonMute.classList.remove('btn-muted'); btnSysMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
-  sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
+  sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.value=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
+  sysMonVal.addEventListener('change', e => { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); sysMonVal.value = sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
+  sysMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); sysMonVal.value = sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } e.target.blur(); } });
 
   // =====================================================
   // UNIFIED INPUT SOURCE SYSTEM
@@ -3687,10 +3724,10 @@
     else if (mode === 'external') btnModeExternal.classList.add('btn-active'), btnModeExternal.classList.remove('btn-ghost');
     else if (mode === 'generator') btnModeGenerator.classList.add('btn-active'), btnModeGenerator.classList.remove('btn-ghost');
 
-    // Show/hide panels
-    browserSourcePanel.style.display = mode === 'browser' ? 'block' : 'none';
-    externalSourcePanel.style.display = mode === 'external' ? 'block' : 'none';
-    generatorSourcePanel.style.display = mode === 'generator' ? 'block' : 'none';
+    // Show/hide panels with animation
+    browserSourcePanel.classList.toggle('source-panel-hidden', mode !== 'browser');
+    externalSourcePanel.classList.toggle('source-panel-hidden', mode !== 'external');
+    generatorSourcePanel.classList.toggle('source-panel-hidden', mode !== 'generator');
 
     // Enumerate devices when switching to external mode
     if (mode === 'external') enumerateAudioDevices();
@@ -3847,8 +3884,7 @@
   function setExtTrim(dB, save = true) {
     extTrimDb = clamp(parseFloat(dB) || EXT_TRIM_DEFAULT, -48, 24);
     extTrimRange.value = extTrimDb;
-    extTrimInput.value = extTrimDb.toFixed(1);
-    extTrimOut.textContent = extTrimDb.toFixed(1) + ' dB';
+    extTrimVal.value = Math.round(extTrimDb);
     if (extTrimNode) extTrimNode.gain.value = dbToGain(extTrimDb);
     if (save) try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch (e) {}
   }
@@ -3857,8 +3893,8 @@
   setExtTrim(storedExtTrim !== null ? parseFloat(storedExtTrim) : EXT_TRIM_DEFAULT, false);
 
   extTrimRange.addEventListener('input', e => setExtTrim(e.target.value));
-  extTrimInput.addEventListener('change', e => setExtTrim(e.target.value));
-  extTrimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setExtTrim(e.target.value); e.target.blur(); } });
+  extTrimVal.addEventListener('change', e => setExtTrim(e.target.value));
+  extTrimVal.addEventListener('keydown', e => { if (e.key === 'Enter') { setExtTrim(e.target.value); e.target.blur(); } });
   extTrimReset.addEventListener('click', () => setExtTrim(EXT_TRIM_DEFAULT));
 
   // --- AudioWorklet Loading ---
@@ -3969,7 +4005,7 @@
     if (!extMonGain) return;
     extMonitorMuted = !extMonitorMuted;
     extMonGain.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl.value);
-    extMonVal.textContent = extMonGainEl.value;
+    extMonVal.value = extMonGainEl.value;
     // RED when muted, neutral when not muted
     if (extMonitorMuted) {
       btnExtMonMute.classList.add('btn-muted');
@@ -3983,9 +4019,11 @@
 
   btnExtMonMute.addEventListener('click', toggleExtMonitorMute);
   extMonGainEl.addEventListener('input', () => {
-    extMonVal.textContent = extMonGainEl.value;
+    extMonVal.value = extMonGainEl.value;
     if (extMonGain && !extMonitorMuted) extMonGain.gain.value = parseFloat(extMonGainEl.value);
   });
+  extMonVal.addEventListener('change', e => { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); extMonVal.value = extMonGainEl.value; if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value) } });
+  extMonVal.addEventListener('keydown', e => { if (e.key === 'Enter') { extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); extMonVal.value = extMonGainEl.value; if(extMonGain && !extMonitorMuted){ extMonGain.gain.value=parseFloat(extMonGainEl.value) } e.target.blur(); } });
 
   navigator.mediaDevices.addEventListener('devicechange', () => {
     if (selectedInputMode === 'external') enumerateAudioDevices();
@@ -4145,14 +4183,16 @@
   function toggleGenMonitorMute(){
     if(!genMonGain) return;
     monitorMuted = !monitorMuted; genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value);
-    monVal.textContent = monGainEl.value;
+    monVal.value = monGainEl.value;
     // RED when muted, neutral when not muted
     if (monitorMuted){ btnMonMute.classList.add('btn-muted'); btnMonMute.classList.remove('btn-ghost'); }
     else { btnMonMute.classList.remove('btn-muted'); btnMonMute.classList.add('btn-ghost'); }
 
     updateMonitorStatusDisplay();
   }
-  monGainEl.addEventListener('input', ()=>{ monVal.textContent=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
+  monGainEl.addEventListener('input', ()=>{ monVal.value=monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
+  monVal.addEventListener('change', e => { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); monVal.value = monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } });
+  monVal.addEventListener('keydown', e => { if (e.key === 'Enter') { monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 1); monVal.value = monGainEl.value; if(genMonGain && !monitorMuted){ genMonGain.gain.value=parseFloat(monGainEl.value) } e.target.blur(); } });
 
   // ------- Meter Mode Switcher -------
   const METER_MODE_KEY = 'tsg-meter-mode';
