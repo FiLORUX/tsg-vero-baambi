@@ -3512,7 +3512,8 @@
     if(sLUFS>=gate){ intEnergy+=e; intCount++; }
     const iLUFS=(intCount>0)? lufsFromEnergy(intEnergy/intCount): -Infinity;
     const stVals=stHistory.map(v=>10*Math.log10(v+1e-12)).filter(v=>v>(iLUFS-20));
-    let LRA='--.- LU'; if(stVals.length>5){
+    // EBU R128: LRA requires sufficient data (~60s). Require at least 15 short-term blocks.
+    let LRA='--.- LU'; if(stVals.length >= 15){
       const sorted=[...stVals].sort((a,b)=>a-b);
       const p95=sorted[Math.floor(sorted.length*0.95)]; const p10=sorted[Math.floor(sorted.length*0.10)];
       LRA = (p95-p10).toFixed(1).padStart(4) + ' LU';
