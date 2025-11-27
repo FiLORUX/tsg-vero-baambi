@@ -488,6 +488,12 @@
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
 
     /* Collapsible Panel System */
+    .card.collapsible {
+      transition: padding 0.2s ease;
+    }
+    .card.collapsible.collapsed {
+      padding-bottom: 14px;
+    }
     .card.collapsible h2 {
       cursor: pointer;
       user-select: none;
@@ -521,16 +527,10 @@
       border-left-color: var(--ink);
     }
     .card.collapsible .card-body {
-      overflow: hidden;
-      transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
-      max-height: 2000px;
-      opacity: 1;
+      display: block;
     }
     .card.collapsible.collapsed .card-body {
-      max-height: 0;
-      opacity: 0;
-      padding-top: 0;
-      padding-bottom: 0;
+      display: none;
     }
     /* Collapsed summary text */
     .card.collapsible .collapse-summary {
@@ -918,9 +918,9 @@
         <div class="card-body">
           <!-- Source Mode Selector (3 buttons) -->
           <div class="row" style="margin-bottom:8px;gap:4px">
-            <button id="btnModeBrowser" class="btn-active" style="flex:1">Browser Tab</button>
-            <button id="btnModeExternal" class="btn-ghost" style="flex:1">External Device</button>
-            <button id="btnModeGenerator" class="btn-ghost" style="flex:1">Internal Generator</button>
+            <button id="btnModeBrowser" class="btn-active" style="flex:1;line-height:1.2">Browser<br>Tab</button>
+            <button id="btnModeExternal" class="btn-ghost" style="flex:1;line-height:1.2">External<br>Device</button>
+            <button id="btnModeGenerator" class="btn-ghost" style="flex:1;line-height:1.2">Internal<br>Generator</button>
           </div>
 
           <!-- Unified Start/Stop Capture -->
