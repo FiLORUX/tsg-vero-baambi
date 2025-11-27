@@ -105,7 +105,7 @@
       flex-shrink: 0;
     }
 
-    /* Phase correlation widget under goniometer - tar resterande höjd */
+    /* Phase correlation widget under goniometer - takes remaining height */
     .corrWidget {
       flex: 1;
       min-height: 0;
@@ -320,7 +320,7 @@
       border-radius: 6px;
       font-size: 11px;
     }
-    /* ===== NY LAYOUT: Loudness (höger kolumn) ===== */
+    /* ===== LOUDNESS DISPLAY (right column) ===== */
     .loudnessModule {
       display: flex;
       flex-direction: column;
@@ -330,7 +330,7 @@
       align-items: center;
     }
 
-    /* Radar wrapper - JS sätter storlek */
+    /* Radar wrapper – JS sets dimensions */
     .radarWrap {
       position: relative;
       flex-shrink: 0;
@@ -350,7 +350,7 @@
       display: none; /* Dold - LUFS visas i R128-panelen under radarn */
     }
 
-    /* Peak LED - DOM-baserad (utanför canvas border-radius) */
+    /* Peak LED - DOM-based (outside canvas border-radius) */
     .peak-led {
       position: absolute;
       top: 2px;
@@ -391,7 +391,7 @@
       color: #ff6655;
     }
 
-    /* R128 värde-panel under radar */
+    /* R128 value panel below radar */
     .r128-panel {
       flex: 1;
       min-height: 0;
@@ -399,7 +399,7 @@
       overflow-y: auto;
     }
 
-    /* R128 värden - responsiva */
+    /* R128 values – responsive */
     .r128 .row {
       display: flex;
       justify-content: space-between;
@@ -431,7 +431,7 @@
 
     /*
      * Sidebar Collapse System
-     * Synkroniserad animation för sidebar + grid
+     * Synchronised animation for sidebar + grid
      */
     .sidebar-container {
       position: relative;
@@ -446,7 +446,7 @@
       min-height: 0;
     }
 
-    /* Animerade transitions - läggs till efter page load */
+    /* Animated transitions – added after page load */
     .sidebar-ready .wrap {
       transition: grid-template-columns 0.35s ease-out,
                   gap 0.35s ease-out,
@@ -458,11 +458,11 @@
                   opacity 0.25s ease-out;
     }
 
-    /* Collapsed state - ta bort sidebar helt */
+    /* Collapsed state – sidebar fully hidden */
     .wrap.sidebar-collapsed {
       grid-template-columns: 0px 1fr;
       gap: 0;
-      padding-left: 20px; /* behåll samma marginal som höger */
+      padding-left: 20px; /* maintain same margin as right side */
     }
 
     .sidebar-collapsed .sidebar-content {
@@ -500,10 +500,10 @@
       justify-content: center;
       z-index: 100;
       box-shadow: 0 4px 16px rgba(0,0,0,.25);
-      opacity: 0; /* Gömd som default */
+      opacity: 0; /* hidden by default */
     }
 
-    /* Collapsed state - annan position */
+    /* Collapsed state – repositioned */
     .sidebar-collapsed .collapse-toggle,
     .sidebar-start-collapsed .collapse-toggle {
       left: 24px;
@@ -514,7 +514,7 @@
       transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
                   opacity 0.2s ease;
     }
-    /* Toggle visas/göms via JavaScript baserat på musrörelse */
+    /* Toggle shown/hidden via JavaScript based on mouse movement */
     
     .collapse-toggle:hover {
       background: linear-gradient(135deg, rgba(147, 197, 253, 0.2), rgba(34, 211, 238, 0.1));
@@ -704,7 +704,7 @@
     }
     .stack-left{
       display: grid;
-      grid-template-rows: 2fr 1fr;  /* Vectorscope 2/3, aktiv mätare 1/3 */
+      grid-template-rows: 2fr 1fr;  /* Vectorscope 2/3, active meter 1/3 */
       gap: 12px;
       min-height: 0;
       align-items: stretch;
@@ -799,7 +799,7 @@
 
     canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
 
-    /* Canvas för goniometer och correlation */
+    /* Canvas for goniometer and correlation */
     #xy, #corr, #monoDev {
       width: 100% !important;
       height: 100% !important;
@@ -807,16 +807,16 @@
     }
 
 /*
- * Tabular Numbers - Framtidssäker implementation
+ * Tabular Numbers – Future-proof implementation
  *
- * font-variant-numeric: tabular-nums gör att ALLA siffror får samma bredd
- * oavsett vilken font som används (så länge fonten stöder OpenType tnum).
+ * font-variant-numeric: tabular-nums ensures ALL digits render at equal width
+ * regardless of typeface (provided the font supports OpenType tnum feature).
  *
- * Detta är den moderna standarden (CSS Fonts Module Level 4) och tillåter
- * fritt byte av typsnitt utan att siffror "hoppar".
+ * This is the modern standard (CSS Fonts Module Level 4) and allows
+ * free typeface substitution without numeric "jitter".
  *
- * Fallback: font-feature-settings för äldre browsers.
- * Monospace-fallback endast om fonten saknar tnum-stöd.
+ * Fallback: font-feature-settings for older browsers.
+ * Monospace fallback only if font lacks tnum support.
  */
 .tabular-nums,
 .mono-num,
@@ -832,12 +832,12 @@
 #lra,
 #r128TpMax {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1; /* Fallback för äldre browsers */
+  font-feature-settings: "tnum" 1; /* fallback for older browsers */
 }
 
 /*
- * För element som KRÄVER absolut fixed-width (t.ex. timers, counters)
- * kan man lägga till monospace som extra säkerhet:
+ * For elements requiring absolute fixed-width (e.g. timers, counters)
+ * add monospace as an additional safeguard:
  */
 .mono-num-strict {
   font-variant-numeric: tabular-nums;
@@ -845,7 +845,7 @@
   font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
 }
 
-/* Mono Deviation meter - samma bredd som goniometer */
+/* Mono Deviation meter – same width as goniometer */
 .monoDevWrap {
   width: var(--gonio-size, 280px);
   margin: 0 auto;
@@ -985,7 +985,7 @@
         100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
       }
   </style>
-  <!-- Sidebar state BEFORE render - förhindrar "flash" -->
+  <!-- Sidebar state BEFORE render - prevents "flash" -->
   <script>
     (function() {
       if (localStorage.getItem('tsg-sidebar-collapsed') === 'true') {
@@ -998,7 +998,7 @@
 <header>
   <div class="hdr">
     <div class="brand">
-      <!-- Vector logotyp: VEROBAAMBI utan mellanrum, BAAMBI tätare -->
+      <!-- Vector logo: VEROBAAMBI without space, BAAMBI tighter -->
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 4000 200"
      width="100%" height="auto"
@@ -1024,7 +1024,7 @@
 
     <!-- VERO = extra bold -->
     <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="1.2em">VERO</tspan>
-    <!-- BAAMBI = väldigt tunn och tight -->
+    <!-- BAAMBI = very thin and tight -->
     <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
 
     <!-- separator -->
@@ -1203,7 +1203,7 @@
     </div>
   </div>
 
-  <!-- Toggle utanför sidebar-container så position:fixed fungerar korrekt -->
+  <!-- Toggle outside sidebar-container so position:fixed works correctly -->
   <div class="collapse-toggle" id="sidebarToggle">
     <svg viewBox="0 0 24 24">
       <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
@@ -1217,7 +1217,7 @@
         <div class="meter" id="xyCard">
           <header><label>Spatial Analysis</label><span class="badge">Goniometer + Phase Correlation</span></header>
           <div class="stereoContainer">
-            <!-- Vänster kolumn: Goniometer + Phase Correlation -->
+            <!-- Left column: Goniometer + Phase Correlation -->
             <div class="stereoLeftCol">
               <div class="gonioSquare" id="xyWrap">
                 <div class="canvasPad"><canvas id="xy"></canvas></div>
@@ -1229,7 +1229,7 @@
                 </div>
               </div>
             </div>
-            <!-- Höger kolumn: 2x2 grid + Spectrum (full width, double height) -->
+            <!-- Right column: 2x2 grid + Spectrum (full width, double height) -->
             <div class="stereoRightCol">
               <!-- Row 1, Col 1: Balance Meter -->
               <div class="phaseWidget">
@@ -1322,7 +1322,7 @@
         </div>
       </div>
       <div class="stack-right">
-        <!-- NY: Loudness (radar överst, siffror under) -->
+        <!-- Loudness (radar on top, values below) -->
         <div class="meter" id="loudnessCard">
           <header><label>Loudness</label><span class="badge">Radar + EBU R128</span></header>
           <div class="loudnessModule">
@@ -1389,12 +1389,12 @@
       return Math.max(0, Math.min(1, (lu - minLu) / (maxLu - minLu)));
     }
 
-    // TC/RTW färglogik för momentary ring
+    // TC/RTW colour logic for momentary ring
     function colorForLu(lu) {
-      if (lu >= 3) return '#ff4444';       // Röd: +3 till +9 (för högt)
-      if (lu >= 0) return '#ffd700';       // Gul: 0 till +3 (över target)
-      if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Grön: normal nivå
-      return '#4488cc';                     // Blå: under low level
+      if (lu >= 3) return '#ff4444';       // Red: +3 to +9 (too loud)
+      if (lu >= 0) return '#ffd700';       // Yellow: 0 to +3 (over target)
+      if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Green: normal level
+      return '#4488cc';                     // Blue: below low level
     }
 
     // Radar radius: LUFS → LU relativt LOUDNESS_TARGET, EBU R128 scale (-36 till +9 LU)
@@ -1405,15 +1405,15 @@
       return rInner + t * (rOuter - rInner);
     }
 
-    // Radar färgzoner: LUFS → LU relativt LOUDNESS_TARGET (EBU R128 compliant)
+    // Radar colour zones: LUFS → LU relative to LOUDNESS_TARGET (EBU R128 compliant)
     // EBU R128 defines < -12 LU as "low level"
     function radarColorForLufs(lufs) {
       const lu = lufs - LOUDNESS_TARGET;
-      if (lu >= 3) return '#ff4335';    // röd – för högt (+3 och över)
-      if (lu >= 0) return '#ff9a2d';    // orange – över target (0 till +3)
-      if (lu >= -6) return '#ffd94a';   // gul – nära target (-6 till 0)
-      if (lu >= -12) return '#88d65c';  // ljusgrön – normal (-12 till -6)
-      return '#4488cc';                 // blå – low level (under -12 LU per EBU R128)
+      if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
+      if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
+      if (lu >= -6) return '#ffd94a';   // yellow – near target (-6 to 0)
+      if (lu >= -12) return '#88d65c';  // light green – normal (-12 till -6)
+      return '#4488cc';                 // blue – low level (below -12 LU per EBU R128)
     }
 
     function drawRadarBackground(ctx, cx, cy, rOuter, rInner) {
@@ -1438,7 +1438,7 @@
       ctx.restore();
     }
 
-    // Grå stödlinjer - ringar OCH spokes (ritas OVANPÅ segment)
+    // Grey reference lines - rings AND spokes (drawn ON TOP OF segments)
     function drawGridOverlay(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       ctx.lineCap = 'round';
@@ -1458,7 +1458,7 @@
         ctx.stroke();
       }
 
-      // Spokes var 30° (12 "klockslag")
+      // Spokes every 30° (12 o'clock positions)
       ctx.setLineDash([]);
       ctx.strokeStyle = '#6b7580';
       ctx.lineWidth = 1.0;
@@ -1473,7 +1473,7 @@
       ctx.restore();
     }
 
-    // Target-ring ritas separat EFTER segmenten så den syns ovanpå
+    // Target ring drawn separately AFTER segments so it appears on top
     function drawTargetRing(ctx, cx, cy, rOuter, rInner) {
       ctx.save();
       const lufs = 0 + LOUDNESS_TARGET;  // LU=0 → LUFS
@@ -1495,7 +1495,7 @@
       const now = Date.now();
       const segmentCount = history.length;
       const anglePerSegment = (2 * Math.PI) / Math.max(segmentCount, 60);
-      const FADE_START = 0.85;  // Börja tona vid 85% av ålder
+      const FADE_START = 0.85;  // Start fading at 85% of age
 
       history.forEach((point, index) => {
         const age = now - point.t;
@@ -1514,7 +1514,7 @@
         }
         const opacity = 0.85 * (1 - normalizedAge * 0.2) * Math.max(0, fadeMultiplier);
 
-        // DONUT: Rita arc från rInner till r
+        // DONUT: Draw arc from rInner to r
         ctx.beginPath();
         ctx.arc(cx, cy, rInner, startAngle, endAngle);
         ctx.arc(cx, cy, r, endAngle, startAngle, true);
@@ -1522,7 +1522,7 @@
         ctx.fillStyle = color;
         ctx.globalAlpha = opacity;
 
-        // Färska segment (första 10%) får subtil glow
+        // Fresh segments (first 10%) get subtle glow
         if (normalizedAge < 0.10) {
           ctx.shadowColor = color;
           ctx.shadowBlur = 4 * (1 - normalizedAge / 0.10);
@@ -1546,7 +1546,7 @@
         ctx.shadowColor = '#69bfff';
         ctx.shadowBlur = 8;
         ctx.beginPath();
-        // Sweep line från rInner till rOuter
+        // Sweep line from rInner to rOuter
         ctx.moveTo(cx + rInner * Math.cos(sweepAngle), cy + rInner * Math.sin(sweepAngle));
         ctx.lineTo(cx + rOuter * Math.cos(sweepAngle), cy + rOuter * Math.sin(sweepAngle));
         ctx.stroke();
@@ -1555,8 +1555,8 @@
       ctx.restore();
     }
 
-    // Radiella LU-labels längs kl 3-spaken (matchar grid-ringarna)
-    // LU-värden: -18, -12, -6, 0, +6 (var 6:e LU)
+    // Radial LU labels along 3 o'clock spoke (matches grid rings)
+    // LU values: -18, -12, -6, 0, +6 (every 6 LU)
     const RADAR_SCALE_LU = [-18, -12, -6, 0, 6];
 
     function drawRadarLabels(ctx, cx, cy, rOuter, rInner, canvasWidth) {
@@ -1579,10 +1579,10 @@
           ctx.fillStyle = '#40a0ff';
           ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         } else {
-          ctx.fillStyle = '#9ca3af';  // Ljusare grå
+          ctx.fillStyle = '#9ca3af';  // Lighter grey
           ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
         }
-        // Visa LU-värde (med + för positiva)
+        // Show LU value (with + for positive)
         const label = lu > 0 ? `+${lu}` : lu.toString();
         ctx.fillText(label, x, y);
       });
@@ -1591,21 +1591,21 @@
     }
 
     // TC/RTW-style outer ring med momentary bargraph
-    // Geometri: 270° båge, -18 till +9 LU = 27 LU, 10° per LU
+    // Geometry: 270° arc, -18 to +9 LU = 27 LU, 10° per LU
     // Ticks var 2°, major tick var 10° (1 per LU)
     function drawOuterMomentaryRing(ctx, cx, cy, rOuter, canvasWidth, momentaryLufs) {
       ctx.save();
 
-      // Geometri för ringen
+      // Geometry for the ring
       const ringOuterRadius = rOuter * 1.16;
       const ringThickness = rOuter * 0.07;
       const ringInnerRadius = ringOuterRadius - ringThickness;
       const fontSize = Math.max(8, Math.floor(canvasWidth * 0.022));
 
-      // 270° båge: -180° till +90° (kl 6 till kl 3)
-      // -18 LU vid -180° (kl 6, botten), +9 LU vid +90° (kl 3, höger)
+      // 270° arc: -180° to +90° (6 o'clock to 3 o'clock)
+      // -18 LU at -180° (6 o'clock, bottom), +9 LU at +90° (3 o'clock, right)
       const START_ANGLE_DEG = -180;  // -18 LU (kl 6, botten)
-      const END_ANGLE_DEG = 90;      // +9 LU (kl 3, höger)
+      const END_ANGLE_DEG = 90;      // +9 LU (3 o'clock, right)
       const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG;  // 270°
 
       // 27 LU = 270° → 10° per LU
@@ -1615,7 +1615,7 @@
       const TICK_STEP_DEG = 2;
       const NUM_TICKS = Math.floor(TOTAL_ARC_DEG / TICK_STEP_DEG) + 1;
 
-      // Beräkna momentary LU relativt target
+      // Calculate momentary LU relative to target
       const momentaryLu = (typeof momentaryLufs === 'number' && isFinite(momentaryLufs))
         ? momentaryLufs - LOUDNESS_TARGET
         : MOMENTARY_LU_MIN - 1;
@@ -1624,7 +1624,7 @@
       const normalized = luToNormalized(momentaryLu, MOMENTARY_LU_MIN, MOMENTARY_LU_MAX);
       const litAngleDeg = START_ANGLE_DEG + normalized * TOTAL_ARC_DEG;
 
-      // Rita alla ticks (tända och släckta)
+      // Draw all ticks (lit and unlit)
       ctx.lineCap = 'round';
       const tickOuterR = ringOuterRadius;
       const minorTickLen = rOuter * 0.055;
@@ -1632,7 +1632,7 @@
 
       for (let i = 0; i < NUM_TICKS; i++) {
         const angleDeg = START_ANGLE_DEG + i * TICK_STEP_DEG;
-        const angleRad = (angleDeg - 90) * Math.PI / 180;  // -90° offset för kl 12
+        const angleRad = (angleDeg - 90) * Math.PI / 180;  // -90° offset for 12 o'clock
 
         // Major tick var 10° (1 per LU)
         const isMajor = (Math.round(angleDeg - START_ANGLE_DEG) % 10 === 0);
@@ -1643,10 +1643,10 @@
         const t = (angleDeg - START_ANGLE_DEG) / TOTAL_ARC_DEG;
         const luAtTick = MOMENTARY_LU_MIN + t * MOMENTARY_LU_RANGE;
 
-        // Tänd om vi är under momentary-nivån
+        // Light up if we are below momentary level
         const isLit = angleDeg <= litAngleDeg;
 
-        // Färg: tänd = zonbaserad, släckt = synlig grå
+        // Colour: lit = zone-based, unlit = visible grey
         const color = isLit ? colorForLu(luAtTick) : '#3a4048';
         const alpha = isLit ? 0.95 : 0.55;
         // Tjocklek: lit minor 2.5, major 4; unlit minor 2, major 3.5
@@ -1681,7 +1681,7 @@
         const x = cx + labelRadius * Math.cos(angleRad);
         const y = cy + labelRadius * Math.sin(angleRad);
 
-        // Färg baserat på zon (0 är grå som negativa)
+        // Colour based on zone (0 is grey like negatives)
         if (lu >= 3) {
           ctx.fillStyle = '#ff6666';
         } else if (lu > 0) {
@@ -1739,15 +1739,15 @@
       }
       const cx = w / 2;
       const cy = h / 2;
-      const rOuter = Math.min(w, h) * 0.38;  // Större för att fylla canvasen bättre
-      const rInner = rOuter * 0.30;  // DONUT: 30% hål i mitten
+      const rOuter = Math.min(w, h) * 0.38;  // Larger to fill canvas better
+      const rInner = rOuter * 0.30;  // DONUT: 30% hole in centre
       const maxAge = maxSeconds * 1000;
       drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs);  // TC/RTW momentary bargraph
       drawRadarBackground(ctx, cx, cy, rOuter, rInner);
       drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
-      drawGridOverlay(ctx, cx, cy, rOuter, rInner);  // Grå ringar + spokes (ovanpå segment)
-      drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target-ring (ovanpå grid)
-      drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels högst upp
+      drawGridOverlay(ctx, cx, cy, rOuter, rInner);  // Grey rings + spokes (on top of segments)
+      drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target ring (on top of grid)
+      drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels on top
       // Peak LED now DOM-based (see .peak-led CSS) - canvas version disabled due to border-radius clipping
       // drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);
     }
@@ -2066,18 +2066,18 @@
   const dbToGain = dB => Math.pow(10, dB/20);
   const clamp = (v,min,max)=>Math.max(min,Math.min(max, v));
 
-  // ------- dB Formatters (fixed-width, monospace-vänliga) -------
-  // Alla formatterare ger konsekvent bredd så siffror inte "hoppar"
+  // ------- dB Formatters (fixed-width, monospace-friendly) -------
+  // All formatters yield consistent width so digits don't "jump"
 
-  // formatDb: Fixed-width dB (t.ex. "-23.4", " -3.4", "  0.0")
-  // width = totalt antal tecken inklusive tecken och decimal
+  // formatDb: Fixed-width dB (e.g. "-23.4", " -3.4", "  0.0")
+  // width = total character count including sign and decimal
   function formatDb(value, decimals = 1, width = 5) {
     if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
     const str = value.toFixed(decimals);
     return str.padStart(width);
   }
 
-  // formatDbu: Med snap-to-zero för PPM, alltid med +/- tecken
+  // formatDbu: With snap-to-zero for PPM, always with +/- sign
   function formatDbu(value, decimals = 1, snapWindow = 0.25, width = 5) {
     if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
     const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
@@ -2085,20 +2085,20 @@
     return (sign + snapped.toFixed(decimals)).padStart(width);
   }
 
-  // formatDbSigned: Alltid med +/− tecken, fixed-width
+  // formatDbSigned: Always with +/− sign, fixed-width
   function formatDbSigned(value, decimals = 1, width = 5) {
     if (!isFinite(value) || Math.abs(value) > 99) return '--.-'.padStart(width);
     const sign = value >= 0 ? '+' : '';
     return (sign + value.toFixed(decimals)).padStart(width);
   }
 
-  // formatLufs: För LUFS-värden (t.ex. "-23.4 LUFS")
+  // formatLufs: For LUFS values (e.g. "-23.4 LUFS")
   function formatLufs(value, decimals = 1) {
     if (!isFinite(value) || value < -99) return '--.- LUFS';
     return value.toFixed(decimals).padStart(5) + ' LUFS';
   }
 
-  // formatCorr: Korrelation (-1.00 till +1.00)
+  // formatCorr: Correlation (-1.00 to +1.00)
   function formatCorr(value) {
     if (!isFinite(value)) return '+-.--';
     const sign = value >= 0 ? '+' : '';
@@ -2132,15 +2132,15 @@
 
     const gap = 10; // Gap mellan kolumner
 
-    // Tillgängligt utrymme
+    // Available space
     const availH = stereoContainer.clientHeight;
     const availW = stereoContainer.clientWidth;
 
-    // Goniometer: kvadrat begränsad av 55% av bredd och 85% av höjd
-    // Resten av höjden går till correlation-widgeten via flex
+    // Goniometer: square constrained by 55% of width and 85% of height
+    // Rest of height goes to correlation widget via flex
     const gonioSize = Math.min(availH * 0.85, availW * 0.55);
 
-    // Sätt goniometer container och canvas
+    // Set goniometer container and canvas
     const gonioSquare = xyCard.querySelector('.gonioSquare');
     if (gonioSquare) {
       gonioSquare.style.width = gonioSize + 'px';
@@ -2153,13 +2153,13 @@
       }
     }
 
-    // Vänster kolumn bredd = goniometer bredd
+    // Left column width = goniometer width
     const leftCol = xyCard.querySelector('.stereoLeftCol');
     if (leftCol) {
       leftCol.style.width = gonioSize + 'px';
     }
 
-    // Phase correlation canvas (under goniometer) - flex tar hand om höjden
+    // Phase correlation canvas (under goniometer) - flex handles height
     const corrWrapEl = xyCard.querySelector('.corrWrap');
     if (corrWrapEl && corr) {
       const rect = corrWrapEl.getBoundingClientRect();
@@ -2171,8 +2171,8 @@
       }
     }
 
-    // Höger kolumn widgets - CSS flex hanterar layouten
-    // Vi behöver bara sätta canvas-storlekar baserat på faktisk storlek
+    // Right column widgets - CSS flex handles layout
+    // We only need to set canvas sizes based on actual size
 
     // L/R Balance (monoDev) canvas - use monoDevCanvas (defined later in script)
     const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
@@ -2190,26 +2190,26 @@
     // Width meter and Spectrum analyser canvas - sizing handled by their draw functions using getBoundingClientRect()
   }
 
-  // Loudness Radar layout - beräkna och sätt storlekar
+  // Loudness Radar layout – calculate and set dimensions
   function layoutLoudness() {
     if (isDragLayoutFrozen) return;
     if (!loudnessModule || !radarWrap || !loudnessRadar) return;
 
     const dpr = window.devicePixelRatio || 1;
     const gap = 12;
-    const r128MinHeight = 180; // Minst plats för R128-värden
+    const r128MinHeight = 180; // Minimum space for R128 values
 
-    // Tillgängligt utrymme
+    // Available space
     const availH = loudnessModule.clientHeight;
     const availW = loudnessModule.clientWidth;
 
-    // Radar: kvadrat som får plats, men lämnar utrymme för R128
-    // Max höjd = tillgänglig höjd - r128 minsta höjd - gap
+    // Radar: square that fits, but leaves room for R128
+    // Max height = available height - R128 min height - gap
     const maxRadarH = availH - r128MinHeight - gap;
-    // Radar ska vara en cirkel, så begränsa till minsta av bredd och beräknad maxhöjd
+    // Radar should be circular, so constrain to minimum of width and calculated max height
     const radarSize = Math.max(100, Math.min(maxRadarH, availW));
 
-    // Sätt radar container och canvas
+    // Set radar container and canvas
     radarWrap.style.width = radarSize + 'px';
     radarWrap.style.height = radarSize + 'px';
 
@@ -2508,7 +2508,7 @@
     }
     // Always render the current held value (smooth during blanking)
 
-    // Uppdatera canvas-storlek baserat på faktisk elementstorlek
+    // Update canvas size based on actual element size
     const dpr = window.devicePixelRatio || 1;
     const rect = corr.getBoundingClientRect();
     const w = Math.floor(rect.width * dpr);
@@ -2544,7 +2544,7 @@
     ctx.fillStyle = '#4b5563';
     ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
-    // RTW-style färgzoner för correlation
+    // RTW-style colour zones for correlation
     const col = (corrHold < -0.3) ? getCss('--hot') : (corrHold >= 0.3 ? getCss('--ok') : getCss('--warn'));
 
     // Fill from center based on correlation value
@@ -2584,7 +2584,7 @@
     analyserL.getFloatTimeDomainData(bufL);
     analyserR.getFloatTimeDomainData(bufR);
 
-    // Beräkna RMS för L och R
+    // Calculate RMS for L and R
     let sumL = 0, sumR = 0;
     for (let i = 0; i < bufL.length; i++) {
       sumL += bufL[i] * bufL[i];
@@ -2593,7 +2593,7 @@
     const rmsL = Math.sqrt(sumL / bufL.length);
     const rmsR = Math.sqrt(sumR / bufR.length);
 
-    // L/R balance i dB (positiv = L högre, negativ = R högre)
+    // L/R balance in dB (positive = L louder, negative = R louder)
     const balanceDb = 20 * Math.log10((rmsL + 1e-12) / (rmsR + 1e-12));
     const clampedBalance = Math.max(-12, Math.min(12, balanceDb));
 
@@ -2601,7 +2601,7 @@
     const a = 0.15;
     monoDevHold = isFinite(clampedBalance) ? monoDevHold + a * (clampedBalance - monoDevHold) : 0;
 
-    // Canvas setup med HiDPI
+    // Canvas setup with HiDPI
     const dpr = window.devicePixelRatio || 1;
     const rect = monoDevCanvas.getBoundingClientRect();
     const w = Math.floor(rect.width * dpr);
@@ -2615,7 +2615,7 @@
     const ctx = monoDevCtx;
     ctx.clearRect(0, 0, w, h);
 
-    // Rita bakgrund
+    // Draw background
     const pad = Math.round(8 * dpr);
     const barY = Math.round(h * 0.35);
     const barH = Math.round(h * 0.3);
@@ -2627,12 +2627,12 @@
     ctx.strokeStyle = '#3a4855';
     ctx.strokeRect(barX, barY, barW, barH);
 
-    // Mittstrecket (0 dB)
+    // Centre line (0 dB)
     const centerX = barX + barW / 2;
     ctx.fillStyle = '#5a6a7a';
     ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
-    // Tick marks vid ±3, ±6, ±12 dB
+    // Tick marks at ±3, ±6, ±12 dB
     const ticks = [-12, -6, -3, 3, 6, 12];
     ctx.fillStyle = '#3a4855';
     ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
@@ -2643,22 +2643,22 @@
       ctx.fillRect(xPos - 0.5, barY - 2 * dpr, 1, barH + 4 * dpr);
     }
 
-    // Rita balance-bar
+    // Draw balance bar
     const devX = centerX + (monoDevHold / 12) * (barW / 2);
     const devW = Math.abs(devX - centerX);
 
-    // Färg baserat på deviation
+    // Colour based on deviation
     let col;
     const absDev = Math.abs(monoDevHold);
-    if (absDev < 1.5) col = getCss('--ok');       // Grön: bra balans
-    else if (absDev < 3) col = getCss('--cyan');  // Cyan: lätt deviation
-    else if (absDev < 6) col = getCss('--warn');  // Amber: märkbar
-    else col = getCss('--hot');                    // Röd: stark obalans
+    if (absDev < 1.5) col = getCss('--ok');       // Green: good balance
+    else if (absDev < 3) col = getCss('--cyan');  // Cyan: slight deviation
+    else if (absDev < 6) col = getCss('--warn');  // Amber: noticeable
+    else col = getCss('--hot');                    // Red: severe imbalance
 
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
-    // Positiv balance (L > R) → bar åt VÄNSTER (mot L-etiketten)
-    // Negativ balance (R > L) → bar åt HÖGER (mot R-etiketten)
+    // Positive balance (L > R) → bar to LEFT (towards L label)
+    // Negative balance (R > L) → bar to RIGHT (towards R label)
     if (monoDevHold >= 0) {
       ctx.fillRect(centerX - devW, barY + 2, devW, barH - 4);
     } else {
@@ -2666,7 +2666,7 @@
     }
     ctx.globalAlpha = 1;
 
-    // Uppdatera display med L/R istället för +/-
+    // Update display with L/R instead of +/-
     const absVal = Math.abs(monoDevHold);
     let balanceStr;
     if (absVal < 0.05) {
@@ -3130,7 +3130,7 @@
       lab.style.position='absolute'; lab.style.left=`calc(${x}% - 32px)`; lab.style.top='8px'; lab.style.width='64px'; lab.style.textAlign='center'; lab.style.fontSize='10px'; lab.style.color='#88a3bf';
       el.appendChild(lab);
     });
-    // TEST -21 dBFS RMS (= 0 dBu = -18 dBFS peak för sinus)
+    // TEST -21 dBFS RMS (= 0 dBu = -18 dBFS peak for sine)
     const x = ((-21+60)/60)*100;
     const ref=document.createElement('div');
     ref.style.position='absolute';
@@ -3193,7 +3193,7 @@
       tag.innerHTML = dbfsEq;
       tag.style.position='absolute';
       tag.style.left=`calc(${x}% - 32px)`;
-      tag.style.bottom='8px';  // Samma luftiga spacing som blå TEST-text
+      tag.style.bottom='8px';  // Same spacing as blue TEST text
       tag.style.width='64px';
       tag.style.textAlign='center';
       tag.style.fontSize='10px';
@@ -3296,7 +3296,7 @@
   }
 
   // Nordic PPM – klassisk Nordic N9 skala
-  // PPM-skala: -36 till +9 där 0 PPM = 0 dBu = -18 dBFS peak
+  // PPM scale: -36 to +9 where 0 PPM = 0 dBu = -18 dBFS peak
   const ppmMarks = [
     { ppm: -36, label: '−36' },
     { ppm: -30, label: '−30' },
@@ -3349,7 +3349,7 @@
     tag.style.borderRadius='0';
     tag.style.padding='0';
     el.appendChild(tag);
-    // PML = +9 PPM = +9 dBu = -9 dBFS (röd markering)
+    // PML = +9 PPM = +9 dBu = -9 dBFS (red marker)
     const xPML = ((-9-dbMin)/dbSpan)*100;
     const pmlLine=document.createElement('div');
     pmlLine.style.position='absolute';
@@ -3436,11 +3436,11 @@
       const peakDb = Math.max(-60, Math.min(3, peakDbRaw));
       const peakCell = Math.max(
         0,
-        Math.min(LED_CELLS - 1, Math.round((peakDb + 60) * 2))  // 0.5 dB per cell över 63 dB
+        Math.min(LED_CELLS - 1, Math.round((peakDb + 60) * 2))  // 0.5 dB per cell over 63 dB
       );
 
       for (let cell = 0; cell < LED_CELLS; cell++) {
-        const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell, 126 celler → −60…+3 täcks
+        const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell, 126 cells → −60…+3 covered
         const cellX = cell * (cellW + LED_GAP);
         const col = segColor(cellDb + 0.25);  // Color based on cell center
 
@@ -3505,15 +3505,15 @@
     ctx.clearRect(0,0,w,h);
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=0.5;  // 0.5 dB resolution → 90 "dioder"
-    // Nordic PPM färgzoner (PPM = dBu = dBFS + 18)
+    // Nordic PPM colour zones (PPM = dBu = dBFS + 18)
     function segColor(db){
       const ppm = db + 18; // dBFS -> PPM/dBu
-      if (ppm >= 6)  return getCss('--hot');      // +6..+9: rött (över PML)
+      if (ppm >= 6)  return getCss('--hot');      // +6..+9: red (over PML)
       if (ppm >= 0)  return getCss('--caution');  // 0..+6: amber (nominal / varning)
-      return getCss('--ok');                      // <0: grönt (allt under line-up)
+      return getCss('--ok');                      // <0: green (everything below line-up)
     }
     function drawChannel(yTop, val, peakHold){
-      // Bakgrund (dimmat)
+      // Background (dimmed)
       for(let d=dbMin; d<dbMax; d+=step){
         const x0=xFromDb(d), x1=xFromDb(d+step);
         if(x1<=x0) continue;  // aliasing protection
@@ -3521,7 +3521,7 @@
         ctx.fillStyle=segColor(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
-      // Aktiv bar
+      // Active bar
       const tEnd = Math.min(dbMax, val);
       for(let d=dbMin; d<tEnd; d+=step){
         const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd));
@@ -3530,7 +3530,7 @@
         ctx.fillStyle=segColor(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
-      // Peak-hold markör (RTW-style: tunn linje)
+      // Peak-hold marker (RTW-style: thin line)
       if (peakHold !== undefined && peakHold > dbMin) {
         const xPeak = xFromDb(peakHold);
         const peakColor = segColor(peakHold);
@@ -3552,7 +3552,7 @@
     const now=performance.now(); const dt=Math.max(0.001,(now-lastTsDB)/1000); lastTsDB=now; const tau=.3, a=1-Math.exp(-dt/tau);
     rmsHoldL += a*(rmsL - rmsHoldL); rmsHoldR += a*(rmsR - rmsHoldR);
     const dBL = 20*Math.log10(rmsHoldL+1e-12); const dBR = 20*Math.log10(rmsHoldR+1e-12);
-    // Visa "--.-" om signalen är under botten av skalan (-60 dBFS)
+    // Show "--.-" if signal is below bottom of scale (-60 dBFS)
     const dbfsLStr = (dBL <= -59) ? '--.-' : formatDb(dBL);
     const dbfsRStr = (dBR <= -59) ? '--.-' : formatDb(dBR);
     document.getElementById('dbfsLabel').innerHTML = `L: <b>${dbfsLStr}</b> · R: <b>${dbfsRStr}</b> dBFS`;
@@ -3574,9 +3574,9 @@
     return 20*Math.log10(maxAbs + 1e-9);
   }
   let tpSmoothL=-60, tpSmoothR=-60;
-  // Peak-hold för True Peak (RTW-style): 3 sekunders hold
+  // Peak-hold for True Peak (RTW-style): 3 seconds hold
   let tpPeakHoldL=-60, tpPeakHoldR=-60, tpPeakTimeL=0, tpPeakTimeR=0;
-  const TP_PEAK_HOLD_SEC = 3; // 3 sekunder peak-hold
+  const TP_PEAK_HOLD_SEC = 3; // 3 seconds peak-hold
   let tpOverFlag = false; // OVER-indikator
 
   // Peak indicator state (for radar diode) - current TP with short hold
@@ -3616,22 +3616,22 @@
     if (peakLed) peakLed.classList.toggle('on', peakIndicatorOn);
 
     // Label med peak-hold max och OVER-indikator
-    // Alltid samma bredd för att undvika "hopp" - använder visibility istället för att ta bort
+    // Always same width to avoid "jitter" – use visibility instead of removing
     const overVisible = tpOverFlag;
     const overHtml = `<span style="color:var(--hot);font-weight:bold;margin-left:8px;visibility:${overVisible ? 'visible' : 'hidden'}">OVER</span>`;
     const peakMaxVal = Math.max(tpPeakHoldL, tpPeakHoldR);
-    // Alltid visa Max med fixed-width placeholder
+    // Always show Max with fixed-width placeholder
     const peakMaxStr = peakMaxVal > -59
       ? `Max: <b>${formatDb(peakMaxVal)}</b>`
       : `Max: <b style="opacity:0.3">--.-</b>`;
-    // Visa "--.-" om signalen är under botten av skalan (-60 dBTP)
+    // Show "--.-" if signal is below bottom of scale (-60 dBTP)
     const tpLStr = (tpSmoothL <= -59) ? '--.-' : formatDb(tpSmoothL);
     const tpRStr = (tpSmoothR <= -59) ? '--.-' : formatDb(tpSmoothR);
     document.getElementById('tpLabel').innerHTML = `L: <b>${tpLStr}</b> · R: <b>${tpRStr}</b> dBTP · ${peakMaxStr} dBTP${overHtml}`;
 
     drawDiodeBar_TP(tp, tpSmoothL, tpSmoothR, tpPeakHoldL, tpPeakHoldR);
   }
-  // Reset-funktion för OVER-indikator (kan kopplas till en knapp)
+  // Reset function for OVER indicator (can be connected to a button)
   window.resetTPOver = function(){ tpOverFlag = false; tpPeakHoldL = -60; tpPeakHoldR = -60; peakIndicatorOn = false; };
   layoutTPScale(tpScale);
 
@@ -3687,14 +3687,14 @@
   }
   r128ResetBtn.addEventListener('click', resetR128);
 
-  // Färg baserat på avstånd från target
+  // Colour based on distance from target
   function loudnessColor(lufs) {
     if (!isFinite(lufs)) return 'var(--muted)';
     const offset = lufs - LOUDNESS_TARGET;
-    if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 till −22: grönt (on target)
-    if (offset < -1) return getCss('--cyan');                     // Under −24: cyan (too quiet)
-    if (offset <= 3) return getCss('--warn');                     // −22 till −20: amber (bit loud)
-    return getCss('--hot');                                        // Över −20: rött (too loud)
+    if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 to −22: green (on target)
+    if (offset < -1) return getCss('--cyan');                     // Below −24: cyan (too quiet)
+    if (offset <= 3) return getCss('--warn');                     // −22 to −20: amber (bit loud)
+    return getCss('--hot');                                        // Above −20: red (too loud)
   }
   function energyFromK(){
     kAnL.getFloatTimeDomainData(kBufL); kAnR.getFloatTimeDomainData(kBufR);
@@ -3729,7 +3729,7 @@
       // Short-term
       lufsS.textContent = formatLufs(sDisp);
       lufsS.style.color = loudnessColor(sDisp);
-      // Integrated med offset från target
+      // Integrated with offset from target
       if (isFinite(iDisp)) {
         const offsetLU = iDisp - LOUDNESS_TARGET;
         const offsetStr = formatDbSigned(offsetLU, 1, 5);
@@ -3741,7 +3741,7 @@
       }
       lraEl.textContent = LRA; lastText=now;
 
-      // --- TPmax: spåra max true peak sedan reset ---
+      // --- TPmax: track max true peak since reset ---
       const currentTpMax = Math.max(tpPeakHoldL, tpPeakHoldR);
       if (currentTpMax > r128TpMax) r128TpMax = currentTpMax;
       if (isFinite(r128TpMax) && r128TpMax > -60) {
@@ -4284,9 +4284,9 @@
   // =====================================================
 
   // ------- Generator -------
-  // Broadcast-alignment: −18 dBFS betyder PEAK/quasi-peak nivå (EBU R68)
-  // För sinus: Amplitude = 10^(-18/20) ≈ 0.126 → Peak = -18 dBFS
-  // RMS blir då -21 dBFS (3 dB lägre pga crest factor √2)
+  // Broadcast alignment: −18 dBFS means PEAK/quasi-peak level (EBU R68)
+  // For sine: Amplitude = 10^(-18/20) ≈ 0.126 → Peak = -18 dBFS
+  // RMS becomes -21 dBFS (3 dB lower due to crest factor √2)
   const SINE_A_FOR_MINUS18_PEAK = Math.pow(10, -18/20); // ≈ 0.126
 
   // Single-oscillator architecture with gain-based EBU Stereo-ID control
@@ -4296,7 +4296,7 @@
   let monitorMuted=false;
   let ebuModeActive=false; // Track if EBU Stereo-ID is running
 
-  // Generator presets (frekvens → badge-text)
+  // Generator presets (frequency → badge text)
   const genPresets = {
     '400':  '400 Hz · −18 dBFS peak (0 dBu / 0 PPM · EBU alignment)',
     '1000': '1 kHz · −18 dBFS peak (digital test tone · AES-style)',
@@ -4307,12 +4307,12 @@
   const genBadgeEl = document.getElementById('genBadge');
   let currentGenFreq = 400; // Standard: 400 Hz (EBU broadcast line-up)
 
-  // Uppdatera badge och frekvens vid preset-ändring
+  // Update badge and frequency on preset change
   genPresetEl.addEventListener('change', () => {
     const freq = parseInt(genPresetEl.value);
     currentGenFreq = freq;
     genBadgeEl.textContent = genPresets[freq] || genPresets['400'];
-    // Om generatorn redan kör, uppdatera frekvensen live
+    // If generator is already running, update frequency live
     if (genOsc) genOsc.frequency.value = freq;
   });
 
@@ -4401,7 +4401,7 @@
     const panels = switcher.querySelectorAll('.meter-panel');
     const badge = document.getElementById('meterBadge');
 
-    // Återställ sparad mode (default: tp)
+    // Restore saved mode (default: tp)
     const savedMode = localStorage.getItem(METER_MODE_KEY) || 'tp';
     setMeterMode(savedMode);
 
@@ -4415,15 +4415,15 @@
     });
 
     function setMeterMode(mode) {
-      // Uppdatera tabs
+      // Update tabs
       tabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.meter === mode);
       });
-      // Uppdatera panels
+      // Update panels
       panels.forEach(panel => {
         panel.classList.toggle('active', panel.dataset.meter === mode);
       });
-      // Uppdatera badge
+      // Update badge
       if (badge && METER_BADGES[mode]) {
         badge.textContent = METER_BADGES[mode];
       }
@@ -4438,19 +4438,19 @@
     const wrap = document.getElementById('wrap');
     const html = document.documentElement;
 
-    // Kolla initial state (satt av inline script i <head>)
+    // Check initial state (set by inline script in <head>)
     let isCollapsed = html.classList.contains('sidebar-start-collapsed');
 
-    // Synka wrap class med initial state
+    // Sync wrap class with initial state
     if (isCollapsed) {
       wrap.classList.add('sidebar-collapsed');
     }
 
-    // Aktivera transitions EFTER första renderingen (förhindrar flash)
+    // Enable transitions AFTER first render (prevents flash)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         html.classList.add('sidebar-ready');
-        // Ta bort initial-klassen nu när wrap har rätt class
+        // Remove initial class now that wrap has correct class
         html.classList.remove('sidebar-start-collapsed');
       });
     });
@@ -4458,7 +4458,7 @@
     sidebarToggle.addEventListener('click', () => {
       isCollapsed = !isCollapsed;
 
-      // Spara state till localStorage
+      // Save state to localStorage
       localStorage.setItem(SIDEBAR_STATE_KEY, isCollapsed);
 
       if (isCollapsed) {
@@ -4483,7 +4483,7 @@
       }
     });
 
-    // Visa toggle vid musrörelse, göm efter 2s inaktivitet
+    // Show toggle on mouse movement, hide after 2s inactivity
     let hideToggleTimeout;
     const showToggle = () => {
       sidebarToggle.style.opacity = '1';
