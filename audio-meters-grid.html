@@ -380,10 +380,11 @@
     }
 
     .sidebar-content {
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 16px;
-      grid-template-rows: 2fr 1fr 1fr;
-      height: 100%;
+      height: auto;
+      min-height: 0;
     }
 
     /* Animerade transitions - läggs till efter page load */
@@ -483,8 +484,8 @@
     }
     .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0}
     /* Sidebar cards: no internal scroll, sidebar scrolls instead */
-    .sidebar-content .card{overflow:visible}
-    .sidebar-content{overflow-y:auto;overflow-x:hidden}
+    .sidebar-content .card{overflow:visible;flex-shrink:0}
+    .sidebar-content{overflow-y:auto;overflow-x:hidden;height:100%}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
 
     /* Collapsible Panel System */
