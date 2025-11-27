@@ -477,14 +477,72 @@
     .sidebar-start-collapsed .collapse-toggle svg {
       transform: rotate(180deg);
     }
-    
+
     .collapse-toggle:hover svg {
       fill: rgba(147, 197, 253, 0.9);
     }
     .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0}
-    /* Sidebar cards får scrolla vid overflow */
-    .sidebar-content .card{overflow-y:auto;overflow-x:hidden}
+    /* Sidebar cards: no internal scroll, sidebar scrolls instead */
+    .sidebar-content .card{overflow:visible}
+    .sidebar-content{overflow-y:auto;overflow-x:hidden}
     .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
+
+    /* Collapsible Panel System */
+    .card.collapsible h2 {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      transition: margin 0.2s ease;
+    }
+    .card.collapsible.collapsed h2 {
+      margin-bottom: 0;
+    }
+    .card.collapsible h2::before {
+      content: '';
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-left: 5px solid var(--muted);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .card.collapsible:not(.collapsed) h2::before {
+      transform: rotate(90deg);
+    }
+    .card.collapsible h2:hover {
+      color: var(--ink);
+    }
+    .card.collapsible h2:hover::before {
+      border-left-color: var(--ink);
+    }
+    .card.collapsible .card-body {
+      overflow: hidden;
+      transition: max-height 0.25s ease, opacity 0.2s ease, padding 0.2s ease;
+      max-height: 2000px;
+      opacity: 1;
+    }
+    .card.collapsible.collapsed .card-body {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    /* Collapsed summary text */
+    .card.collapsible .collapse-summary {
+      display: none;
+      font-size: 11px;
+      color: var(--cyan);
+      margin-left: auto;
+      font-weight: 500;
+    }
+    .card.collapsible.collapsed .collapse-summary {
+      display: inline;
+    }
 
     .visning{
       grid-column:2;
@@ -855,152 +913,154 @@
 <div id="wrap" class="wrap">
   <div class="sidebar-container">
     <div class="sidebar-content">
-      <section class="card leftTop">
-        <h2>Input Sources</h2>
+      <section class="card collapsible" id="panelInputSources" data-panel="inputSources">
+        <h2>Input Sources <span class="collapse-summary" id="inputSourceSummary">–</span></h2>
+        <div class="card-body">
+          <!-- Source Mode Selector (3 buttons) -->
+          <div class="row" style="margin-bottom:8px;gap:4px">
+            <button id="btnModeBrowser" class="btn-active" style="flex:1">Browser Tab</button>
+            <button id="btnModeExternal" class="btn-ghost" style="flex:1">External Device</button>
+            <button id="btnModeGenerator" class="btn-ghost" style="flex:1">Internal Generator</button>
+          </div>
 
-        <!-- Input Mode Selector -->
-        <div class="row" style="margin-bottom:8px;gap:4px">
-          <button id="btnModeBrowser" class="btn-active" style="flex:1">Browser Source</button>
-          <button id="btnModeExternal" class="btn-ghost" style="flex:1">External Source</button>
+          <!-- Unified Start/Stop Capture -->
+          <div class="row" style="margin-bottom:10px">
+            <button id="btnStartCapture" style="flex:1">Start Capture</button>
+            <button id="btnStopCapture" class="btn-ghost" style="flex:1" disabled>Stop Capture</button>
+          </div>
+
+          <!-- Browser Source Panel -->
+          <div id="browserSourcePanel" class="source-panel">
+            <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
+            <div class="row" style="margin-top:6px;align-items:center">
+              <label>Monitor:</label>
+              <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
+              <span id="sysMonVal" class="tiny">0.20</span>
+              <button id="btnSysMonMute" class="btn-ghost">Unmute</button>
+              <span id="sysMonState" class="tiny">(muted)</span>
+            </div>
+            <div class="row" style="align-items:center">
+              <label>Line-up (dB):</label>
+              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
+              <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" style="width:60px" />
+              <span class="tiny" id="sysTrimOut">-18.0 dB</span>
+              <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18</button>
+            </div>
+            <div class="kv" id="info">
+              <div><small>Source</small><span id="srcKind">–</span></div>
+              <div><small>Channels</small><span id="cc">–</span></div>
+              <div><small>Sample rate</small><span id="sr">–</span></div>
+              <div><small>Stereo OK?</small><span id="stOK">–</span></div>
+            </div>
+            <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you enable the monitor.</p>
+          </div>
+
+          <!-- External Source Panel (hidden by default) -->
+          <div id="externalSourcePanel" class="source-panel" style="display:none">
+            <div class="row" style="align-items:center;gap:8px">
+              <label>Device:</label>
+              <select id="extDeviceSelect" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <option value="">– Select audio input –</option>
+              </select>
+              <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
+            </div>
+            <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, Dante, etc.</p>
+            <div class="row" style="margin-top:6px;align-items:center">
+              <label>Monitor:</label>
+              <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
+              <span id="extMonVal" class="tiny">0.20</span>
+              <button id="btnExtMonMute" class="btn-ghost">Unmute</button>
+              <span id="extMonState" class="tiny">(muted)</span>
+            </div>
+            <div class="row" style="align-items:center">
+              <label>Line-up (dB):</label>
+              <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
+              <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" style="width:60px" />
+              <span class="tiny" id="extTrimOut">0.0 dB</span>
+              <button id="extTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0</button>
+            </div>
+            <div class="kv" id="extInfo">
+              <div><small>Device</small><span id="extDevice">–</span></div>
+              <div><small>Channels</small><span id="extCc">–</span></div>
+              <div><small>Sample rate</small><span id="extSr">–</span></div>
+              <div><small>Status</small><span id="extStatus">–</span></div>
+            </div>
+            <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable.</p>
+            <p class="tiny">No AGC, no noise suppression, no echo cancellation.</p>
+          </div>
+
+          <!-- Generator Source Panel (hidden by default) -->
+          <div id="generatorSourcePanel" class="source-panel" style="display:none">
+            <div class="row" style="align-items:center;gap:8px;flex-wrap:wrap">
+              <select id="genPreset" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <option value="400" selected>400 Hz · EBU broadcast line-up</option>
+                <option value="1000">1 kHz · digital test tone (AES-style)</option>
+                <option value="997">997 Hz · FFT-optimised test tone</option>
+                <option value="440">440 Hz · musical A (non-broadcast)</option>
+              </select>
+            </div>
+            <p class="tiny"><span class="badge" id="genBadge">400 Hz · −18 dBFS peak (0 dBu / 0 PPM)</span></p>
+            <div class="row" style="margin-top:6px;align-items:center">
+              <label><input type="checkbox" id="muteLeft"> EBU stereo-ID (L pulsed)</label>
+              <span class="tiny" style="margin-left:8px;opacity:0.7">ITU-R BR.1385</span>
+            </div>
+            <div class="row" style="margin-top:6px;align-items:center">
+              <label>Monitor:</label>
+              <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
+              <span id="monVal" class="tiny">0.20</span>
+              <button id="btnMonMute" class="btn-ghost">Unmute</button>
+              <span id="monState" class="tiny">(muted)</span>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <!-- Browser Source Panel -->
-        <div id="browserSourcePanel">
-          <div class="row">
-            <button id="btnTab">Start capture</button>
-            <button id="btnStop" class="btn-ghost" disabled>Stop capture</button>
-          </div>
-          <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>. <b>Default:</b> monitoring OFF.</p>
-          <div class="row" style="margin-top:6px;align-items:center">
-            <label>System monitor:</label>
-            <input type="range" id="sysMonGain" min="0" max="1" step="0.01" value="0.20" />
-            <span id="sysMonVal" class="tiny">0.20</span>
-            <button id="btnSysMonMute" class="btn-ghost">Unmute system monitor</button>
-            <span id="sysMonState" class="tiny">(muted)</span>
-          </div>
-          <div class="row" style="align-items:center">
-            <label>Line-up (Chrome, dB):</label>
-            <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-18" />
-            <input type="number" id="sysTrimInput" min="-48" max="24" step="0.1" value="-18.0" />
-            <span class="tiny" id="sysTrimOut">-18.0 dB</span>
-            <button id="sysTrimReset" class="btn-ghost" style="white-space:nowrap">Reset −18 dB</button>
-          </div>
-          <div class="kv" id="info">
-            <div><small>Source</small><span id="srcKind">–</span></div>
-            <div><small>Channel count</small><span id="cc">–</span></div>
-            <div><small>Sample rate</small><span id="sr">–</span></div>
-            <div><small>Stereo OK?</small><span id="stOK">–</span></div>
-          </div>
-          <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you intend to enable the system monitor.</p>
-        </div>
-
-        <!-- External Source Panel (hidden by default) -->
-        <div id="externalSourcePanel" style="display:none">
-          <div class="row" style="align-items:center;gap:8px">
-            <label>Device:</label>
-            <select id="extDeviceSelect" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
-              <option value="">– Select audio input –</option>
+      <section class="card collapsible collapsed" id="panelMeteringSettings" data-panel="meteringSettings">
+        <h2>Metering Settings <span class="collapse-summary">−23 LUFS / −1 dBTP</span></h2>
+        <div class="card-body">
+          <!-- LUFS Target -->
+          <div class="setting-row">
+            <label for="targetPreset">Loudness Target</label>
+            <select id="targetPreset">
+              <option value="-23">−23 LUFS (EBU R128)</option>
+              <option value="-24">−24 LUFS (ATSC A/85)</option>
+              <option value="-16">−16 LUFS (Streaming)</option>
+              <option value="-14">−14 LUFS (Podcast)</option>
             </select>
-            <button id="btnExtRefresh" class="btn-ghost" title="Refresh device list">↻</button>
           </div>
-          <div class="row" style="margin-top:8px">
-            <button id="btnExtStart">Start capture</button>
-            <button id="btnExtStop" class="btn-ghost" disabled>Stop capture</button>
+
+          <!-- TP Limit -->
+          <div class="setting-row">
+            <label for="tpLimit">True Peak Limit</label>
+            <select id="tpLimit">
+              <option value="-1">−1 dBTP (Broadcast)</option>
+              <option value="-2">−2 dBTP (Streaming)</option>
+              <option value="-3">−3 dBTP (Safe)</option>
+            </select>
           </div>
-          <p class="tiny">External audio input via <code class="small">getUserMedia</code>. Supports USB, Dante, and other OS audio devices.</p>
-          <div class="row" style="margin-top:6px;align-items:center">
-            <label>External monitor:</label>
-            <input type="range" id="extMonGain" min="0" max="1" step="0.01" value="0.20" />
-            <span id="extMonVal" class="tiny">0.20</span>
-            <button id="btnExtMonMute" class="btn-ghost">Unmute external monitor</button>
-            <span id="extMonState" class="tiny">(muted)</span>
+
+          <!-- Radar Sweep -->
+          <div class="setting-row">
+            <label for="radarSweep">Radar Sweep Time</label>
+            <select id="radarSweep">
+              <option value="30">30 seconds</option>
+              <option value="60" selected>60 seconds</option>
+              <option value="120">120 seconds</option>
+            </select>
           </div>
-          <div class="row" style="align-items:center">
-            <label>Line-up (Ext, dB):</label>
-            <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" />
-            <input type="number" id="extTrimInput" min="-48" max="24" step="0.1" value="0.0" />
-            <span class="tiny" id="extTrimOut">0.0 dB</span>
-            <button id="extTrimReset" class="btn-ghost" style="white-space:nowrap">Reset 0 dB</button>
-          </div>
-          <div class="kv" id="extInfo">
-            <div><small>Device</small><span id="extDevice">–</span></div>
-            <div><small>Channel count</small><span id="extCc">–</span></div>
-            <div><small>Sample rate</small><span id="extSr">–</span></div>
-            <div><small>Status</small><span id="extStatus">–</span></div>
-          </div>
-          <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable. Check browser permissions.</p>
-          <p class="tiny">No AGC, no noise suppression, no echo cancellation. Clean signal path for broadcast metering.</p>
         </div>
       </section>
 
-      <section class="card leftBottom">
-        <h2>Internal test tone generator</h2>
-        <div class="row" style="align-items:center;flex-wrap:wrap;gap:8px">
-          <button id="btnTone">Start/Stop tone</button>
-          <select id="genPreset" style="padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
-            <option value="400" selected>400 Hz · EBU broadcast line-up</option>
-            <option value="1000">1 kHz · digital test tone (AES-style)</option>
-            <option value="997">997 Hz · FFT-optimised test tone</option>
-            <option value="440">440 Hz · musical A (non-broadcast)</option>
-          </select>
-          <span class="badge" id="genBadge">400 Hz · −18 dBFS peak (0 dBu / 0 PPM · EBU alignment)</span>
-        </div>
-        <div class="row" style="margin-top:6px;align-items:center">
-          <label><input type="checkbox" id="muteLeft"> EBU stereo-ID (L pulsed 250 ms / 3 s)</label>
-          <span class="tiny" style="margin-left:8px;opacity:0.7">ITU-R BR.1385 / EBU R49</span>
-        </div>
-        <div class="row" style="margin-top:6px;align-items:center">
-          <label>Generator monitor:</label>
-          <input type="range" id="monGain" min="0" max="1" step="0.01" value="0.20" />
-          <span id="monVal" class="tiny">0.20</span>
-          <button id="btnMonMute" class="btn-ghost">Unmute generator monitor</button>
-          <span id="monState" class="tiny">(muted)</span>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Metering Settings</h2>
-
-        <!-- LUFS Target -->
-        <div class="setting-row">
-          <label for="targetPreset">Loudness Target</label>
-          <select id="targetPreset">
-            <option value="-23">−23 LUFS (EBU R128)</option>
-            <option value="-24">−24 LUFS (ATSC A/85)</option>
-            <option value="-16">−16 LUFS (Streaming)</option>
-            <option value="-14">−14 LUFS (Podcast)</option>
-          </select>
-        </div>
-
-        <!-- TP Limit -->
-        <div class="setting-row">
-          <label for="tpLimit">True Peak Limit</label>
-          <select id="tpLimit">
-            <option value="-1">−1 dBTP (Broadcast)</option>
-            <option value="-2">−2 dBTP (Streaming)</option>
-            <option value="-3">−3 dBTP (Safe)</option>
-          </select>
-        </div>
-
-        <!-- Radar Sweep -->
-        <div class="setting-row">
-          <label for="radarSweep">Radar Sweep Time</label>
-          <select id="radarSweep">
-            <option value="30">30 seconds</option>
-            <option value="60" selected>60 seconds</option>
-            <option value="120">120 seconds</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="card leftFooter">
-        <h2>Status & live data</h2>
-        <div class="kv">
-          <div><small>Uptime (s)</small><span id="uptime">0.0</span></div>
-          <div><small>AudioContext</small><span id="ctxState">–</span></div>
-          <div><small>Tone running</small><span id="dbgGen">no</span></div>
-          <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
-          <div class="wide"><small>Monitor status</small><span id="monitorStatus" class="tiny">System monitor: <b>OFF</b> (default)<br>Generator monitor: <b>ON</b> (default)</span></div>
+      <section class="card collapsible collapsed" id="panelStatus" data-panel="status">
+        <h2>Status & Live Data <span class="collapse-summary" id="statusSummary">–</span></h2>
+        <div class="card-body">
+          <div class="kv">
+            <div><small>Uptime (s)</small><span id="uptime">0.0</span></div>
+            <div><small>AudioContext</small><span id="ctxState">–</span></div>
+            <div><small>Tone running</small><span id="dbgGen">no</span></div>
+            <div><small>Tab capture running</small><span id="dbgTab">no</span></div>
+            <div class="wide"><small>Monitor status</small><span id="monitorStatus" class="tiny">System monitor: <b>OFF</b> (default)<br>Generator monitor: <b>ON</b> (default)</span></div>
+          </div>
         </div>
       </section>
     </div>
@@ -1796,36 +1856,38 @@
     while (radarHistory.length > 2 && (now - radarHistory[0].t) > radarMaxSeconds*1000) radarHistory.shift();
   }
 
-  const btnTab  = document.getElementById('btnTab');
-  const btnStop = document.getElementById('btnStop');
-  const btnTone = document.getElementById('btnTone');
+  // Generator monitor controls
   const btnMonMute = document.getElementById('btnMonMute');
   const monState = document.getElementById('monState');
   const muteLeft = document.getElementById('muteLeft');
   const monGainEl = document.getElementById('monGain');
   const monVal = document.getElementById('monVal');
 
+  // Browser source controls
   const btnSysMonMute = document.getElementById('btnSysMonMute');
   const sysMonState = document.getElementById('sysMonState');
   const sysMonGainEl = document.getElementById('sysMonGain');
   const sysMonVal = document.getElementById('sysMonVal');
-
   const sysTrimRange = document.getElementById('sysTrimRange');
   const sysTrimInput = document.getElementById('sysTrimInput');
   const sysTrimOut = document.getElementById('sysTrimOut');
   const sysTrimReset = document.getElementById('sysTrimReset');
-
   const info = { srcKind: document.getElementById('srcKind'), cc: document.getElementById('cc'), sr: document.getElementById('sr'), stOK: document.getElementById('stOK') };
 
-  // External Source UI elements
+  // Input Source mode controls
   const btnModeBrowser = document.getElementById('btnModeBrowser');
   const btnModeExternal = document.getElementById('btnModeExternal');
+  const btnModeGenerator = document.getElementById('btnModeGenerator');
   const browserSourcePanel = document.getElementById('browserSourcePanel');
   const externalSourcePanel = document.getElementById('externalSourcePanel');
+  const generatorSourcePanel = document.getElementById('generatorSourcePanel');
+  const btnStartCapture = document.getElementById('btnStartCapture');
+  const btnStopCapture = document.getElementById('btnStopCapture');
+  const inputSourceSummary = document.getElementById('inputSourceSummary');
+
+  // External source controls
   const extDeviceSelect = document.getElementById('extDeviceSelect');
   const btnExtRefresh = document.getElementById('btnExtRefresh');
-  const btnExtStart = document.getElementById('btnExtStart');
-  const btnExtStop = document.getElementById('btnExtStop');
   const extMonGainEl = document.getElementById('extMonGain');
   const extMonVal = document.getElementById('extMonVal');
   const btnExtMonMute = document.getElementById('btnExtMonMute');
@@ -3514,31 +3576,6 @@
   sysTrimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { setSysTrim(e.target.value); e.target.blur(); } });
   sysTrimReset.addEventListener('click', () => setSysTrim(SYS_TRIM_DEFAULT));
 
-  async function startTabCapture(){
-    try{
-      await ac.resume();
-      sysStream = await navigator.mediaDevices.getDisplayMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}, video:true});
-      sysStream.getVideoTracks().forEach(t=>t.stop());
-      const track = sysStream.getAudioTracks()[0]; if(!track) throw new Error('No audio track available.');
-      try{ track.applyConstraints({advanced:[{channelCount:2}]}); }catch{}
-      track.contentHint='music';
-      sysSrc = ac.createMediaStreamSource(sysStream);
-      sysTrimNode = ac.createGain(); sysTrimNode.gain.value = dbToGain(sysTrimDb);
-      sysSrc.connect(sysTrimNode);
-      sysSplit = connectStereoToMix(sysTrimNode);
-      sysMonGain = ac.createGain(); sysMonGain.gain.value = 0; // muted by default
-      sysTrimNode.connect(sysMonGain).connect(ac.destination);
-      btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; sysMonitorMuted=true;
-      const set = track.getSettings?track.getSettings():{};
-      info.srcKind.textContent=track.kind||'audio'; info.cc.textContent=set.channelCount??'unknown'; info.sr.textContent=ac.sampleRate+' Hz'; info.stOK.textContent=(set.channelCount>=2?'Yes':'Uncertain/Mono?');
-      btnTab.disabled=true; btnStop.disabled=false; dbgTab.textContent='yes';
-    }catch(e){ alert(e.message||e) }
-  }
-  function stopCapture(){
-    try{ sysStream && sysStream.getTracks().forEach(t=>t.stop()) }catch{}
-    try{ sysSrc && sysSrc.disconnect() }catch{} try{ sysTrimNode && sysTrimNode.disconnect() }catch{} try{ sysSplit && sysSplit.disconnect() }catch{} try{ sysMonGain && sysMonGain.disconnect() }catch{}
-    sysStream=null; sysSrc=null; sysTrimNode=null; sysSplit=null; sysMonGain=null; sysMonitorMuted=true; btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnTab.disabled=false; btnStop.disabled=true; dbgTab.textContent='no';
-  }
   // Helper: Build monitor status text based on actual state
   // Defaults: System monitor OFF, Generator monitor ON
   function updateMonitorStatusDisplay() {
@@ -3560,80 +3597,198 @@
     if(!sysMonGain) return;
     sysMonitorMuted = !sysMonitorMuted; sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl.value);
     sysMonVal.textContent = sysMonGainEl.value;
-    if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute system monitor'; sysMonState.textContent='(muted)'; }
-    else { btnSysMonMute.classList.add('btn-active'); btnSysMonMute.classList.remove('btn-ghost'); btnSysMonMute.textContent='Mute system monitor'; sysMonState.textContent='(on)'; }
+    if (sysMonitorMuted){ btnSysMonMute.classList.remove('btn-active'); btnSysMonMute.classList.add('btn-ghost'); btnSysMonMute.textContent='Unmute'; sysMonState.textContent='(muted)'; }
+    else { btnSysMonMute.classList.add('btn-active'); btnSysMonMute.classList.remove('btn-ghost'); btnSysMonMute.textContent='Mute'; sysMonState.textContent='(on)'; }
 
     updateMonitorStatusDisplay();
   }
   sysMonGainEl.addEventListener('input', ()=>{ sysMonVal.textContent=sysMonGainEl.value; if(sysMonGain && !sysMonitorMuted){ sysMonGain.gain.value=parseFloat(sysMonGainEl.value) } });
 
   // =====================================================
-  // EXTERNAL SOURCE - AudioWorklet + getUserMedia
+  // UNIFIED INPUT SOURCE SYSTEM
   // =====================================================
 
-  // State
-  let currentInputMode = 'browser'; // 'browser' or 'external'
+  // State: selectedMode = UI selection, activeCapture = currently running source
+  let selectedInputMode = 'browser'; // 'browser', 'external', 'generator'
+  let activeCapture = null; // null, 'browser', 'external', 'generator'
+
+  // External source state
   let extStream = null, extSrc = null, extSplit = null, extMonGain = null, extTrimNode = null;
   let extMonitorMuted = true;
   let extTrimDb = 0;
   let extWorkletNode = null;
   let extWorkletLoaded = false;
-  let extAvailable = true; // Whether external input is available
+  let extAvailable = true;
 
-  const EXT_TRIM_DEFAULT = 0; // External: 0 dB default (professional level assumed)
+  const EXT_TRIM_DEFAULT = 0;
   const EXT_TRIM_STORAGE_KEY = 'tsg_extTrimDb';
   const EXT_DEVICE_STORAGE_KEY = 'tsg_extDeviceId';
+  const PANEL_COLLAPSE_STORAGE_KEY = 'tsg_panelCollapseState';
 
-  // --- Input Mode Switching ---
-  function setInputMode(mode) {
-    currentInputMode = mode;
-    if (mode === 'browser') {
-      btnModeBrowser.classList.add('btn-active');
-      btnModeBrowser.classList.remove('btn-ghost');
-      btnModeExternal.classList.remove('btn-active');
-      btnModeExternal.classList.add('btn-ghost');
-      browserSourcePanel.style.display = 'block';
-      externalSourcePanel.style.display = 'none';
-    } else {
-      btnModeBrowser.classList.remove('btn-active');
-      btnModeBrowser.classList.add('btn-ghost');
-      btnModeExternal.classList.add('btn-active');
-      btnModeExternal.classList.remove('btn-ghost');
-      browserSourcePanel.style.display = 'none';
-      externalSourcePanel.style.display = 'block';
-      // Enumerate devices when switching to external mode
-      enumerateAudioDevices();
+  // --- Update Input Source Summary (for collapsed panel) ---
+  function updateInputSourceSummary() {
+    if (!inputSourceSummary) return;
+    if (!activeCapture) {
+      inputSourceSummary.textContent = '–';
+    } else if (activeCapture === 'browser') {
+      inputSourceSummary.textContent = 'Browser Tab';
+    } else if (activeCapture === 'external') {
+      const opt = extDeviceSelect.options[extDeviceSelect.selectedIndex];
+      const name = opt && opt.value ? opt.textContent.slice(0, 20) : 'External';
+      inputSourceSummary.textContent = name;
+    } else if (activeCapture === 'generator') {
+      inputSourceSummary.textContent = 'Internal Generator';
     }
   }
 
-  btnModeBrowser.addEventListener('click', () => {
-    if (currentInputMode === 'external' && extStream) {
-      stopExternalCapture();
-    }
-    setInputMode('browser');
-  });
+  // --- Input Mode Switching (UI only, does NOT stop/start capture) ---
+  function setInputMode(mode) {
+    selectedInputMode = mode;
 
-  btnModeExternal.addEventListener('click', () => {
-    if (currentInputMode === 'browser' && sysStream) {
-      stopCapture();
+    // Update button states
+    [btnModeBrowser, btnModeExternal, btnModeGenerator].forEach(btn => {
+      btn.classList.remove('btn-active');
+      btn.classList.add('btn-ghost');
+    });
+    if (mode === 'browser') btnModeBrowser.classList.add('btn-active'), btnModeBrowser.classList.remove('btn-ghost');
+    else if (mode === 'external') btnModeExternal.classList.add('btn-active'), btnModeExternal.classList.remove('btn-ghost');
+    else if (mode === 'generator') btnModeGenerator.classList.add('btn-active'), btnModeGenerator.classList.remove('btn-ghost');
+
+    // Show/hide panels
+    browserSourcePanel.style.display = mode === 'browser' ? 'block' : 'none';
+    externalSourcePanel.style.display = mode === 'external' ? 'block' : 'none';
+    generatorSourcePanel.style.display = mode === 'generator' ? 'block' : 'none';
+
+    // Enumerate devices when switching to external mode
+    if (mode === 'external') enumerateAudioDevices();
+
+    // Update start/stop button state based on whether THIS mode is capturing
+    updateCaptureButtons();
+  }
+
+  function updateCaptureButtons() {
+    const isActiveMode = activeCapture === selectedInputMode;
+    const isAnyCapture = activeCapture !== null;
+
+    if (isActiveMode) {
+      btnStartCapture.disabled = true;
+      btnStopCapture.disabled = false;
+    } else {
+      btnStartCapture.disabled = false;
+      btnStopCapture.disabled = !isAnyCapture || activeCapture !== selectedInputMode;
     }
-    setInputMode('external');
-  });
+    // If viewing a different mode than active, show stop as disabled
+    if (activeCapture && activeCapture !== selectedInputMode) {
+      btnStopCapture.disabled = true;
+    }
+  }
+
+  btnModeBrowser.addEventListener('click', () => setInputMode('browser'));
+  btnModeExternal.addEventListener('click', () => setInputMode('external'));
+  btnModeGenerator.addEventListener('click', () => setInputMode('generator'));
+
+  // --- Unified Start Capture ---
+  async function startCapture() {
+    // Stop any existing capture from OTHER sources first
+    if (activeCapture && activeCapture !== selectedInputMode) {
+      await stopActiveCapture();
+    }
+
+    // Start capture for selected mode
+    if (selectedInputMode === 'browser') {
+      await startBrowserCapture();
+    } else if (selectedInputMode === 'external') {
+      await startExternalCapture();
+    } else if (selectedInputMode === 'generator') {
+      await startGeneratorCapture();
+    }
+  }
+
+  async function stopActiveCapture() {
+    if (activeCapture === 'browser') {
+      stopBrowserCapture();
+    } else if (activeCapture === 'external') {
+      stopExternalCapture();
+    } else if (activeCapture === 'generator') {
+      await stopGeneratorCapture();
+    }
+    activeCapture = null;
+    updateCaptureButtons();
+    updateInputSourceSummary();
+  }
+
+  btnStartCapture.addEventListener('click', startCapture);
+  btnStopCapture.addEventListener('click', stopActiveCapture);
+
+  // --- Browser Capture ---
+  async function startBrowserCapture() {
+    try {
+      await ac.resume();
+      sysStream = await navigator.mediaDevices.getDisplayMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
+        video: true
+      });
+      sysStream.getVideoTracks().forEach(t => t.stop());
+      const track = sysStream.getAudioTracks()[0];
+      if (!track) throw new Error('No audio track available.');
+      try { track.applyConstraints({ advanced: [{ channelCount: 2 }] }); } catch {}
+      track.contentHint = 'music';
+      sysSrc = ac.createMediaStreamSource(sysStream);
+      sysTrimNode = ac.createGain();
+      sysTrimNode.gain.value = dbToGain(sysTrimDb);
+      sysSrc.connect(sysTrimNode);
+      sysSplit = connectStereoToMix(sysTrimNode);
+      sysMonGain = ac.createGain();
+      sysMonGain.gain.value = 0;
+      sysTrimNode.connect(sysMonGain).connect(ac.destination);
+      btnSysMonMute.classList.remove('btn-active');
+      btnSysMonMute.classList.add('btn-ghost');
+      btnSysMonMute.textContent = 'Unmute';
+      sysMonState.textContent = '(muted)';
+      sysMonitorMuted = true;
+      const set = track.getSettings ? track.getSettings() : {};
+      info.srcKind.textContent = track.kind || 'audio';
+      info.cc.textContent = set.channelCount ?? 'unknown';
+      info.sr.textContent = ac.sampleRate + ' Hz';
+      info.stOK.textContent = (set.channelCount >= 2 ? 'Yes' : 'Uncertain/Mono?');
+      activeCapture = 'browser';
+      dbgTab.textContent = 'yes';
+      updateCaptureButtons();
+      updateInputSourceSummary();
+    } catch (e) {
+      alert(e.message || e);
+    }
+  }
+
+  function stopBrowserCapture() {
+    try { sysStream && sysStream.getTracks().forEach(t => t.stop()); } catch {}
+    try { sysSrc && sysSrc.disconnect(); } catch {}
+    try { sysTrimNode && sysTrimNode.disconnect(); } catch {}
+    try { sysSplit && sysSplit.disconnect(); } catch {}
+    try { sysMonGain && sysMonGain.disconnect(); } catch {}
+    sysStream = null; sysSrc = null; sysTrimNode = null; sysSplit = null; sysMonGain = null;
+    sysMonitorMuted = true;
+    btnSysMonMute.textContent = 'Unmute';
+    sysMonState.textContent = '(muted)';
+    btnSysMonMute.classList.remove('btn-active');
+    btnSysMonMute.classList.add('btn-ghost');
+    dbgTab.textContent = 'no';
+    if (activeCapture === 'browser') activeCapture = null;
+    updateCaptureButtons();
+    updateInputSourceSummary();
+  }
 
   // --- Device Enumeration ---
   async function enumerateAudioDevices() {
     try {
-      // Request permission first (needed to get device labels)
       try {
         const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         tempStream.getTracks().forEach(t => t.stop());
       } catch (e) {
         console.warn('Could not get initial audio permission:', e);
       }
-
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter(d => d.kind === 'audioinput');
-
       extDeviceSelect.innerHTML = '<option value="">– Select audio input –</option>';
       audioInputs.forEach(device => {
         const option = document.createElement('option');
@@ -3641,25 +3796,18 @@
         option.textContent = device.label || `Audio Input (${device.deviceId.slice(0, 8)}...)`;
         extDeviceSelect.appendChild(option);
       });
-
-      // Restore last used device
       const storedDeviceId = localStorage.getItem(EXT_DEVICE_STORAGE_KEY);
       if (storedDeviceId) {
         const exists = audioInputs.some(d => d.deviceId === storedDeviceId);
-        if (exists) {
-          extDeviceSelect.value = storedDeviceId;
-        }
+        if (exists) extDeviceSelect.value = storedDeviceId;
       }
-
       extAvailable = audioInputs.length > 0;
       extWarning.style.display = extAvailable ? 'none' : 'block';
-      btnExtStart.disabled = !extAvailable;
     } catch (e) {
       console.error('Device enumeration failed:', e);
       extAvailable = false;
       extWarning.style.display = 'block';
       extWarning.textContent = '⚠ Cannot enumerate devices: ' + e.message;
-      btnExtStart.disabled = true;
     }
   }
 
@@ -3671,11 +3819,10 @@
     extTrimRange.value = extTrimDb;
     extTrimInput.value = extTrimDb.toFixed(1);
     extTrimOut.textContent = extTrimDb.toFixed(1) + ' dB';
-    if (extTrimNode) { extTrimNode.gain.value = dbToGain(extTrimDb); }
-    if (save) { try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch(e) {} }
+    if (extTrimNode) extTrimNode.gain.value = dbToGain(extTrimDb);
+    if (save) try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch (e) {}
   }
 
-  // Load from localStorage or use default (0 dB)
   const storedExtTrim = localStorage.getItem(EXT_TRIM_STORAGE_KEY);
   setExtTrim(storedExtTrim !== null ? parseFloat(storedExtTrim) : EXT_TRIM_DEFAULT, false);
 
@@ -3690,7 +3837,6 @@
     try {
       await ac.audioWorklet.addModule('external-meter-processor.js');
       extWorkletLoaded = true;
-      console.log('External meter processor loaded successfully');
       return true;
     } catch (e) {
       console.error('Failed to load external meter processor:', e);
@@ -3707,14 +3853,9 @@
       alert('Please select an audio input device.');
       return;
     }
-
     try {
       await ac.resume();
-
-      // Load AudioWorklet if not already loaded
       const workletReady = await loadExternalWorklet();
-
-      // getUserMedia with strict constraints - NO processing
       const constraints = {
         audio: {
           deviceId: { exact: deviceId },
@@ -3725,78 +3866,45 @@
           echoCancellation: false
         }
       };
-
       extStream = await navigator.mediaDevices.getUserMedia(constraints);
       const track = extStream.getAudioTracks()[0];
       if (!track) throw new Error('No audio track available.');
-
-      // Apply additional constraints to ensure no processing
       try {
-        await track.applyConstraints({
-          autoGainControl: false,
-          noiseSuppression: false,
-          echoCancellation: false,
-          channelCount: 2
-        });
-      } catch (e) {
-        console.warn('Could not apply all constraints:', e);
-      }
-
+        await track.applyConstraints({ autoGainControl: false, noiseSuppression: false, echoCancellation: false, channelCount: 2 });
+      } catch (e) { console.warn('Could not apply all constraints:', e); }
       track.contentHint = 'music';
-
-      // Create source
       extSrc = ac.createMediaStreamSource(extStream);
-
-      // Create trim node
       extTrimNode = ac.createGain();
       extTrimNode.gain.value = dbToGain(extTrimDb);
-
-      // Route through AudioWorklet if available (for clean signal path)
       if (workletReady) {
         extWorkletNode = new AudioWorkletNode(ac, 'external-meter-processor', {
-          numberOfInputs: 1,
-          numberOfOutputs: 1,
-          channelCount: 2,
-          channelCountMode: 'explicit',
-          processorOptions: { sendPCM: false }
+          numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit', processorOptions: { sendPCM: false }
         });
         extSrc.connect(extWorkletNode);
         extWorkletNode.connect(extTrimNode);
       } else {
-        // Fallback: direct connection
         extSrc.connect(extTrimNode);
       }
-
-      // Connect to metering pipeline (same as browser source)
       extSplit = connectStereoToMix(extTrimNode);
-
-      // Monitor output (muted by default)
       extMonGain = ac.createGain();
       extMonGain.gain.value = 0;
       extTrimNode.connect(extMonGain).connect(ac.destination);
-
-      // Update UI
       btnExtMonMute.classList.remove('btn-active');
       btnExtMonMute.classList.add('btn-ghost');
-      btnExtMonMute.textContent = 'Unmute external monitor';
+      btnExtMonMute.textContent = 'Unmute';
       extMonState.textContent = '(muted)';
       extMonitorMuted = true;
-
       const settings = track.getSettings ? track.getSettings() : {};
       const selectedOption = extDeviceSelect.options[extDeviceSelect.selectedIndex];
       extInfo.device.textContent = selectedOption ? selectedOption.textContent.slice(0, 30) : 'Unknown';
       extInfo.cc.textContent = settings.channelCount ?? 'unknown';
       extInfo.sr.textContent = ac.sampleRate + ' Hz';
       extInfo.status.textContent = 'Active';
-
-      btnExtStart.disabled = true;
-      btnExtStop.disabled = false;
       extDeviceSelect.disabled = true;
-
-      // Save device selection
-      try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch(e) {}
-
-      console.log('External capture started:', deviceId);
+      try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch (e) {}
+      activeCapture = 'external';
+      updateCaptureButtons();
+      updateInputSourceSummary();
     } catch (e) {
       console.error('External capture failed:', e);
       alert('Failed to start external capture: ' + e.message);
@@ -3811,33 +3919,21 @@
     try { extTrimNode && extTrimNode.disconnect(); } catch {}
     try { extSplit && extSplit.disconnect(); } catch {}
     try { extMonGain && extMonGain.disconnect(); } catch {}
-
-    extStream = null;
-    extSrc = null;
-    extWorkletNode = null;
-    extTrimNode = null;
-    extSplit = null;
-    extMonGain = null;
+    extStream = null; extSrc = null; extWorkletNode = null; extTrimNode = null; extSplit = null; extMonGain = null;
     extMonitorMuted = true;
-
-    btnExtMonMute.textContent = 'Unmute external monitor';
+    btnExtMonMute.textContent = 'Unmute';
     extMonState.textContent = '(muted)';
     btnExtMonMute.classList.remove('btn-active');
     btnExtMonMute.classList.add('btn-ghost');
-    btnExtStart.disabled = false;
-    btnExtStop.disabled = true;
     extDeviceSelect.disabled = false;
-
     extInfo.device.textContent = '–';
     extInfo.cc.textContent = '–';
     extInfo.sr.textContent = '–';
     extInfo.status.textContent = '–';
-
-    console.log('External capture stopped');
+    if (activeCapture === 'external') activeCapture = null;
+    updateCaptureButtons();
+    updateInputSourceSummary();
   }
-
-  btnExtStart.addEventListener('click', startExternalCapture);
-  btnExtStop.addEventListener('click', stopExternalCapture);
 
   // --- External Monitor Control ---
   function toggleExtMonitorMute() {
@@ -3848,12 +3944,12 @@
     if (extMonitorMuted) {
       btnExtMonMute.classList.remove('btn-active');
       btnExtMonMute.classList.add('btn-ghost');
-      btnExtMonMute.textContent = 'Unmute external monitor';
+      btnExtMonMute.textContent = 'Unmute';
       extMonState.textContent = '(muted)';
     } else {
       btnExtMonMute.classList.add('btn-active');
       btnExtMonMute.classList.remove('btn-ghost');
-      btnExtMonMute.textContent = 'Mute external monitor';
+      btnExtMonMute.textContent = 'Mute';
       extMonState.textContent = '(on)';
     }
   }
@@ -3861,20 +3957,74 @@
   btnExtMonMute.addEventListener('click', toggleExtMonitorMute);
   extMonGainEl.addEventListener('input', () => {
     extMonVal.textContent = extMonGainEl.value;
-    if (extMonGain && !extMonitorMuted) {
-      extMonGain.gain.value = parseFloat(extMonGainEl.value);
-    }
+    if (extMonGain && !extMonitorMuted) extMonGain.gain.value = parseFloat(extMonGainEl.value);
   });
 
-  // --- Device change listener ---
   navigator.mediaDevices.addEventListener('devicechange', () => {
-    if (currentInputMode === 'external') {
-      enumerateAudioDevices();
-    }
+    if (selectedInputMode === 'external') enumerateAudioDevices();
   });
+
+  // --- Generator Capture ---
+  async function startGeneratorCapture() {
+    await startGenerator();
+    activeCapture = 'generator';
+    updateCaptureButtons();
+    updateInputSourceSummary();
+  }
+
+  async function stopGeneratorCapture() {
+    await stopGenerator();
+    if (activeCapture === 'generator') activeCapture = null;
+    updateCaptureButtons();
+    updateInputSourceSummary();
+  }
 
   // =====================================================
-  // END EXTERNAL SOURCE
+  // COLLAPSIBLE PANELS
+  // =====================================================
+
+  function initCollapsiblePanels() {
+    const panels = document.querySelectorAll('.card.collapsible');
+    const savedState = JSON.parse(localStorage.getItem(PANEL_COLLAPSE_STORAGE_KEY) || '{}');
+
+    panels.forEach(panel => {
+      const panelId = panel.dataset.panel;
+      const header = panel.querySelector('h2');
+
+      // Restore saved state (except inputSources which defaults to expanded)
+      if (panelId && savedState[panelId] !== undefined) {
+        if (savedState[panelId]) {
+          panel.classList.add('collapsed');
+        } else {
+          panel.classList.remove('collapsed');
+        }
+      }
+
+      // Add click handler to header
+      header.addEventListener('click', () => {
+        panel.classList.toggle('collapsed');
+        savePanelCollapseState();
+      });
+    });
+  }
+
+  function savePanelCollapseState() {
+    const panels = document.querySelectorAll('.card.collapsible');
+    const state = {};
+    panels.forEach(panel => {
+      const panelId = panel.dataset.panel;
+      if (panelId) {
+        state[panelId] = panel.classList.contains('collapsed');
+      }
+    });
+    try { localStorage.setItem(PANEL_COLLAPSE_STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  // Initialize collapsible panels
+  initCollapsiblePanels();
+
+  // =====================================================
+  // END UNIFIED INPUT SOURCE SYSTEM
   // =====================================================
 
   // ------- Generator -------
@@ -3947,8 +4097,8 @@
 
     genOsc.start();
     ebuModeActive = false;
-    btnTone.textContent='Stop tone'; dbgGen.textContent='yes';
-    btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; monitorMuted = false;
+    dbgGen.textContent='yes';
+    btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute'; monState.textContent='(on)'; monitorMuted = false;
   }
 
   async function stopGenerator(){
@@ -3960,14 +4110,14 @@
     merger = null; genMonGain = null; genSplit = null;
     ebuModeActive = false;
     TransitionGuard.reset();
-    btnTone.textContent = 'Start/Stop tone'; dbgGen.textContent = 'no';
+    dbgGen.textContent = 'no';
   }
   function toggleGenMonitorMute(){
     if(!genMonGain) return;
     monitorMuted = !monitorMuted; genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value);
     monVal.textContent = monGainEl.value;
-    if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute generator monitor'; monState.textContent='(muted)'; }
-    else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute generator monitor'; monState.textContent='(on)'; }
+    if (monitorMuted){ btnMonMute.classList.remove('btn-active'); btnMonMute.classList.add('btn-ghost'); btnMonMute.textContent='Unmute'; monState.textContent='(muted)'; }
+    else { btnMonMute.classList.add('btn-active'); btnMonMute.classList.remove('btn-ghost'); btnMonMute.textContent='Mute'; monState.textContent='(on)'; }
 
     updateMonitorStatusDisplay();
   }
@@ -4575,7 +4725,6 @@
   visibilityObserver.observe(loudnessCard);
 
   // ------- Bind -------
-  btnTab.onclick  = startTabCapture; btnStop.onclick = stopCapture; btnTone.onclick = async()=>{ if(!genOsc) await startGenerator(); else await stopGenerator(); };
   btnMonMute.onclick = toggleGenMonitorMute; btnSysMonMute.onclick = toggleSysMonitorMute;
 
   // ------- Boot: ingen auto-ton, allt muted default -------
