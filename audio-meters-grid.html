@@ -3074,9 +3074,10 @@
     tag.style.padding='0';
     el.appendChild(tag);
 
-    // TP LIMIT -1 dBTP reference line (same style as TEST line)
-    const xLimit = ((-1 - TP_MIN) / TP_SPAN) * 100;
+    // TP LIMIT reference line (same style as TEST line)
+    const xLimit = ((TP_LIMIT - TP_MIN) / TP_SPAN) * 100;
     const limitRef = document.createElement('div');
+    limitRef.id = 'tpLimitLine';
     limitRef.style.position = 'absolute';
     limitRef.style.left = `calc(${xLimit}% - 1px)`;
     limitRef.style.top = '25%';
@@ -3087,7 +3088,8 @@
     el.appendChild(limitRef);
     // LIMIT label
     const limitTag = document.createElement('div');
-    limitTag.innerHTML = '<div>LIMIT</div><div>−1 dBTP</div>';
+    limitTag.id = 'tpLimitTag';
+    limitTag.innerHTML = `<div>LIMIT</div><div>${TP_LIMIT} dBTP</div>`;
     limitTag.style.position = 'absolute';
     limitTag.style.left = `calc(${xLimit}% - 40px)`;
     limitTag.style.bottom = '4px';
@@ -3101,6 +3103,20 @@
     limitTag.style.borderRadius = '0';
     limitTag.style.padding = '0';
     el.appendChild(limitTag);
+  }
+
+  // Update TP Limit line and label position when setting changes
+  function updateTpLimitDisplay() {
+    const xLimit = ((TP_LIMIT - TP_MIN) / TP_SPAN) * 100;
+    const limitLine = document.getElementById('tpLimitLine');
+    const limitTag = document.getElementById('tpLimitTag');
+    if (limitLine) {
+      limitLine.style.left = `calc(${xLimit}% - 1px)`;
+    }
+    if (limitTag) {
+      limitTag.style.left = `calc(${xLimit}% - 40px)`;
+      limitTag.innerHTML = `<div>LIMIT</div><div>${TP_LIMIT} dBTP</div>`;
+    }
   }
 
   // Nordic PPM – klassisk Nordic N9 skala
@@ -4760,6 +4776,7 @@
     if (savedTpLimit) {
       TP_LIMIT = parseFloat(savedTpLimit);
       tpLimitEl.value = savedTpLimit;
+      updateTpLimitDisplay();
     }
     if (savedSweep) {
       radarMaxSeconds = parseInt(savedSweep);
@@ -4777,6 +4794,7 @@
     TP_LIMIT = parseFloat(tpLimitEl.value);
     localStorage.setItem(SETTINGS_KEYS.tpLimit, tpLimitEl.value);
     tpOverFlag = false;
+    updateTpLimitDisplay();
   });
 
   radarSweepEl.addEventListener('change', () => {
