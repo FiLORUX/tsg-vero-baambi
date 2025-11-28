@@ -15,12 +15,14 @@
  * VERO-BAAMBI MAIN MODULE
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * PHASE 3: AUDIO ENGINE & UTILITIES
- * ──────────────────────────────────
- * Foundation modules for audio processing and UI:
- *   - AudioEngine class for Web Audio management
- *   - Utility functions (math, formatting, DOM)
- *   - Color schemes for meter displays
+ * PHASE 4: UI RENDERING COMPONENTS
+ * ─────────────────────────────────
+ * Canvas-based meter displays extracted from legacy HTML:
+ *   - MeterBar: LED-style horizontal bars (dBFS, True Peak, PPM)
+ *   - LoudnessRadar: EBU R128 loudness history display
+ *   - Goniometer: M/S vectorscope for stereo imaging
+ *   - CorrelationMeter: Phase correlation display
+ *   - BalanceMeter: L/R balance indication
  *
  * ARCHITECTURE OVERVIEW
  * ─────────────────────
@@ -35,7 +37,11 @@
  *               ├─► audio/               - AudioContext, worklets
  *               │   └─► engine.js        - AudioEngine class
  *               ├─► ui/                  - Display components
- *               │   └─► colors.js        - Meter color schemes
+ *               │   ├─► colors.js        - Meter color schemes
+ *               │   ├─► meter-bar.js     - LED bar renderers
+ *               │   ├─► radar.js         - Loudness radar
+ *               │   ├─► goniometer.js    - M/S vectorscope
+ *               │   └─► correlation-meter.js - Phase display
  *               └─► utils/               - Shared utilities
  *                   ├─► format.js        - Display formatting
  *                   ├─► math.js          - Math utilities
@@ -83,11 +89,23 @@ import {
   createAnimationLoop
 } from './utils/index.js';
 
-// UI colors
+// UI components
 import {
   DEFAULT_COLORS,
   getLoudnessColor,
-  getCorrelationColor
+  getCorrelationColor,
+  // Meter bars
+  MeterBar,
+  StereoMeterBar,
+  TRUE_PEAK_CONFIG,
+  PPM_CONFIG,
+  // Radar
+  LoudnessRadar,
+  // Goniometer
+  Goniometer,
+  // Correlation/Balance
+  CorrelationMeter,
+  BalanceMeter
 } from './ui/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -111,7 +129,7 @@ const WORKLET_PATH = new URL('../external-meter-processor.js', import.meta.url).
  * Application version for cache busting and diagnostics.
  * @type {string}
  */
-export const APP_VERSION = '2.0.0-phase3';
+export const APP_VERSION = '2.0.0-phase4';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // APPLICATION STATE
@@ -171,6 +189,14 @@ export async function initApp({ mountElement, loadingElement }) {
   console.log('  - StereoMeter:', typeof StereoMeter);
   console.log('  - createStereoKWeightingFilters:', typeof createStereoKWeightingFilters);
 
+  console.log('[VERO-BAAMBI] Verifying UI components...');
+  console.log('  - MeterBar:', typeof MeterBar);
+  console.log('  - StereoMeterBar:', typeof StereoMeterBar);
+  console.log('  - LoudnessRadar:', typeof LoudnessRadar);
+  console.log('  - Goniometer:', typeof Goniometer);
+  console.log('  - CorrelationMeter:', typeof CorrelationMeter);
+  console.log('  - BalanceMeter:', typeof BalanceMeter);
+
   // ─────────────────────────────────────────────────────────────────────────
   // PHASE 2: Metering modules loaded, UI integration in Phase 3+
   // ─────────────────────────────────────────────────────────────────────────
@@ -226,7 +252,14 @@ export {
   dbToGain,
   // Colors
   DEFAULT_COLORS,
-  getLoudnessColor
+  getLoudnessColor,
+  // UI Components
+  MeterBar,
+  StereoMeterBar,
+  LoudnessRadar,
+  Goniometer,
+  CorrelationMeter,
+  BalanceMeter
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -234,7 +267,7 @@ export {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Render Phase 3 UI showing all extracted modules.
+ * Render Phase 4 UI showing all extracted modules.
  *
  * @param {HTMLElement} container - Mount element
  * @private
@@ -251,6 +284,11 @@ function renderPhase2UI(container) {
     { name: 'utils/math', status: 'ok', desc: 'dB conversion, smoothing, stats' },
     { name: 'utils/dom', status: 'ok', desc: 'Canvas DPI, animation loops' },
     { name: 'ui/colors', status: 'ok', desc: 'Meter color schemes (RTW-style)' },
+    { name: 'MeterBar', status: 'ok', desc: 'LED-style horizontal bar meters' },
+    { name: 'LoudnessRadar', status: 'ok', desc: 'EBU R128 loudness radar display' },
+    { name: 'Goniometer', status: 'ok', desc: 'M/S stereo vectorscope' },
+    { name: 'CorrelationMeter', status: 'ok', desc: 'Phase correlation bar meter' },
+    { name: 'BalanceMeter', status: 'ok', desc: 'L/R balance indicator' },
   ];
 
   const moduleList = modules.map(m => `
@@ -301,7 +339,7 @@ function renderPhase2UI(container) {
           margin-bottom: 1rem;
           color: #00d4aa;
           text-align: center;
-        ">Phase 3: Audio Engine & Utilities</h2>
+        ">Phase 4: UI Rendering Components</h2>
 
         <div style="margin-bottom: 1.5rem;">
           ${moduleList}
@@ -314,8 +352,8 @@ function renderPhase2UI(container) {
           margin-bottom: 1.5rem;
           text-align: center;
         ">
-          Core metering algorithms extracted as ES modules.
-          <br>UI integration will be completed in Phase 3.
+          Canvas-based UI components extracted as ES modules.
+          <br>Ready for integration in Phase 5.
         </p>
 
         <div style="
