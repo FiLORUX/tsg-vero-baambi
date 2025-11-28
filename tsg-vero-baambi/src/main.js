@@ -15,14 +15,12 @@
  * VERO-BAAMBI MAIN MODULE
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * PHASE 2: METERING MODULES EXTRACTED
- * ────────────────────────────────────
- * Core metering algorithms extracted as ES modules:
- *   - K-weighting filter (ITU-R BS.1770-4)
- *   - LUFS measurement (EBU R128)
- *   - True Peak detection (4× oversampling)
- *   - PPM ballistics (IEC 60268-10 Type I)
- *   - Stereo correlation (phase analysis)
+ * PHASE 3: AUDIO ENGINE & UTILITIES
+ * ──────────────────────────────────
+ * Foundation modules for audio processing and UI:
+ *   - AudioEngine class for Web Audio management
+ *   - Utility functions (math, formatting, DOM)
+ *   - Color schemes for meter displays
  *
  * ARCHITECTURE OVERVIEW
  * ─────────────────────
@@ -33,17 +31,15 @@
  *               ├─► config/storage.js    - LocalStorage versioning
  *               ├─► remote/types.js      - Metrics schema (probe/client)
  *               ├─► metering/            - EBU R128, LUFS, True Peak, PPM
- *               │   ├─► k-weighting.js   - K-weighting filter
- *               │   ├─► lufs.js          - LUFS meter class
- *               │   ├─► true-peak.js     - True Peak detector
- *               │   ├─► ppm.js           - Nordic PPM meter
- *               │   └─► index.js         - Module exports
  *               ├─► stereo/              - Phase correlation
- *               │   ├─► correlation.js   - Stereo analysis
- *               │   └─► index.js         - Module exports
- *               ├─► audio/               - (Phase 3+) AudioContext
- *               ├─► ui/                  - (Phase 3+) DOM rendering
- *               └─► utils/               - (Phase 3+) Shared utilities
+ *               ├─► audio/               - AudioContext, worklets
+ *               │   └─► engine.js        - AudioEngine class
+ *               ├─► ui/                  - Display components
+ *               │   └─► colors.js        - Meter color schemes
+ *               └─► utils/               - Shared utilities
+ *                   ├─► format.js        - Display formatting
+ *                   ├─► math.js          - Math utilities
+ *                   └─► dom.js           - DOM helpers
  *
  * @module main
  * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import.meta
@@ -72,6 +68,28 @@ import {
   getCorrelationZone
 } from './stereo/index.js';
 
+// Audio engine
+import {
+  AudioEngine,
+  getAudioInputDevices
+} from './audio/index.js';
+
+// Utilities
+import {
+  formatDb,
+  formatTime,
+  clamp,
+  dbToGain,
+  createAnimationLoop
+} from './utils/index.js';
+
+// UI colors
+import {
+  DEFAULT_COLORS,
+  getLoudnessColor,
+  getCorrelationColor
+} from './ui/index.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE-LEVEL CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,7 +111,7 @@ const WORKLET_PATH = new URL('../external-meter-processor.js', import.meta.url).
  * Application version for cache busting and diagnostics.
  * @type {string}
  */
-export const APP_VERSION = '2.0.0-phase2';
+export const APP_VERSION = '2.0.0-phase3';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // APPLICATION STATE
@@ -191,13 +209,24 @@ export function getModuleBase() {
   return MODULE_BASE.href;
 }
 
-// Re-export metering classes for external use
+// Re-export classes for external use
 export {
+  // Metering
   LUFSMeter,
   TruePeakMeter,
   PPMMeter,
   StereoMeter,
-  createStereoKWeightingFilters
+  createStereoKWeightingFilters,
+  // Audio
+  AudioEngine,
+  // Utilities
+  formatDb,
+  formatTime,
+  clamp,
+  dbToGain,
+  // Colors
+  DEFAULT_COLORS,
+  getLoudnessColor
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -205,7 +234,7 @@ export {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Render Phase 2 UI showing extracted modules.
+ * Render Phase 3 UI showing all extracted modules.
  *
  * @param {HTMLElement} container - Mount element
  * @private
@@ -217,6 +246,11 @@ function renderPhase2UI(container) {
     { name: 'TruePeakMeter', status: 'ok', desc: '4× oversampling peak detection' },
     { name: 'PPMMeter', status: 'ok', desc: 'IEC 60268-10 Type I ballistics' },
     { name: 'StereoMeter', status: 'ok', desc: 'Phase correlation analysis' },
+    { name: 'AudioEngine', status: 'ok', desc: 'Web Audio context management' },
+    { name: 'utils/format', status: 'ok', desc: 'Fixed-width display formatting' },
+    { name: 'utils/math', status: 'ok', desc: 'dB conversion, smoothing, stats' },
+    { name: 'utils/dom', status: 'ok', desc: 'Canvas DPI, animation loops' },
+    { name: 'ui/colors', status: 'ok', desc: 'Meter color schemes (RTW-style)' },
   ];
 
   const moduleList = modules.map(m => `
@@ -267,7 +301,7 @@ function renderPhase2UI(container) {
           margin-bottom: 1rem;
           color: #00d4aa;
           text-align: center;
-        ">Phase 2: Metering Modules Extracted</h2>
+        ">Phase 3: Audio Engine & Utilities</h2>
 
         <div style="margin-bottom: 1.5rem;">
           ${moduleList}
