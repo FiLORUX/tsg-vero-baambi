@@ -31,7 +31,7 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-import { getDPR, getCssVar } from '../utils/dom.js';
+import { getDPR } from '../utils/dom.js';
 import { clamp, mapRange } from '../utils/math.js';
 import { DEFAULT_COLORS } from './colors.js';
 

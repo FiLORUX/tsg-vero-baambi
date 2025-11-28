@@ -309,13 +309,13 @@ export class Goniometer {
       const intensity = Math.sqrt(l * l + r * r);
       const alpha = clamp(intensity * 2, 0.3, 1.0);
 
-      // Color based on phase
-      // Positive correlation (L≈R) = green, negative = red
-      const correlation = l * r;
+      // Colour based on instantaneous phase relationship
+      // Positive product (L and R same polarity) = green, opposite = red
+      const phaseProduct = l * r;
       let color;
-      if (correlation >= 0) {
+      if (phaseProduct >= 0) {
         color = colors.ok;
-      } else if (correlation > -0.3) {
+      } else if (phaseProduct > -0.3) {
         color = colors.warn;
       } else {
         color = colors.hot;
