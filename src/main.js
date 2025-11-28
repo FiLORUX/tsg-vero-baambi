@@ -15,14 +15,13 @@
  * VERO-BAAMBI MAIN MODULE
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * PHASE 4: UI RENDERING COMPONENTS
+ * PHASE 5: APPLICATION INTEGRATION
  * ─────────────────────────────────
- * Canvas-based meter displays extracted from legacy HTML:
- *   - MeterBar: LED-style horizontal bars (dBFS, True Peak, PPM)
- *   - LoudnessRadar: EBU R128 loudness history display
- *   - Goniometer: M/S vectorscope for stereo imaging
- *   - CorrelationMeter: Phase correlation display
- *   - BalanceMeter: L/R balance indication
+ * Application wiring layer connecting all extracted modules:
+ *   - StateStore: Reactive state management with persistence
+ *   - SourceController: Input source management (browser/device/generator)
+ *   - RenderLoop: Animation frame orchestration
+ *   - MeterRenderer: Coordinates meters with audio data
  *
  * ARCHITECTURE OVERVIEW
  * ─────────────────────
@@ -30,6 +29,10 @@
  *       │
  *       └─► src/main.js (this file)
  *               │
+ *               ├─► app/                 - Application integration
+ *               │   ├─► state.js         - Reactive state store
+ *               │   ├─► sources.js       - Input source controller
+ *               │   └─► renderer.js      - Render loop orchestration
  *               ├─► config/storage.js    - LocalStorage versioning
  *               ├─► remote/types.js      - Metrics schema (probe/client)
  *               ├─► metering/            - EBU R128, LUFS, True Peak, PPM
@@ -53,6 +56,17 @@
  */
 
 import { STORAGE_VERSION, migrateStorage } from './config/storage.js';
+
+// Application integration
+import {
+  InputMode,
+  StateStore,
+  appState,
+  SourceController,
+  RenderLoop,
+  MeterRenderer,
+  renderLoop
+} from './app/index.js';
 
 // Metering modules
 import {
@@ -129,7 +143,7 @@ const WORKLET_PATH = new URL('../external-meter-processor.js', import.meta.url).
  * Application version for cache busting and diagnostics.
  * @type {string}
  */
-export const APP_VERSION = '2.0.0-phase4';
+export const APP_VERSION = '2.0.0-phase5';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // APPLICATION STATE
@@ -182,27 +196,29 @@ export async function initApp({ mountElement, loadingElement }) {
   // ─────────────────────────────────────────────────────────────────────────
   // VERIFY MODULE IMPORTS
   // ─────────────────────────────────────────────────────────────────────────
+  console.log('[VERO-BAAMBI] Verifying app modules...');
+  console.log('  - StateStore:', typeof StateStore);
+  console.log('  - SourceController:', typeof SourceController);
+  console.log('  - RenderLoop:', typeof RenderLoop);
+  console.log('  - MeterRenderer:', typeof MeterRenderer);
+  console.log('  - appState:', typeof appState);
+
   console.log('[VERO-BAAMBI] Verifying metering modules...');
   console.log('  - LUFSMeter:', typeof LUFSMeter);
   console.log('  - TruePeakMeter:', typeof TruePeakMeter);
   console.log('  - PPMMeter:', typeof PPMMeter);
   console.log('  - StereoMeter:', typeof StereoMeter);
-  console.log('  - createStereoKWeightingFilters:', typeof createStereoKWeightingFilters);
 
   console.log('[VERO-BAAMBI] Verifying UI components...');
   console.log('  - MeterBar:', typeof MeterBar);
-  console.log('  - StereoMeterBar:', typeof StereoMeterBar);
   console.log('  - LoudnessRadar:', typeof LoudnessRadar);
   console.log('  - Goniometer:', typeof Goniometer);
   console.log('  - CorrelationMeter:', typeof CorrelationMeter);
-  console.log('  - BalanceMeter:', typeof BalanceMeter);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PHASE 2: Metering modules loaded, UI integration in Phase 3+
+  // RENDER MODULE STATUS UI
   // ─────────────────────────────────────────────────────────────────────────
-
-  // Render Phase 2 UI with module verification
-  renderPhase2UI(mountElement);
+  renderModuleStatusUI(mountElement);
 
   // Hide loading indicator
   if (loadingElement) {
@@ -237,6 +253,14 @@ export function getModuleBase() {
 
 // Re-export classes for external use
 export {
+  // Application integration
+  InputMode,
+  StateStore,
+  appState,
+  SourceController,
+  RenderLoop,
+  MeterRenderer,
+  renderLoop,
   // Metering
   LUFSMeter,
   TruePeakMeter,
@@ -267,23 +291,23 @@ export {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Render Phase 4 UI showing all extracted modules.
+ * Render module status UI showing all extracted components.
  *
  * @param {HTMLElement} container - Mount element
  * @private
  */
-function renderPhase2UI(container) {
+function renderModuleStatusUI(container) {
   const modules = [
+    { name: 'StateStore', status: 'ok', desc: 'Reactive state with persistence' },
+    { name: 'SourceController', status: 'ok', desc: 'Browser/device/generator input' },
+    { name: 'RenderLoop', status: 'ok', desc: 'Animation frame orchestration' },
+    { name: 'MeterRenderer', status: 'ok', desc: 'Meter/display coordination' },
     { name: 'K-weighting', status: 'ok', desc: 'ITU-R BS.1770-4 pre-filter' },
     { name: 'LUFSMeter', status: 'ok', desc: 'EBU R128 loudness measurement' },
     { name: 'TruePeakMeter', status: 'ok', desc: '4× oversampling peak detection' },
     { name: 'PPMMeter', status: 'ok', desc: 'IEC 60268-10 Type I ballistics' },
     { name: 'StereoMeter', status: 'ok', desc: 'Phase correlation analysis' },
     { name: 'AudioEngine', status: 'ok', desc: 'Web Audio context management' },
-    { name: 'utils/format', status: 'ok', desc: 'Fixed-width display formatting' },
-    { name: 'utils/math', status: 'ok', desc: 'dB conversion, smoothing, stats' },
-    { name: 'utils/dom', status: 'ok', desc: 'Canvas DPI, animation loops' },
-    { name: 'ui/colors', status: 'ok', desc: 'Meter color schemes (RTW-style)' },
     { name: 'MeterBar', status: 'ok', desc: 'LED-style horizontal bar meters' },
     { name: 'LoudnessRadar', status: 'ok', desc: 'EBU R128 loudness radar display' },
     { name: 'Goniometer', status: 'ok', desc: 'M/S stereo vectorscope' },
@@ -339,7 +363,7 @@ function renderPhase2UI(container) {
           margin-bottom: 1rem;
           color: #00d4aa;
           text-align: center;
-        ">Phase 4: UI Rendering Components</h2>
+        ">Phase 5: Application Integration</h2>
 
         <div style="margin-bottom: 1.5rem;">
           ${moduleList}
@@ -352,8 +376,8 @@ function renderPhase2UI(container) {
           margin-bottom: 1.5rem;
           text-align: center;
         ">
-          Canvas-based UI components extracted as ES modules.
-          <br>Ready for integration in Phase 5.
+          Application wiring complete. All modules extracted and integrated.
+          <br>Ready for full UI integration.
         </p>
 
         <div style="
