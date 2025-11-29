@@ -1515,7 +1515,7 @@ function measureLoop() {
   }
   // LRA also needs accumulation time (same as I)
   if (lraEl) {
-    if (elapsedSec >= DELAY_I && isFinite(readings.lra)) {
+    if (elapsedSec >= DELAY_I && readings.lra !== null && isFinite(readings.lra)) {
       lraEl.textContent = readings.lra.toFixed(1) + ' LU';
     } else {
       lraEl.textContent = '--.- LU';
@@ -1563,7 +1563,7 @@ function measureLoop() {
   }
 
   // Push to radar history (external as in original)
-  if (isFinite(readings.shortTerm)) {
+  if (readings.shortTerm !== null && isFinite(readings.shortTerm)) {
     const now = Date.now();
     const maxAge = radarMaxSeconds * 1000;
     // Remove old entries
