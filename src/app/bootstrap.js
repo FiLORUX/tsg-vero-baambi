@@ -22,6 +22,8 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
+console.log('%c[TSG] Bootstrap v2024-12-08-B loaded', 'color: lime; font-weight: bold');
+
 import { Goniometer } from '../ui/goniometer.js';
 import { CorrelationMeter } from '../ui/correlation-meter.js';
 import { LoudnessRadar } from '../ui/radar.js';
