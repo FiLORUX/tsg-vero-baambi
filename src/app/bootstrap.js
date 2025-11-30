@@ -878,12 +878,19 @@ function getWhiteNoiseBuffer() {
   if (whiteNoiseBuffer && whiteNoiseBuffer.sampleRate === ac.sampleRate) {
     return whiteNoiseBuffer;
   }
+  whiteNoiseBuffer = createNoiseBuffer();
+  return whiteNoiseBuffer;
+}
+
+// Create a NEW noise buffer (for uncorrelated stereo - each channel needs unique data)
+// EBU Tech 3341: Uncorrelated noise requires statistically independent L/R signals
+function createNoiseBuffer() {
   const bufferSize = 10 * ac.sampleRate; // 10 seconds for less frequent looping
   const crossfadeSize = Math.floor(0.05 * ac.sampleRate); // 50ms crossfade
-  whiteNoiseBuffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
-  const data = whiteNoiseBuffer.getChannelData(0);
+  const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+  const data = buffer.getChannelData(0);
 
-  // Fill with white noise
+  // Fill with white noise (unique random sequence)
   for (let i = 0; i < bufferSize; i++) {
     data[i] = Math.random() * 2 - 1;
   }
@@ -892,18 +899,18 @@ function getWhiteNoiseBuffer() {
   for (let i = 0; i < crossfadeSize; i++) {
     const fadeIn = i / crossfadeSize;
     const fadeOut = 1 - fadeIn;
-    // Blend end with beginning
     const endIdx = bufferSize - crossfadeSize + i;
     data[endIdx] = data[endIdx] * fadeOut + data[i] * fadeIn;
   }
 
-  return whiteNoiseBuffer;
+  return buffer;
 }
 
 // Create noise source with optional filtering
-function createNoiseSource(type, loFreq, hiFreq) {
+// Set uniqueBuffer=true for uncorrelated stereo (EBU requirement)
+function createNoiseSource(type, loFreq, hiFreq, uniqueBuffer = false) {
   const noise = ac.createBufferSource();
-  noise.buffer = getWhiteNoiseBuffer();
+  noise.buffer = uniqueBuffer ? createNoiseBuffer() : getWhiteNoiseBuffer();
   noise.loop = true;
 
   // For pink/brown noise, we need filtering
@@ -1145,9 +1152,10 @@ async function createGeneratorSignal(existingMonitorGain = null) {
 
   } else if (config.type === 'pink' || config.type === 'white' || config.type === 'brown') {
     if (config.routing === 'stereo-uncorr') {
-      // Uncorrelated: separate noise for L and R
-      const noiseL = createNoiseSource(config.type, config.lo, config.hi);
-      const noiseR = createNoiseSource(config.type, config.lo, config.hi);
+      // Uncorrelated: separate INDEPENDENT noise for L and R
+      // EBU Tech 3341: Each channel must have statistically independent noise
+      const noiseL = createNoiseSource(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
+      const noiseR = createNoiseSource(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
 
       const gainL = ac.createGain();
       const gainR = ac.createGain();
