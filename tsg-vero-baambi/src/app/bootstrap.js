@@ -1724,8 +1724,17 @@ const GlitchDebug = {
 window.GlitchDebug = GlitchDebug;
 console.log('%c[GLITCH DEBUG] Active - use GlitchDebug.reset() after starting generator', 'color: #4ecdc4; font-weight: bold');
 
+// Frame timing for glitch protection
+let lastRenderTime = performance.now();
+const FRAME_SKIP_THRESHOLD = 80; // Skip goniometer if frame > 80ms (protects against stale buffer data)
+
 function renderLoop() {
   const now = performance.now();
+  const frameDelta = now - lastRenderTime;
+  lastRenderTime = now;
+
+  // Skip goniometer on long frames to prevent visual glitches
+  const skipGoniometer = frameDelta > FRAME_SKIP_THRESHOLD;
 
   // Layout
   layoutXY();
@@ -1742,8 +1751,8 @@ function renderLoop() {
     stereoAnalysis.analyze(bufL, bufR);
   }
 
-  // Goniometer - pass TransitionGuard.shouldRender() for blanking
-  if (goniometer) {
+  // Goniometer - skip on long frames to prevent glitch artifacts
+  if (goniometer && !skipGoniometer) {
     goniometer.draw(bufL, bufR, TransitionGuard.shouldRender());
   }
 
