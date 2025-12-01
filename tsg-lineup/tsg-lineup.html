@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TSG Suite</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=2">
+<meta name="description" content="Thåst Signal Generator - A browser-based toolkit for broadcast line-up, tone, PLUGE, testcards, and visual sync references. Built entirely in HTML, CSS, and vanilla JavaScript.">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+html, body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    min-height: 100vh;
+    min-height: -webkit-fill-available; /* iOS Safari fix */
+}
+canvas {
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    touch-action: none; /* Prevent mobile gestures */
+}
+#overlay {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    color: white;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(14px, 2.5vw, 48px); /* Responsive with limits */
+    min-width: 12vw;
+    max-width: 56vw;
+    text-align: center;
+    background: rgba(0,0,0,0.58);
+    padding: 0.36em 0.6em;
+    border-radius: 10px;
+    z-index: 2;
+    pointer-events: none;
+    box-sizing: border-box;
+    word-break: break-word;
+    top: 4.5vh;
+    line-height: 1.4;
+}
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    #overlay {
+        font-size: clamp(12px, 3.5vw, 28px);
+        max-width: 80vw;
+    }
+}
+.tc-sync-bg {
+    position: absolute;
+    background: rgba(0,0,0,0.54);
+    border-radius: 14px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+#timecode, #syncInfo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 2vw;
+    color: white;
+    background: none;
+    position: absolute;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center; /* Ändra från flex-end till center */
+    justify-content: center; /* Behåll centrerad horisontellt */
+    text-align: center;
+    padding: 0;
+    white-space: nowrap;
+    line-height: 1.2; /* Justera för bättre vertikal centrering */
+    box-sizing: border-box;
+    overflow: hidden;
+}
+.sync-main {
+    font-size: 2vw;
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: flex-end;
+}
+.sync-ms-row {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start; /* Vänsterställ texten */
+    align-items: baseline; /* Justera alla element till samma baslinje */
+}
+.sync-ms-val {
+    font-size: 2.3vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: normal; /* Behåll normal vikt för "ms" */
+    text-align: right;
+    min-width: 5ch;
+    width: 5ch;
+    margin-right: 0.2em;
+    letter-spacing: 0.01em;
+    line-height: 1; /* Undvik extra mellanrum */
+    vertical-align: baseline; /* Justera till baslinjen */
+    -webkit-font-smoothing: antialiased; /* Förbättra textens skärpa */
+    -moz-osx-font-smoothing: grayscale; /* Förbättra textens skärpa */
+}
+.sync-ms-label {
+    font-size: 1.05vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: normal; /* "ms" ska inte vara fetstil */
+    opacity: 0.85;
+    margin-right: 0.2em;
+    line-height: 1;
+    vertical-align: baseline;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+.sync-audio-block {
+    display: inline-block;
+    font-size: 1.05vw;
+    font-family: 'Share Tech Mono', monospace;
+    font-weight: bold; /* "audio early/late" ska vara fetstil */
+    letter-spacing: 0.01em;
+    color: #fff;
+    line-height: 1;
+    vertical-align: baseline;
+    margin-left: 0.5em; /* Dynamiskt mellanrum baserat på textstorlek */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+#waveformBoxL, #waveformBoxR {
+    position: absolute;
+    z-index: 4;
+    background: rgba(0,0,0,0.45);
+    border-radius: 14px;
+    box-shadow: 0 1px 5px #0006;
+    opacity: 0;
+    transition: opacity 0.28s cubic-bezier(.4,0,.2,1);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+#waveformBoxL.visible, #waveformBoxR.visible {
+    opacity: 1;
+}
+.waveform-canvas {
+    width: 100%; height: 100%;
+    border-radius: 14px;
+    display: block;
+    background: transparent;
+}
+#audioStarter {
+    position: fixed;
+    z-index: 10000;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    cursor: pointer;
+    background: rgba(0,0,0,0);
+}
+#flash {
+    position: fixed;
+    z-index: 9999;
+    left: 0; width: 100vw;
+    pointer-events: none;
+    display: none;
+}
+#flash.red {
+    top: 75vh;
+    height: 25vh;
+    background: rgba(255,255,255,0.97);
+}
+</style>
+</head>
+<body>
+<canvas id="lineupCanvas" aria-label="Broadcast test pattern display" role="img"></canvas>
+<div id="overlay" aria-label="Signal information overlay" role="region"></div>
+<div id="tcBg" class="tc-sync-bg" aria-hidden="true"></div>
+<div id="syncBg" class="tc-sync-bg" aria-hidden="true"></div>
+<div id="timecode" aria-label="Timecode display" role="status" aria-live="off"></div>
+<div id="syncInfo" aria-label="Sync information display" role="status" aria-live="off"></div>
+<div id="waveformBoxL" aria-label="Left channel audio waveform" role="img"><canvas id="waveL" class="waveform-canvas"></canvas></div>
+<div id="waveformBoxR" aria-label="Right channel audio waveform" role="img"><canvas id="waveR" class="waveform-canvas"></canvas></div>
+<div id="audioStarter" role="button" tabindex="0" aria-label="Click to enable audio" title="Click anywhere to enable audio"></div>
+<div id="flash" class="red" aria-hidden="true"></div>
+<script>
+'use strict';
+
+// ==========================================
+// BROADCAST STANDARDS CONSTANTS (EBU/SMPTE)
+// ==========================================
+
+// Audio levels (current values preserved exactly)
+const AUDIO_LEVELS = {
+    STEREO_IDENT: 0.13,  // -17.7 dBFS
+    PIP_NORMAL: 0.18,    // -14.9 dBFS
+    PIP_EMPHASIS: 0.48   // -6.4 dBFS
+};
+
+// Timing constants (current values preserved exactly)
+const TIMING = {
+    STEREO_CYCLE_SEC: 3.0,      // Stereo ident cycle
+    STEREO_LEFT_ON_SEC: 2.75,   // LEFT channel on duration
+    SYNC_CYCLE_SEC: 4.0,        // Sync pattern cycle
+    PIP_DURATION_SEC: 0.04,     // 40ms pip
+    FLASH_DURATION_SEC: 0.04    // 40ms flash
+};
+
+// Tone frequencies (current values preserved exactly)
+const TONE_FREQ = {
+    PRIMARY: 1000,    // 1 kHz standard tone
+    EMPHASIS: 1200    // 1.2 kHz emphasis pip
+};
+
+// ==========================================
+// MULTI-DEVICE SYNC CONFIGURATION (WebRTC)
+// ==========================================
+
+// Parse sync parameters from URL
+const SYNC_CONFIG = {
+    room: new URLSearchParams(window.location.search).get('room') || null,
+    role: new URLSearchParams(window.location.search).get('role') || 'auto',
+    latency: parseFloat(new URLSearchParams(window.location.search).get('latency')) || 0.0
+};
+
+// WebRTC ICE servers (public STUN servers for NAT traversal)
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
+
+// Sync state
+let peerConnection = null;
+let dataChannel = null;
+let isMaster = false;
+let syncOffset = 0; // Master timecode - local timecode (seconds)
+let lastSyncReceived = 0;
+let connectionState = 'disconnected'; // disconnected, connecting, connected, failed
+
+// Latency measurement
+let rttSamples = []; // Recent RTT samples for averaging
+let averageRTT = 0; // Average round-trip time in ms
+let estimatedLatency = 0; // Estimated one-way latency in seconds
+
+// ==========================================
+// BROADCAST MATH UTILITIES
+// ==========================================
+
+/**
+ * Convert linear gain to dBFS
+ * @param {number} gain - Linear gain value (0-1)
+ * @returns {number} Level in dBFS
+ */
+function gainToDbfs(gain) {
+    return 20 * Math.log10(gain);
+}
+
+/**
+ * Convert RGB (0-255) to IRE (broadcast units)
+ * Rec.709: 16-235 range maps to 0-100 IRE
+ * @param {number} rgb - RGB value (0-255)
+ * @returns {number} IRE level
+ */
+function rgbToIre(rgb) {
+    return ((rgb - 16) / 219) * 100;
+}
+
+/**
+ * Check if RGB value is broadcast-safe (16-235 range)
+ * @param {number} rgb - RGB value to check
+ * @returns {boolean} True if broadcast-safe
+ */
+function isBroadcastSafe(rgb) {
+    return rgb >= 16 && rgb <= 235;
+}
+
+/**
+ * Safe wrapper for audio operations
+ * @param {Function} fn - Function to execute
+ * @param {string} context - Context description for logging
+ * @returns {*} Result of function or null on error
+ */
+function safeAudioCall(fn, context = 'Audio operation') {
+    try {
+        return fn();
+    } catch (e) {
+        console.warn(`${context} failed:`, e);
+        return null;
+    }
+}
+
+// --- Core params ---
+// Gradient dimensions (calculated in drawFrame)
+let gradH, gradY;
+
+// EBU Colour Bars (75% amplitude, 100% saturation) - Rec.709
+const ebuColors709 = [
+    '#EBEBEB', // White (235,235,235)
+    '#B4B410', // Yellow (180,180,16)
+    '#10B4B4', // Cyan (16,180,180)
+    '#10B410', // Green (16,180,16)
+    '#B410B4', // Magenta (180,16,180)
+    '#B41010', // Red (180,16,16)
+    '#1010B4'  // Blue (16,16,180)
+];
+
+const redRec709 = '#B41010';  // Broadcast-safe röd
+const params = new URLSearchParams(window.location.search);
+const STATE_MOS = 0, STATE_STEREOIDENT = 1, STATE_SYNC = 2;
+let syncState = STATE_MOS;
+
+// === Framerate-parsing med stöd för broadcast-konventioner ===
+function parseFramerate(val) {
+    if (!val) return 50;
+
+    let raw = val.toString().toLowerCase()
+        .replace(',', '.')
+        .replace(/[^\d.pisdf]/g, '');
+
+    if (raw === '5994') return 59.94;
+    if (raw === '2397' || raw === '23976') return 23.976;
+
+    const isInterlaced = /i/.test(raw);
+    const isPsf = /psf/.test(raw);
+    let num = parseFloat(raw.replace(/[^0-9.]/g, ''));
+
+    if (isInterlaced) {
+        if (Math.abs(num - 50) < 0.5) return 25.0;
+        if (Math.abs(num - 60) < 1) return 29.97;
+    }
+
+    if (isNaN(num)) return 50;
+
+    if (Math.abs(num - 23.976) < 0.02) return 23.976;
+    if (Math.abs(num - 24.0) < 0.02) return 24.0;
+    if (Math.abs(num - 25.0) < 0.02) return 25.0;
+    if (Math.abs(num - 29.97) < 0.02) return 29.97;
+    if (Math.abs(num - 30.0) < 0.02) return 30.0;
+    if (Math.abs(num - 50.0) < 0.02) return 50.0;
+    if (Math.abs(num - 59.94) < 0.02) return 59.94;
+    if (Math.abs(num - 60.0) < 0.02) return 60.0;
+
+    return num;
+}
+
+// === Parse framerate och upplösning ===
+const framerateParam = params.get('fps') || params.get('fr');
+const framerate = parseFramerate(framerateParam || '50p');
+
+let scanMode = 'p'; // default
+if (framerateParam?.toLowerCase().includes('i')) {
+    scanMode = 'i';
+} else if (framerateParam?.toLowerCase().includes('psf')) {
+    scanMode = 'psf';
+}
+
+// === Resolution parsing ===
+const resParam = (params.get('res') || '').toLowerCase();
+let resolution = '1080'; // default (mutable - ändras i if-statements)
+if (resParam.includes('720')) resolution = '720';
+else if (resParam.includes('sd') || resParam.includes('576')) resolution = '576';
+else if (resParam.includes('uhd') || resParam.includes('2160')) resolution = '2160';
+else if (resParam.includes('4320')) resolution = '4320';
+
+// === Drop-frame flagga ===
+// Drop-frame enligt SMPTE 12M-2: endast 29.97 och 59.94 fps
+const isDropFrame = (framerate === 29.97 || framerate === 59.94);
+
+// === Slate-id + EBU-rad ===
+let slateId = params.get('slate') || 'TSG SUITE<br>Thåst Signal Generator'; // mutable - ändras nedan
+
+// Visar EBU-rad som "EBU Tech 3299: 1080p/50" etc
+function ebuFormat(scan, fps, df) {
+    let fpsText = [23.976, 29.97, 59.94].includes(fps) ? fps.toFixed(2) : fps.toFixed(0);
+    if (df) fpsText += ' DF';
+    return `EBU Tech 3299: ${resolution}${scan}/${fpsText}`;
+}
+
+// ==========================================
+// WEBRTC PEER CONNECTION & SIGNALING
+// ==========================================
+
+/**
+ * Initialize WebRTC peer connection as Master
+ * Creates offer and displays it as QR code for slaves to scan
+ */
+async function initMaster() {
+    // Check WebRTC support
+    if (!window.RTCPeerConnection) {
+        console.error('[MASTER] WebRTC not supported in this browser');
+        connectionState = 'failed';
+        return null;
+    }
+
+    isMaster = true;
+    connectionState = 'connecting';
+
+    peerConnection = new RTCPeerConnection(ICE_SERVERS);
+
+    // Create data channel for timecode broadcast
+    dataChannel = peerConnection.createDataChannel('timecode', {
+        ordered: false, // Allow out-of-order delivery for lower latency
+        maxRetransmits: 0 // Don't retransmit old packets
+    });
+
+    dataChannel.onopen = () => {
+        connectionState = 'connected';
+        console.log('[MASTER] DataChannel open - broadcasting timecode');
+    };
+
+    dataChannel.onclose = () => {
+        connectionState = 'disconnected';
+        console.log('[MASTER] DataChannel closed');
+    };
+
+    // Handle ICE candidates
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            console.log('[MASTER] ICE candidate:', event.candidate.candidate);
+        }
+    };
+
+    // Create offer
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+
+    // Wait for ICE gathering to complete
+    await new Promise((resolve) => {
+        if (peerConnection.iceGatheringState === 'complete') {
+            resolve();
+        } else {
+            peerConnection.addEventListener('icegatheringstatechange', () => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    resolve();
+                }
+            });
+        }
+    });
+
+    // Encode offer as base64 for QR code
+    const offerData = btoa(JSON.stringify(peerConnection.localDescription));
+    showSyncUI(offerData, 'offer');
+
+    return offerData;
+}
+
+/**
+ * Initialize WebRTC peer connection as Slave
+ * Receives master offer, creates answer, and syncs to master timecode
+ * @param {string} offerData - Base64 encoded SDP offer from master
+ */
+async function initSlave(offerData) {
+    // Check WebRTC support
+    if (!window.RTCPeerConnection) {
+        console.error('[SLAVE] WebRTC not supported in this browser');
+        connectionState = 'failed';
+        return null;
+    }
+
+    isMaster = false;
+    connectionState = 'connecting';
+
+    peerConnection = new RTCPeerConnection(ICE_SERVERS);
+
+    // Listen for data channel from master
+    peerConnection.ondatachannel = (event) => {
+        dataChannel = event.channel;
+
+        dataChannel.onopen = () => {
+            connectionState = 'connected';
+            console.log('[SLAVE] DataChannel open - receiving timecode');
+        };
+
+        dataChannel.onmessage = (event) => {
+            handleSyncData(event.data);
+        };
+
+        dataChannel.onclose = () => {
+            connectionState = 'disconnected';
+            console.log('[SLAVE] DataChannel closed');
+        };
+    };
+
+    // Handle ICE candidates
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            console.log('[SLAVE] ICE candidate:', event.candidate.candidate);
+        }
+    };
+
+    // Set remote description (master's offer)
+    const offer = JSON.parse(atob(offerData));
+    await peerConnection.setRemoteDescription(offer);
+
+    // Create answer
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+
+    // Wait for ICE gathering to complete
+    await new Promise((resolve) => {
+        if (peerConnection.iceGatheringState === 'complete') {
+            resolve();
+        } else {
+            peerConnection.addEventListener('icegatheringstatechange', () => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    resolve();
+                }
+            });
+        }
+    });
+
+    // Encode answer as base64 for QR code
+    const answerData = btoa(JSON.stringify(peerConnection.localDescription));
+    showSyncUI(answerData, 'answer');
+
+    return answerData;
+}
+
+/**
+ * Complete handshake by setting slave's answer on master
+ * @param {string} answerData - Base64 encoded SDP answer from slave
+ */
+async function acceptAnswer(answerData) {
+    if (!isMaster || !peerConnection) {
+        console.error('[MASTER] Cannot accept answer - not initialized as master');
+        return;
+    }
+
+    const answer = JSON.parse(atob(answerData));
+    await peerConnection.setRemoteDescription(answer);
+    console.log('[MASTER] Answer accepted - connection established');
+}
+
+/**
+ * Handle incoming sync data from master (slave only)
+ * @param {string} data - JSON encoded sync data
+ */
+function handleSyncData(data) {
+    try {
+        const parsed = JSON.parse(data);
+
+        if (parsed.type === 'TIMECODE_SYNC') {
+            const receiveTime = performance.now();
+            const rtt = receiveTime - parsed.timestamp; // Round-trip time estimate
+
+            // Collect RTT samples for latency estimation (keep last 20)
+            rttSamples.push(rtt);
+            if (rttSamples.length > 20) {
+                rttSamples.shift();
+            }
+
+            // Calculate average RTT (exclude outliers > 200ms)
+            const validSamples = rttSamples.filter(s => s < 200);
+            if (validSamples.length > 0) {
+                averageRTT = validSamples.reduce((a, b) => a + b, 0) / validSamples.length;
+                estimatedLatency = (averageRTT / 2000); // Convert to seconds, divide by 2
+            }
+
+            // Network delay: use average RTT if available, otherwise current RTT
+            const networkDelay = estimatedLatency || (rtt / 2000);
+
+            // Correct for network latency + user-specified device latency
+            const masterTime = parsed.masterTime + networkDelay + SYNC_CONFIG.latency;
+            const localTime = getRawCentralSeconds(); // Use RAW time to avoid feedback loop!
+
+            // Calculate offset with exponential smoothing (0.1 = smooth, 1.0 = instant)
+            const rawOffset = masterTime - localTime;
+            syncOffset += (rawOffset - syncOffset) * 0.1;
+
+            // Update state from master
+            syncState = parsed.state;
+            if (parsed.countdown !== undefined) {
+                countdownVal = parsed.countdown;
+            }
+
+            lastSyncReceived = receiveTime;
+        }
+    } catch (e) {
+        console.warn('[SLAVE] Failed to parse sync data:', e);
+    }
+}
+
+/**
+ * Broadcast timecode to all connected slaves (master only)
+ * Called every 17ms from update loop
+ */
+function broadcastTimecode() {
+    if (!isMaster || !dataChannel || dataChannel.readyState !== 'open') return;
+
+    const syncData = {
+        type: 'TIMECODE_SYNC',
+        masterTime: getRawCentralSeconds(), // Master always sends raw time
+        state: syncState,
+        countdown: countdownVal,
+        timestamp: performance.now()
+    };
+
+    try {
+        dataChannel.send(JSON.stringify(syncData));
+    } catch (e) {
+        console.warn('[MASTER] Failed to broadcast timecode:', e);
+    }
+}
+
+// ==========================================
+// QR CODE GENERATOR (ISO/IEC 18004:2015)
+// ==========================================
+
+/**
+ * QRCode.js - Battle-tested QR code library
+ * Inlined for offline operation (zero CDN dependencies)
+ *
+ * Source: https://github.com/davidshimjs/qrcodejs
+ * Version: 1.0.0 (19927 bytes minified)
+ * License: MIT
+ *
+ * Supports: SVG, Canvas, Table rendering
+ * Error correction: L, M, Q, H levels
+ * Auto version selection (1-40)
+ */
+var QRCode;!function(){function a(a){this.mode=c.MODE_8BIT_BYTE,this.data=a,this.parsedData=[];for(var b=[],d=0,e=this.data.length;e>d;d++){var f=this.data.charCodeAt(d);f>65536?(b[0]=240|(1835008&f)>>>18,b[1]=128|(258048&f)>>>12,b[2]=128|(4032&f)>>>6,b[3]=128|63&f):f>2048?(b[0]=224|(61440&f)>>>12,b[1]=128|(4032&f)>>>6,b[2]=128|63&f):f>128?(b[0]=192|(1984&f)>>>6,b[1]=128|63&f):b[0]=f,this.parsedData=this.parsedData.concat(b)}this.parsedData.length!=this.data.length&&(this.parsedData.unshift(191),this.parsedData.unshift(187),this.parsedData.unshift(239))}function b(a,b){this.typeNumber=a,this.errorCorrectLevel=b,this.modules=null,this.moduleCount=0,this.dataCache=null,this.dataList=[]}function i(a,b){if(void 0==a.length)throw new Error(a.length+"/"+b);for(var c=0;c<a.length&&0==a[c];)c++;this.num=new Array(a.length-c+b);for(var d=0;d<a.length-c;d++)this.num[d]=a[d+c]}function j(a,b){this.totalCount=a,this.dataCount=b}function k(){this.buffer=[],this.length=0}function m(){return"undefined"!=typeof CanvasRenderingContext2D}function n(){var a=!1,b=navigator.userAgent;return/android/i.test(b)&&(a=!0,aMat=b.toString().match(/android ([0-9]\.[0-9])/i),aMat&&aMat[1]&&(a=parseFloat(aMat[1]))),a}function r(a,b){for(var c=1,e=s(a),f=0,g=l.length;g>=f;f++){var h=0;switch(b){case d.L:h=l[f][0];break;case d.M:h=l[f][1];break;case d.Q:h=l[f][2];break;case d.H:h=l[f][3]}if(h>=e)break;c++}if(c>l.length)throw new Error("Too long data");return c}function s(a){var b=encodeURI(a).toString().replace(/\%[0-9a-fA-F]{2}/g,"a");return b.length+(b.length!=a?3:0)}a.prototype={getLength:function(){return this.parsedData.length},write:function(a){for(var b=0,c=this.parsedData.length;c>b;b++)a.put(this.parsedData[b],8)}},b.prototype={addData:function(b){var c=new a(b);this.dataList.push(c),this.dataCache=null},isDark:function(a,b){if(0>a||this.moduleCount<=a||0>b||this.moduleCount<=b)throw new Error(a+","+b);return this.modules[a][b]},getModuleCount:function(){return this.moduleCount},make:function(){this.makeImpl(!1,this.getBestMaskPattern())},makeImpl:function(a,c){this.moduleCount=4*this.typeNumber+17,this.modules=new Array(this.moduleCount);for(var d=0;d<this.moduleCount;d++){this.modules[d]=new Array(this.moduleCount);for(var e=0;e<this.moduleCount;e++)this.modules[d][e]=null}this.setupPositionProbePattern(0,0),this.setupPositionProbePattern(this.moduleCount-7,0),this.setupPositionProbePattern(0,this.moduleCount-7),this.setupPositionAdjustPattern(),this.setupTimingPattern(),this.setupTypeInfo(a,c),this.typeNumber>=7&&this.setupTypeNumber(a),null==this.dataCache&&(this.dataCache=b.createData(this.typeNumber,this.errorCorrectLevel,this.dataList)),this.mapData(this.dataCache,c)},setupPositionProbePattern:function(a,b){for(var c=-1;7>=c;c++)if(!(-1>=a+c||this.moduleCount<=a+c))for(var d=-1;7>=d;d++)-1>=b+d||this.moduleCount<=b+d||(this.modules[a+c][b+d]=c>=0&&6>=c&&(0==d||6==d)||d>=0&&6>=d&&(0==c||6==c)||c>=2&&4>=c&&d>=2&&4>=d?!0:!1)},getBestMaskPattern:function(){for(var a=0,b=0,c=0;8>c;c++){this.makeImpl(!0,c);var d=f.getLostPoint(this);(0==c||a>d)&&(a=d,b=c)}return b},createMovieClip:function(a,b,c){var d=a.createEmptyMovieClip(b,c),e=1;this.make();for(var f=0;f<this.modules.length;f++)for(var g=f*e,h=0;h<this.modules[f].length;h++){var i=h*e,j=this.modules[f][h];j&&(d.beginFill(0,100),d.moveTo(i,g),d.lineTo(i+e,g),d.lineTo(i+e,g+e),d.lineTo(i,g+e),d.endFill())}return d},setupTimingPattern:function(){for(var a=8;a<this.moduleCount-8;a++)null==this.modules[a][6]&&(this.modules[a][6]=0==a%2);for(var b=8;b<this.moduleCount-8;b++)null==this.modules[6][b]&&(this.modules[6][b]=0==b%2)},setupPositionAdjustPattern:function(){for(var a=f.getPatternPosition(this.typeNumber),b=0;b<a.length;b++)for(var c=0;c<a.length;c++){var d=a[b],e=a[c];if(null==this.modules[d][e])for(var g=-2;2>=g;g++)for(var h=-2;2>=h;h++)this.modules[d+g][e+h]=-2==g||2==g||-2==h||2==h||0==g&&0==h?!0:!1}},setupTypeNumber:function(a){for(var b=f.getBCHTypeNumber(this.typeNumber),c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[Math.floor(c/3)][c%3+this.moduleCount-8-3]=d}for(var c=0;18>c;c++){var d=!a&&1==(1&b>>c);this.modules[c%3+this.moduleCount-8-3][Math.floor(c/3)]=d}},setupTypeInfo:function(a,b){for(var c=this.errorCorrectLevel<<3|b,d=f.getBCHTypeInfo(c),e=0;15>e;e++){var g=!a&&1==(1&d>>e);6>e?this.modules[e][8]=g:8>e?this.modules[e+1][8]=g:this.modules[this.moduleCount-15+e][8]=g}for(var e=0;15>e;e++){var g=!a&&1==(1&d>>e);8>e?this.modules[8][this.moduleCount-e-1]=g:9>e?this.modules[8][15-e-1+1]=g:this.modules[8][15-e-1]=g}this.modules[this.moduleCount-8][8]=!a},mapData:function(a,b){for(var c=-1,d=this.moduleCount-1,e=7,g=0,h=this.moduleCount-1;h>0;h-=2)for(6==h&&h--;;){for(var i=0;2>i;i++)if(null==this.modules[d][h-i]){var j=!1;g<a.length&&(j=1==(1&a[g]>>>e));var k=f.getMask(b,d,h-i);k&&(j=!j),this.modules[d][h-i]=j,e--,-1==e&&(g++,e=7)}if(d+=c,0>d||this.moduleCount<=d){d-=c,c=-c;break}}}},b.PAD0=236,b.PAD1=17,b.createData=function(a,c,d){for(var e=j.getRSBlocks(a,c),g=new k,h=0;h<d.length;h++){var i=d[h];g.put(i.mode,4),g.put(i.getLength(),f.getLengthInBits(i.mode,a)),i.write(g)}for(var l=0,h=0;h<e.length;h++)l+=e[h].dataCount;if(g.getLengthInBits()>8*l)throw new Error("code length overflow. ("+g.getLengthInBits()+">"+8*l+")");for(g.getLengthInBits()+4<=8*l&&g.put(0,4);0!=g.getLengthInBits()%8;)g.putBit(!1);for(;;){if(g.getLengthInBits()>=8*l)break;if(g.put(b.PAD0,8),g.getLengthInBits()>=8*l)break;g.put(b.PAD1,8)}return b.createBytes(g,e)},b.createBytes=function(a,b){for(var c=0,d=0,e=0,g=new Array(b.length),h=new Array(b.length),j=0;j<b.length;j++){var k=b[j].dataCount,l=b[j].totalCount-k;d=Math.max(d,k),e=Math.max(e,l),g[j]=new Array(k);for(var m=0;m<g[j].length;m++)g[j][m]=255&a.buffer[m+c];c+=k;var n=f.getErrorCorrectPolynomial(l),o=new i(g[j],n.getLength()-1),p=o.mod(n);h[j]=new Array(n.getLength()-1);for(var m=0;m<h[j].length;m++){var q=m+p.getLength()-h[j].length;h[j][m]=q>=0?p.get(q):0}}for(var r=0,m=0;m<b.length;m++)r+=b[m].totalCount;for(var s=new Array(r),t=0,m=0;d>m;m++)for(var j=0;j<b.length;j++)m<g[j].length&&(s[t++]=g[j][m]);for(var m=0;e>m;m++)for(var j=0;j<b.length;j++)m<h[j].length&&(s[t++]=h[j][m]);return s};for(var c={MODE_NUMBER:1,MODE_ALPHA_NUM:2,MODE_8BIT_BYTE:4,MODE_KANJI:8},d={L:1,M:0,Q:3,H:2},e={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7},f={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:1335,G18:7973,G15_MASK:21522,getBCHTypeInfo:function(a){for(var b=a<<10;f.getBCHDigit(b)-f.getBCHDigit(f.G15)>=0;)b^=f.G15<<f.getBCHDigit(b)-f.getBCHDigit(f.G15);return(a<<10|b)^f.G15_MASK},getBCHTypeNumber:function(a){for(var b=a<<12;f.getBCHDigit(b)-f.getBCHDigit(f.G18)>=0;)b^=f.G18<<f.getBCHDigit(b)-f.getBCHDigit(f.G18);return a<<12|b},getBCHDigit:function(a){for(var b=0;0!=a;)b++,a>>>=1;return b},getPatternPosition:function(a){return f.PATTERN_POSITION_TABLE[a-1]},getMask:function(a,b,c){switch(a){case e.PATTERN000:return 0==(b+c)%2;case e.PATTERN001:return 0==b%2;case e.PATTERN010:return 0==c%3;case e.PATTERN011:return 0==(b+c)%3;case e.PATTERN100:return 0==(Math.floor(b/2)+Math.floor(c/3))%2;case e.PATTERN101:return 0==b*c%2+b*c%3;case e.PATTERN110:return 0==(b*c%2+b*c%3)%2;case e.PATTERN111:return 0==(b*c%3+(b+c)%2)%2;default:throw new Error("bad maskPattern:"+a)}},getErrorCorrectPolynomial:function(a){for(var b=new i([1],0),c=0;a>c;c++)b=b.multiply(new i([1,g.gexp(c)],0));return b},getLengthInBits:function(a,b){if(b>=1&&10>b)switch(a){case c.MODE_NUMBER:return 10;case c.MODE_ALPHA_NUM:return 9;case c.MODE_8BIT_BYTE:return 8;case c.MODE_KANJI:return 8;default:throw new Error("mode:"+a)}else if(27>b)switch(a){case c.MODE_NUMBER:return 12;case c.MODE_ALPHA_NUM:return 11;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 10;default:throw new Error("mode:"+a)}else{if(!(41>b))throw new Error("type:"+b);switch(a){case c.MODE_NUMBER:return 14;case c.MODE_ALPHA_NUM:return 13;case c.MODE_8BIT_BYTE:return 16;case c.MODE_KANJI:return 12;default:throw new Error("mode:"+a)}}},getLostPoint:function(a){for(var b=a.getModuleCount(),c=0,d=0;b>d;d++)for(var e=0;b>e;e++){for(var f=0,g=a.isDark(d,e),h=-1;1>=h;h++)if(!(0>d+h||d+h>=b))for(var i=-1;1>=i;i++)0>e+i||e+i>=b||(0!=h||0!=i)&&g==a.isDark(d+h,e+i)&&f++;f>5&&(c+=3+f-5)}for(var d=0;b-1>d;d++)for(var e=0;b-1>e;e++){var j=0;a.isDark(d,e)&&j++,a.isDark(d+1,e)&&j++,a.isDark(d,e+1)&&j++,a.isDark(d+1,e+1)&&j++,(0==j||4==j)&&(c+=3)}for(var d=0;b>d;d++)for(var e=0;b-6>e;e++)a.isDark(d,e)&&!a.isDark(d,e+1)&&a.isDark(d,e+2)&&a.isDark(d,e+3)&&a.isDark(d,e+4)&&!a.isDark(d,e+5)&&a.isDark(d,e+6)&&(c+=40);for(var e=0;b>e;e++)for(var d=0;b-6>d;d++)a.isDark(d,e)&&!a.isDark(d+1,e)&&a.isDark(d+2,e)&&a.isDark(d+3,e)&&a.isDark(d+4,e)&&!a.isDark(d+5,e)&&a.isDark(d+6,e)&&(c+=40);for(var k=0,e=0;b>e;e++)for(var d=0;b>d;d++)a.isDark(d,e)&&k++;var l=Math.abs(100*k/b/b-50)/5;return c+=10*l}},g={glog:function(a){if(1>a)throw new Error("glog("+a+")");return g.LOG_TABLE[a]},gexp:function(a){for(;0>a;)a+=255;for(;a>=256;)a-=255;return g.EXP_TABLE[a]},EXP_TABLE:new Array(256),LOG_TABLE:new Array(256)},h=0;8>h;h++)g.EXP_TABLE[h]=1<<h;for(var h=8;256>h;h++)g.EXP_TABLE[h]=g.EXP_TABLE[h-4]^g.EXP_TABLE[h-5]^g.EXP_TABLE[h-6]^g.EXP_TABLE[h-8];for(var h=0;255>h;h++)g.LOG_TABLE[g.EXP_TABLE[h]]=h;i.prototype={get:function(a){return this.num[a]},getLength:function(){return this.num.length},multiply:function(a){for(var b=new Array(this.getLength()+a.getLength()-1),c=0;c<this.getLength();c++)for(var d=0;d<a.getLength();d++)b[c+d]^=g.gexp(g.glog(this.get(c))+g.glog(a.get(d)));return new i(b,0)},mod:function(a){if(this.getLength()-a.getLength()<0)return this;for(var b=g.glog(this.get(0))-g.glog(a.get(0)),c=new Array(this.getLength()),d=0;d<this.getLength();d++)c[d]=this.get(d);for(var d=0;d<a.getLength();d++)c[d]^=g.gexp(g.glog(a.get(d))+b);return new i(c,0).mod(a)}},j.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],j.getRSBlocks=function(a,b){var c=j.getRsBlockTable(a,b);if(void 0==c)throw new Error("bad rs block @ typeNumber:"+a+"/errorCorrectLevel:"+b);for(var d=c.length/3,e=[],f=0;d>f;f++)for(var g=c[3*f+0],h=c[3*f+1],i=c[3*f+2],k=0;g>k;k++)e.push(new j(h,i));return e},j.getRsBlockTable=function(a,b){switch(b){case d.L:return j.RS_BLOCK_TABLE[4*(a-1)+0];case d.M:return j.RS_BLOCK_TABLE[4*(a-1)+1];case d.Q:return j.RS_BLOCK_TABLE[4*(a-1)+2];case d.H:return j.RS_BLOCK_TABLE[4*(a-1)+3];default:return void 0}},k.prototype={get:function(a){var b=Math.floor(a/8);return 1==(1&this.buffer[b]>>>7-a%8)},put:function(a,b){for(var c=0;b>c;c++)this.putBit(1==(1&a>>>b-c-1))},getLengthInBits:function(){return this.length},putBit:function(a){var b=Math.floor(this.length/8);this.buffer.length<=b&&this.buffer.push(0),a&&(this.buffer[b]|=128>>>this.length%8),this.length++}};var l=[[17,14,11,7],[32,26,20,14],[53,42,32,24],[78,62,46,34],[106,84,60,44],[134,106,74,58],[154,122,86,64],[192,152,108,84],[230,180,130,98],[271,213,151,119],[321,251,177,137],[367,287,203,155],[425,331,241,177],[458,362,258,194],[520,412,292,220],[586,450,322,250],[644,504,364,280],[718,560,394,310],[792,624,442,338],[858,666,482,382],[929,711,509,403],[1003,779,565,439],[1091,857,611,461],[1171,911,661,511],[1273,997,715,535],[1367,1059,751,593],[1465,1125,805,625],[1528,1190,868,658],[1628,1264,908,698],[1732,1370,982,742],[1840,1452,1030,790],[1952,1538,1112,842],[2068,1628,1168,898],[2188,1722,1228,958],[2303,1809,1283,983],[2431,1911,1351,1051],[2563,1989,1423,1093],[2699,2099,1499,1139],[2809,2213,1579,1219],[2953,2331,1663,1273]],o=function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){function g(a,b){var c=document.createElementNS("http://www.w3.org/2000/svg",a);for(var d in b)b.hasOwnProperty(d)&&c.setAttribute(d,b[d]);return c}var b=this._htOption,c=this._el,d=a.getModuleCount();Math.floor(b.width/d),Math.floor(b.height/d),this.clear();var h=g("svg",{viewBox:"0 0 "+String(d)+" "+String(d),width:"100%",height:"100%",fill:b.colorLight});h.setAttributeNS("http://www.w3.org/2000/xmlns/","xmlns:xlink","http://www.w3.org/1999/xlink"),c.appendChild(h),h.appendChild(g("rect",{fill:b.colorDark,width:"1",height:"1",id:"template"}));for(var i=0;d>i;i++)for(var j=0;d>j;j++)if(a.isDark(i,j)){var k=g("use",{x:String(i),y:String(j)});k.setAttributeNS("http://www.w3.org/1999/xlink","href","#template"),h.appendChild(k)}},a.prototype.clear=function(){for(;this._el.hasChildNodes();)this._el.removeChild(this._el.lastChild)},a}(),p="svg"===document.documentElement.tagName.toLowerCase(),q=p?o:m()?function(){function a(){this._elImage.src=this._elCanvas.toDataURL("image/png"),this._elImage.style.display="block",this._elCanvas.style.display="none"}function d(a,b){var c=this;if(c._fFail=b,c._fSuccess=a,null===c._bSupportDataURI){var d=document.createElement("img"),e=function(){c._bSupportDataURI=!1,c._fFail&&_fFail.call(c)},f=function(){c._bSupportDataURI=!0,c._fSuccess&&c._fSuccess.call(c)};return d.onabort=e,d.onerror=e,d.onload=f,d.src="data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==",void 0}c._bSupportDataURI===!0&&c._fSuccess?c._fSuccess.call(c):c._bSupportDataURI===!1&&c._fFail&&c._fFail.call(c)}if(this._android&&this._android<=2.1){var b=1/window.devicePixelRatio,c=CanvasRenderingContext2D.prototype.drawImage;CanvasRenderingContext2D.prototype.drawImage=function(a,d,e,f,g,h,i,j){if("nodeName"in a&&/img/i.test(a.nodeName))for(var l=arguments.length-1;l>=1;l--)arguments[l]=arguments[l]*b;else"undefined"==typeof j&&(arguments[1]*=b,arguments[2]*=b,arguments[3]*=b,arguments[4]*=b);c.apply(this,arguments)}}var e=function(a,b){this._bIsPainted=!1,this._android=n(),this._htOption=b,this._elCanvas=document.createElement("canvas"),this._elCanvas.width=b.width,this._elCanvas.height=b.height,a.appendChild(this._elCanvas),this._el=a,this._oContext=this._elCanvas.getContext("2d"),this._bIsPainted=!1,this._elImage=document.createElement("img"),this._elImage.style.display="none",this._el.appendChild(this._elImage),this._bSupportDataURI=null};return e.prototype.draw=function(a){var b=this._elImage,c=this._oContext,d=this._htOption,e=a.getModuleCount(),f=d.width/e,g=d.height/e,h=Math.round(f),i=Math.round(g);b.style.display="none",this.clear();for(var j=0;e>j;j++)for(var k=0;e>k;k++){var l=a.isDark(j,k),m=k*f,n=j*g;c.strokeStyle=l?d.colorDark:d.colorLight,c.lineWidth=1,c.fillStyle=l?d.colorDark:d.colorLight,c.fillRect(m,n,f,g),c.strokeRect(Math.floor(m)+.5,Math.floor(n)+.5,h,i),c.strokeRect(Math.ceil(m)-.5,Math.ceil(n)-.5,h,i)}this._bIsPainted=!0},e.prototype.makeImage=function(){this._bIsPainted&&d.call(this,a)},e.prototype.isPainted=function(){return this._bIsPainted},e.prototype.clear=function(){this._oContext.clearRect(0,0,this._elCanvas.width,this._elCanvas.height),this._bIsPainted=!1},e.prototype.round=function(a){return a?Math.floor(1e3*a)/1e3:a},e}():function(){var a=function(a,b){this._el=a,this._htOption=b};return a.prototype.draw=function(a){for(var b=this._htOption,c=this._el,d=a.getModuleCount(),e=Math.floor(b.width/d),f=Math.floor(b.height/d),g=['<table style="border:0;border-collapse:collapse;">'],h=0;d>h;h++){g.push("<tr>");for(var i=0;d>i;i++)g.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:'+e+"px;height:"+f+"px;background-color:"+(a.isDark(h,i)?b.colorDark:b.colorLight)+';"></td>');g.push("</tr>")}g.push("</table>"),c.innerHTML=g.join("");var j=c.childNodes[0],k=(b.width-j.offsetWidth)/2,l=(b.height-j.offsetHeight)/2;k>0&&l>0&&(j.style.margin=l+"px "+k+"px")},a.prototype.clear=function(){this._el.innerHTML=""},a}();QRCode=function(a,b){if(this._htOption={width:256,height:256,typeNumber:4,colorDark:"#000000",colorLight:"#ffffff",correctLevel:d.H},"string"==typeof b&&(b={text:b}),b)for(var c in b)this._htOption[c]=b[c];"string"==typeof a&&(a=document.getElementById(a)),this._android=n(),this._el=a,this._oQRCode=null,this._oDrawing=new q(this._el,this._htOption),this._htOption.text&&this.makeCode(this._htOption.text)},QRCode.prototype.makeCode=function(a){this._oQRCode=new b(r(a,this._htOption.correctLevel),this._htOption.correctLevel),this._oQRCode.addData(a),this._oQRCode.make(),this._el.title=a,this._oDrawing.draw(this._oQRCode),this.makeImage()},QRCode.prototype.makeImage=function(){"function"==typeof this._oDrawing.makeImage&&(!this._android||this._android>=3)&&this._oDrawing.makeImage()},QRCode.prototype.clear=function(){this._oDrawing.clear()},QRCode.CorrectLevel=d}();
+
+/**
+ * Wrapper class for compatibility with existing code
+ * Provides static generateSVG method using QRCode.js library
+ */
+class QRCodeGenerator {
+    static _tempContainer = null;
+
+    /**
+     * Generate SVG QR code using QRCode.js library
+     * Compatible interface with previous implementation
+     * @param {string} data - Data to encode
+     * @param {number} size - Output size in pixels
+     * @returns {string} - SVG markup
+     */
+    static generateSVG(data, size = 256) {
+        // Create temporary container if needed
+        if (!this._tempContainer) {
+            this._tempContainer = document.createElement('div');
+            this._tempContainer.style.display = 'none';
+            document.body.appendChild(this._tempContainer);
+        }
+
+        // Clear previous content
+        this._tempContainer.innerHTML = '';
+
+        // Generate QR code with SVG rendering
+        const qr = new QRCode(this._tempContainer, {
+            text: data,
+            width: size,
+            height: size,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H // High error correction
+        });
+
+        // Extract SVG from container
+        const svg = this._tempContainer.querySelector('svg');
+        if (!svg) {
+            throw new Error('QR code generation failed - no SVG produced');
+        }
+
+        // Return SVG markup as string
+        return svg.outerHTML;
+    }
+}
+
+// ==========================================
+// VISUAL SYNC HANDSHAKE OVERLAY
+// ==========================================
+
+// State for overlay
+let syncOverlayVisible = false;
+let syncOverlayData = null;
+let syncOverlayType = null;
+let qrCodeImage = null; // Cached QR code image
+
+/**
+ * Toggle sync overlay visibility
+ * @param {boolean} visible - Show or hide overlay
+ */
+function toggleSyncOverlay(visible) {
+    syncOverlayVisible = visible;
+
+    // Hide all DOM overlays when QR is visible (so it's not covered)
+    const displayValue = visible ? 'none' : '';
+    overlay.style.display = displayValue;
+    tcBg.style.display = displayValue;
+    syncBg.style.display = displayValue;
+    timecode.style.display = displayValue;
+    syncInfo.style.display = displayValue;
+    waveBoxL.style.display = displayValue;
+    waveBoxR.style.display = displayValue;
+
+    if (!visible) {
+        syncOverlayData = null;
+        syncOverlayType = null;
+        qrCodeImage = null;
+    }
+}
+
+/**
+ * Generate QR code image from data
+ * @param {string} data - Data to encode
+ */
+function generateQRCode(data) {
+    if (!data) return;
+
+    try {
+        const svg = QRCodeGenerator.generateSVG(data, 512);
+        const blob = new Blob([svg], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+
+        const img = new Image();
+        img.onload = () => {
+            qrCodeImage = img;
+            URL.revokeObjectURL(url); // Clean up
+        };
+        img.src = url;
+    } catch (e) {
+        console.error('[QR] Failed to generate QR code:', e);
+    }
+}
+
+/**
+ * Display sync handshake UI
+ * Shows offer/answer for manual exchange
+ * @param {string} data - Base64 encoded SDP data
+ * @param {string} type - 'offer' or 'answer'
+ */
+function showSyncUI(data, type) {
+    const isOffer = type === 'offer';
+    const title = isOffer ? 'MASTER SYNC CODE' : 'SLAVE ANSWER CODE';
+    const instruction = isOffer ?
+        'Slave: Open console and run:\ninitSlave("' + data.substring(0, 40) + '...")' :
+        'Master: Open console and run:\nacceptAnswer("' + data.substring(0, 40) + '...")';
+
+    // Console output
+    console.log('\n='.repeat(60));
+    console.log(title);
+    console.log('='.repeat(60));
+    console.log(instruction);
+    console.log('\nFull data:');
+    console.log(data);
+    console.log('='.repeat(60) + '\n');
+    console.log('Press [Q] to show/hide QR code on screen');
+
+    // Store for on-screen display (toggle with 'Q' key)
+    syncOverlayData = data;
+    syncOverlayType = type;
+
+    // Generate QR code
+    generateQRCode(data);
+
+    // Auto-show QR overlay (hides DOM elements)
+    toggleSyncOverlay(true);
+}
+
+// Lägg till EBU-rad under slate endast om slate ej satt
+if (!params.has('slate')) {
+    slateId += `<br>${ebuFormat(scanMode, framerate, isDropFrame)}`;
+}
+// --- Centraliserad tidkod och countdown-logik ---
+const countdownParam = params.get('countdown');
+const timeParam = params.get('time');
+
+// Funktion för att tolka time=HH:MM[:SS[:FF]]
+function parseTimeOfDay(str) {
+    if (!str) return null;
+    let parts = str.split(':').map(Number);
+    if (parts.length < 2 || parts.some(isNaN)) return null;
+    let [hh, mm = 0, ss = 0, ff = 0] = parts;
+    return (hh * 3600 + mm * 60 + ss + ff / framerate);
+}
+
+// Funktion för countdown=HH:MM:SS:FF (behövs längre ner)
+function parseCountdown(str) {
+    if (!str) return null;
+    let m = str.match(/^(\d{2}):(\d{2}):(\d{2}):(\d{2})$/);
+    if (!m) return null;
+    let hh = parseInt(m[1], 10), mm = parseInt(m[2], 10), ss = parseInt(m[3], 10), ff = parseInt(m[4], 10);
+    return (hh * 3600 + mm * 60 + ss) + ff / framerate;
+}
+
+// --- Countdown-logik (sätter countdownVal och countdownStartTime)
+// countdownVal kommer att sättas senare – deklareras här bara om det inte redan är gjort
+// (ta bort om redan finns nedan)
+
+let countdownStartTime = null;
+let countdownVal = null;
+
+// Prioritera time-parametern om den finns
+let countdownTargetSecondsOfDay = parseTimeOfDay(timeParam);
+if (countdownTargetSecondsOfDay !== null) {
+    let now = new Date();
+    let nowSecondsOfDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000;
+    countdownVal = countdownTargetSecondsOfDay - nowSecondsOfDay;
+    if (countdownVal < 0) countdownVal += 86400; // Nästa dygn om tiden redan har passerat
+} else {
+    countdownVal = parseCountdown(countdownParam);
+}
+
+
+// ==========================================
+// DOM ELEMENTS
+// ==========================================
+const canvas = document.getElementById('lineupCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const syncInfo = document.getElementById('syncInfo');
+const timecode = document.getElementById('timecode');
+const tcBg = document.getElementById('tcBg');
+const syncBg = document.getElementById('syncBg');
+const flashDiv = document.getElementById('flash');
+const audioStarter = document.getElementById('audioStarter');
+const waveBoxL = document.getElementById('waveformBoxL');
+const waveBoxR = document.getElementById('waveformBoxR');
+const waveL = document.getElementById('waveL');
+const waveR = document.getElementById('waveR');
+const waveCtxL = waveL.getContext('2d');
+const waveCtxR = waveR.getContext('2d');
+
+// --- Overlay/Slate-id ---
+
+overlay.innerHTML = slateId.replace(/\\n/g, '<br>');
+function adjustOverlayWidth() {
+    let w = window.innerWidth;
+    overlay.style.maxWidth = `${Math.round(w * 0.56)}px`;
+    overlay.style.minWidth = "12vw";
+    overlay.style.width = "";
+}
+adjustOverlayWidth();
+
+
+let lipSyncCount = 0; // mutable - räknas upp
+const lipSyncFrames = 4 * framerate; // immutable - beräknas vid init
+
+// ==========================================
+// AUDIO STATE
+// ==========================================
+let audioCtx;
+let identOscL, identOscR, identGainL, identGainR, identPannerL, identPannerR;
+let normalOsc, pipGain, lastPipSecond = -1000;
+let pipPeakL = 0, pipPeakR = 0;
+
+// ==========================================
+// VISUAL SYNC STATE
+// ==========================================
+let invertCycle = false;
+let lastGlobalFlash = -1000;
+
+// ==========================================
+// SMOOTH CLOCK (MISSION CRITICAL - DO NOT MODIFY)
+// ==========================================
+// Provides drift-corrected time for broadcast-accurate sync
+// Uses performance.now() for smoothness + Date.now() for accuracy
+let baseWallClock = performance.now();
+let baseSystemTime = Date.now() / 1000;
+let smoothOffset = 0;
+
+/**
+ * Get RAW local time without sync offset (for internal calculations)
+ * @returns {number} Raw smoothed current time in seconds
+ */
+function getRawCentralSeconds() {
+    let wallNow = performance.now();
+    let localSecs = baseSystemTime + (wallNow - baseWallClock) / 1000;
+    let systemSecs = Date.now() / 1000;
+    let targetOffset = systemSecs - localSecs;
+    smoothOffset += (targetOffset - smoothOffset) * 0.016;
+    return localSecs + smoothOffset;
+}
+
+/**
+ * Get current time in seconds with smooth interpolation
+ * If slave: applies sync offset from master timecode
+ * @returns {number} Smoothed current time in seconds
+ */
+function getCentralSeconds() {
+    let result = getRawCentralSeconds();
+
+    // If we're slave and receiving sync from master, apply offset
+    if (!isMaster && (performance.now() - lastSyncReceived) < 500) {
+        result += syncOffset;
+    }
+
+    return result;
+}
+
+
+// --- UI BOX SIZING ---
+function getBoxSize() {
+    return Layout.flyingBoxSize.height; // Returnerar höjden (som också är bredden)
+}
+function getTcSyncBgSize() {
+    let boxHeight = getBoxSize(); // Synkronisera höjden med de flygande boxarna
+    let boxWidth = Layout.textBoxSize.width; // Behåll den manuellt definierade bredden
+    return { width: boxWidth, height: boxHeight };
+}
+function getWaveformBoxSize() {
+    let tcSyncSize = getTcSyncBgSize(); // Hämta storleken från TC/SYNC-boxarna
+    return {
+        width: Math.round(tcSyncSize.width / 2), // Hälften av bredden
+        height: tcSyncSize.height // Samma höjd
+    };
+}
+function positionOverlays() {
+    let rowPositions = Layout.rowPositions;
+
+    // Placering av visualiseringsboxar (waveform-boxar)
+    let waveSize = getWaveformBoxSize();
+    let margin = parseFloat(getComputedStyle(tcBg).left); // Hämta marginalen från TC-boxen
+    let centerX = canvas.width / 2; // Mitten av skärmen
+
+    // Justera mellanrummet till hälften av marginalen
+    let spacing = margin / 2; // Hälften av marginalen
+
+    waveBoxL.style.left = `${centerX - waveSize.width - spacing / 2}px`; // Placera vänster box
+    waveBoxL.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
+    waveBoxL.style.width = waveSize.width + "px";
+    waveBoxL.style.height = waveSize.height + "px";
+
+    waveBoxR.style.left = `${centerX + spacing / 2}px`; // Placera höger box
+    waveBoxR.style.top = `${rowPositions.textRow - waveSize.height / 2}px`;
+    waveBoxR.style.width = waveSize.width + "px";
+    waveBoxR.style.height = waveSize.height + "px";
+
+    // Placering av TC/SYNC-boxar
+    let tcSyncSize = getTcSyncBgSize();
+    tcBg.style.left = '4vw';
+    tcBg.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+    tcBg.style.width = tcSyncSize.width + "px";
+    tcBg.style.height = tcSyncSize.height + "px";
+
+    timecode.style.left = '4vw';
+    timecode.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+    timecode.style.width = tcSyncSize.width + "px";
+    timecode.style.height = tcSyncSize.height + "px";
+
+    syncBg.style.right = '4vw';
+    syncBg.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+    syncBg.style.width = tcSyncSize.width + "px";
+    syncBg.style.height = tcSyncSize.height + "px";
+
+    syncInfo.style.right = '4vw';
+    syncInfo.style.top = `${rowPositions.textRow - tcSyncSize.height / 2}px`;
+    syncInfo.style.width = tcSyncSize.width + "px";
+    syncInfo.style.height = tcSyncSize.height + "px";
+}
+window.addEventListener('resize', positionOverlays);
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    positionOverlays();
+}
+
+// Centraliserad storlekshantering
+const Layout = {
+    // Procentuella faktorer
+    rowHeightFactor: 0.09, // Gemensam höjdstandard (9% av canvasens höjd)
+    textBoxWidthFactor: 0.16,  // Text-boxarnas bredd (16% av canvasens bredd)
+    redFieldHeightFactor: 0.25, // Höjd för det röda fältet (25% av canvasens höjd)
+
+    // Dynamiska beräkningar
+    get rowHeight() {
+        let h = canvas.height;
+        return Math.round(h * this.rowHeightFactor);
+    },
+
+    get textBoxSize() {
+        let h = this.rowHeight; // Använd gemensam höjdstandard
+        let w = canvas.width;
+        return {
+            width: Math.round(w * this.textBoxWidthFactor),
+            height: h
+        };
+    },
+
+    get flyingBoxSize() {
+        let h = this.rowHeight; // Använd gemensam höjdstandard
+        return { width: h, height: h }; // Kvadratiska
+    },
+
+    get redFieldSize() {
+        let h = canvas.height;
+        gradH = h * 0.05;
+        gradY = h * 0.75 - gradH;
+        return { height: Math.round(h * this.redFieldHeightFactor) };
+    },
+
+get rowPositions() {
+    let redTop = canvas.height * (1 - this.redFieldHeightFactor); // Röda fältets start
+    let redHeight = this.redFieldSize.height; // Röda fältets höjd
+
+    let textRow = redTop + redHeight * 0.75; // TC/SYNC-boxar vid 75% ner i röda fältet
+    let flyingBoxRow = redTop + redHeight * 0.25; // Flygande boxar vid 20% ner i röda fältet
+
+    return {
+        textRow,
+        flyingBoxRow
+    };
+}
+
+};
+
+// --------- STEREO IDENT AUDIO ---------
+function stopAllAudio() {
+    try {
+        if (identOscL) identOscL.stop(); identOscL = null;
+        if (identOscR) identOscR.stop(); identOscR = null;
+        if (normalOsc) normalOsc.stop(); normalOsc = null;
+    } catch (e) {}
+}
+function startStereoIdent() {
+    safeAudioCall(() => {
+        stopAllAudio();
+        if (!audioCtx) return;
+        identOscL = audioCtx.createOscillator();
+        identGainL = audioCtx.createGain();
+        identPannerL = audioCtx.createStereoPanner();
+        identOscL.frequency.value = TONE_FREQ.PRIMARY;
+        identGainL.gain.value = AUDIO_LEVELS.STEREO_IDENT;
+        identPannerL.pan.value = -1;
+        identOscL.connect(identGainL).connect(identPannerL).connect(audioCtx.destination);
+        identOscL.start();
+        identOscR = audioCtx.createOscillator();
+        identGainR = audioCtx.createGain();
+        identPannerR = audioCtx.createStereoPanner();
+        identOscR.frequency.value = TONE_FREQ.PRIMARY;
+        identGainR.gain.value = AUDIO_LEVELS.STEREO_IDENT;
+        identPannerR.pan.value = 1;
+        identOscR.connect(identGainR).connect(identPannerR).connect(audioCtx.destination);
+        identOscR.start();
+    }, 'Stereo ident start');
+}
+function updateStereoIdent() {
+    let cs = getCentralSeconds();
+    let tInThree = cs % TIMING.STEREO_CYCLE_SEC;
+    let leftOn = tInThree < TIMING.STEREO_LEFT_ON_SEC;
+    if (identGainL) identGainL.gain.value = leftOn ? AUDIO_LEVELS.STEREO_IDENT : 0;
+    if (identGainR) identGainR.gain.value = AUDIO_LEVELS.STEREO_IDENT;
+}
+function stopStereoIdent() {
+    try {
+        if (identOscL) identOscL.stop(); identOscL = null;
+        if (identOscR) identOscR.stop(); identOscR = null;
+    } catch (e) {}
+}
+
+// --------- SYNC PIPAR (ALLA TAKTER) även i LIP SYNC efter LIP SYNC-text -----
+function playPipIfNeeded() {
+    let cs = getCentralSeconds();
+    let sec = Math.floor(cs);
+    let ms = Math.floor((cs - sec) * 1000);
+    if (((syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames) || (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames)) && (lastPipSecond !== sec) && (ms < 200)) {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // --- PIP-LOGIK ---
+        normalOsc = audioCtx.createOscillator();
+        pipGain = audioCtx.createGain();
+        normalOsc.type = 'sine';
+        if (sec % 4 === 0) {
+            normalOsc.frequency.value = TONE_FREQ.EMPHASIS;
+            pipGain.gain.value = AUDIO_LEVELS.PIP_EMPHASIS;
+        } else {
+            normalOsc.frequency.value = TONE_FREQ.PRIMARY;
+            pipGain.gain.value = AUDIO_LEVELS.PIP_NORMAL;
+        }
+        normalOsc.connect(pipGain).connect(audioCtx.destination);
+        normalOsc.start();
+        normalOsc.stop(audioCtx.currentTime + TIMING.PIP_DURATION_SEC);
+        lastPipSecond = sec;
+    }
+}
+
+// --- Fake peak-meter/Waveform for demo: ---
+function fakeAudioPeaks(state) {
+    let cs = getCentralSeconds();
+    if (state === STATE_STEREOIDENT) {
+        let t = cs % 3;
+        pipPeakL = (t < 2.75) ? (Math.abs(Math.sin(2 * Math.PI * t * 1.2)) * 0.72 + 0.13) : 0.07;
+        pipPeakR = 0.68;
+    } else if (state === STATE_SYNC) {
+        let sec = Math.floor(cs);
+        let ms = cs - sec;
+        pipPeakL = ((ms < 0.19) ? 0.92 : 0.09);
+        pipPeakR = ((ms < 0.19) ? 0.92 : 0.09);
+    } else {
+        pipPeakL = 0;
+        pipPeakR = 0;
+    }
+}
+
+// --- WAVEFORM VISUAL ---
+function drawWaveform(waveCtx, peak, color="#32ffcb") {
+    let w = waveCtx.canvas.width, h = waveCtx.canvas.height;
+    waveCtx.clearRect(0, 0, w, h);
+    // Simulerad (ser broadcast ut!): “True Peak”-bar och en “bump”/oscilloscope
+    let margin = Math.round(h * 0.18);
+    let amp = peak;
+    // Main vertical bar
+    waveCtx.save();
+    waveCtx.strokeStyle = color;
+    waveCtx.lineWidth = Math.max(2, Math.round(h * 0.11));
+    waveCtx.beginPath();
+    let cx = w/2;
+    let cy = h/2;
+    let a = Math.max(margin, cy - (amp * (cy - margin)));
+    let b = Math.min(h-margin, cy + (amp * (cy - margin)));
+    waveCtx.moveTo(cx, a);
+    waveCtx.lineTo(cx, b);
+    waveCtx.stroke();
+    // Oscilloscope “bump”
+    waveCtx.strokeStyle = "#fff";
+    waveCtx.lineWidth = 2;
+    waveCtx.beginPath();
+    for (let i = 0; i < w; i++) {
+        let t = i/w * Math.PI*2;
+        let y = cy + Math.sin(t*3.5 + Date.now()/160) * amp * cy * 0.33;
+        if (i === 0) waveCtx.moveTo(i, y);
+        else waveCtx.lineTo(i, y);
+    }
+    waveCtx.stroke();
+    waveCtx.restore();
+}
+
+// --- Overlay visibility
+function updateWaveformBoxes() {
+    let show = (syncState === STATE_STEREOIDENT || syncState === STATE_SYNC);
+    if (show) {
+        waveBoxL.classList.add("visible");
+        waveBoxR.classList.add("visible");
+    } else {
+        waveBoxL.classList.remove("visible");
+        waveBoxR.classList.remove("visible");
+    }
+    drawWaveform(waveCtxL, pipPeakL, "#32ffcb");
+    drawWaveform(waveCtxR, pipPeakR, "#ffc932");
+}
+
+// --- FLASH och central sync ---
+let globalInvertCycle = false;
+let lastFlashAll = -1000;
+let lastLipSyncBeat = -1;
+let boxFlashUntil = 0;
+
+function updateBoxColor(cs) {
+    let flashPeriod = 4.0;
+    let sec = Math.floor(cs);
+    if ((sec % 4 === 0) && (cs - sec) < 0.02 && lastFlashAll !== sec) {
+        globalInvertCycle = !globalInvertCycle;
+        lastFlashAll = sec;
+    }
+    if (syncState !== STATE_SYNC) return;
+    let beat = Math.floor(cs);
+    if (beat !== lastLipSyncBeat) {
+        boxFlashUntil = cs + 0.04;
+        lastLipSyncBeat = beat;
+    }
+}
+
+function drawRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function drawFrame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const h = canvas.height, w = canvas.width;
+    const barH = h * 0.75, redY = h * 0.75, redH = h * 0.25;
+    
+
+    // Färgbalk
+    const barWidth = w / ebuColors709.length;
+    ebuColors709.forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(i * barWidth, 0, barWidth, barH - gradH);
+    });
+
+    // Gråskala-remsa (grayscale ramp)
+    const grayRampH = gradH; // Samma höjd som den nuvarande grå gradienten
+    const grayRampY = gradY - grayRampH; // Placera precis ovanför den nuvarande grå gradienten
+    const grayRampColors = [
+    '#000000', // Superblack
+    '#101010', // Legal black (0 IRE)
+    '#404040', // 25% gray
+    '#808080', // 50% gray
+    '#B4B4B4', // 75% gray
+    '#EBEBEB', // Legal white (100 IRE)
+    '#FFFFFF'  // Superwhite
+];
+    const grayRampWidth = w / grayRampColors.length;
+    grayRampColors.forEach((color, i) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(i * grayRampWidth, grayRampY, grayRampWidth, grayRampH);
+    });
+
+    // Gråskale-gradient
+    const gradient = ctx.createLinearGradient(0, gradY, w, gradY + gradH);
+    gradient.addColorStop(0, '#101010'); gradient.addColorStop(1, '#EBEBEB');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, gradY, w, gradH);
+
+    // Rött fält
+    ctx.fillStyle = redRec709;
+    ctx.fillRect(0, redY, w, redH);
+
+    // Centre cross + cirkel
+    const cx = w / 2, cy = h / 2;
+    const gradR = Math.min(w, h) * 0.011;
+    const monoGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, gradR * 3.2);
+    monoGradient.addColorStop(0, "#000"); monoGradient.addColorStop(1, "#fff");
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, gradR * 3.2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = monoGradient; ctx.globalAlpha = 0.98;
+    ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 16, cy); ctx.lineTo(cx + 16, cy);
+    ctx.moveTo(cx, cy - 16); ctx.lineTo(cx, cy + 16);
+    ctx.stroke(); ctx.restore();
+
+    // --- FLYGANDE KVADRATISKA RUTOR: möts i mitten på flashen ---
+    const boxSize = getBoxSize();
+    const margin = w * 0.04;
+    const boxZoneY = Layout.rowPositions.flyingBoxRow;
+    let cs = getCentralSeconds();
+    let flashPeriod = 4.0;
+    let phase = (cs % flashPeriod) / flashPeriod;
+    let movement = Math.abs(Math.sin(Math.PI * phase));
+    let leftStart = margin, rightStart = w - margin - boxSize;
+    let travel = (rightStart - leftStart) / 2;
+    let x1 = leftStart + travel * (1 - movement);
+    let x2 = rightStart - travel * (1 - movement);
+
+    updateBoxColor(cs);
+
+    // Flash overlay (bara på flash-frames i SYNC på NOLLAN)
+    let flashNow = false;
+    let sec = Math.floor(cs);
+    if (syncState === STATE_SYNC && (sec % 4 === 0) && (cs - sec) < 0.04) flashNow = true;
+    flashDiv.style.display = flashNow ? "block" : "none";
+
+    // Flygande boxar flashar varje takt/slag, med flashDuration och cykel-inverterar på flashen
+    ctx.save();
+    let useInvert = globalInvertCycle;
+    if (syncState === STATE_SYNC && cs < boxFlashUntil) useInvert = !useInvert;
+
+    // Left box
+    ctx.globalAlpha = 0.92;
+    let leftWhite = useInvert ? false : true;
+    ctx.fillStyle = leftWhite ? 'white' : 'black';
+    drawRoundRect(ctx, x1, boxZoneY - boxSize / 2, boxSize, boxSize, 14);
+    ctx.fill();
+
+    // Right box
+    ctx.globalAlpha = 0.85;
+    let rightWhite = !leftWhite;
+    ctx.fillStyle = rightWhite ? 'white' : 'black';
+    drawRoundRect(ctx, x2, boxZoneY - boxSize / 2, boxSize, boxSize, 14);
+    ctx.fill();
+    ctx.restore();
+
+    // ==========================================
+    // SYNC STATUS DISPLAY (WebRTC Multi-Device)
+    // ==========================================
+    if (SYNC_CONFIG.room) {
+        ctx.save();
+        ctx.font = 'bold 14px "Share Tech Mono"';
+        ctx.textAlign = 'right';
+        const statusX = w - 20;
+        let statusY = 25;
+
+        // Connection status
+        const statusColors = {
+            'disconnected': '#888888',
+            'connecting': '#FFA500',
+            'connected': '#00FF00',
+            'failed': '#FF0000'
+        };
+        const statusIcons = {
+            'disconnected': '⚪',
+            'connecting': '🟡',
+            'connected': '🟢',
+            'failed': '🔴'
+        };
+        ctx.fillStyle = statusColors[connectionState] || '#888888';
+
+        // Display role and status
+        const roleText = isMaster ? 'MASTER' : 'SLAVE';
+        const icon = statusIcons[connectionState] || '⚪';
+        ctx.fillText(`${icon} ${roleText}`, statusX, statusY);
+
+        // Display sync offset for slaves
+        if (!isMaster && connectionState === 'connected') {
+            if (Math.abs(syncOffset) > 0.001) {
+                statusY += 20;
+                const offsetMs = (syncOffset * 1000).toFixed(1);
+                const offsetFrames = (syncOffset * framerate).toFixed(1);
+                ctx.fillStyle = '#00FFFF';
+                ctx.fillText(`Δ ${offsetMs}ms (${offsetFrames}f)`, statusX, statusY);
+            }
+
+            // Display RTT and estimated latency
+            if (averageRTT > 0) {
+                statusY += 20;
+                ctx.fillStyle = '#FFAA00';
+                ctx.font = '11px "Share Tech Mono"';
+                ctx.fillText(`RTT ${averageRTT.toFixed(1)}ms → ${(estimatedLatency * 1000).toFixed(1)}ms latency`, statusX, statusY);
+            }
+        }
+
+        // Display room name
+        statusY += 20;
+        ctx.fillStyle = '#AAAAAA';
+        ctx.font = '12px "Share Tech Mono"';
+        ctx.fillText(`Room: ${SYNC_CONFIG.room}`, statusX, statusY);
+
+        ctx.restore();
+    }
+
+    // ==========================================
+    // QR CODE OVERLAY (WebRTC Handshake)
+    // ==========================================
+    if (syncOverlayVisible && qrCodeImage) {
+        ctx.save();
+
+        // Semi-transparent background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';
+        ctx.fillRect(0, 0, w, h);
+
+        // QR Code container
+        const qrSize = Math.min(w, h) * 0.6; // 60% of screen
+        const qrX = (w - qrSize) / 2;
+        const qrY = (h - qrSize) / 2;
+
+        // White background for QR code
+        ctx.fillStyle = 'white';
+        const padding = 20;
+        ctx.fillRect(qrX - padding, qrY - padding, qrSize + padding * 2, qrSize + padding * 2);
+
+        // Draw QR code
+        ctx.drawImage(qrCodeImage, qrX, qrY, qrSize, qrSize);
+
+        // Title
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 32px "Share Tech Mono"';
+        ctx.textAlign = 'center';
+        const titleY = qrY - padding - 20;
+        const title = syncOverlayType === 'offer' ? 'MASTER SYNC CODE' : 'SLAVE ANSWER CODE';
+        ctx.fillText(title, w / 2, titleY);
+
+        // Instructions
+        ctx.font = '18px "Share Tech Mono"';
+        ctx.fillStyle = '#00FFFF';
+        const instructionY = qrY + qrSize + padding + 40;
+
+        if (syncOverlayType === 'offer') {
+            ctx.fillText('Scan with slave device camera', w / 2, instructionY);
+            ctx.font = '14px "Share Tech Mono"';
+            ctx.fillStyle = '#AAAAAA';
+            ctx.fillText('or copy from console and run: initSlave("...")', w / 2, instructionY + 25);
+        } else {
+            ctx.fillText('Scan with master device camera', w / 2, instructionY);
+            ctx.font = '14px "Share Tech Mono"';
+            ctx.fillStyle = '#AAAAAA';
+            ctx.fillText('or copy from console and run: acceptAnswer("...")', w / 2, instructionY + 25);
+        }
+
+        // Toggle hint
+        ctx.font = '16px "Share Tech Mono"';
+        ctx.fillStyle = '#FFAA00';
+        ctx.fillText('Press [Q] to hide', w / 2, h - 30);
+
+        ctx.restore();
+    }
+
+    requestAnimationFrame(drawFrame);
+}
+
+// TC/Countdown logik + blink vid nollan
+let countdownBlink = false;
+let lastCountdownBlink = 0;
+function updateTimecode() {
+    let showCountdown = !!countdownVal;
+    let timeText = '';
+    let isZero = false;
+    if (showCountdown) {
+        if (!countdownStartTime) countdownStartTime = getCentralSeconds();
+        let elapsed = getCentralSeconds() - countdownStartTime;
+        let rem = Math.max(0, countdownVal - elapsed);
+        if (rem === 0) isZero = true;
+        let hrs = Math.floor(rem / 3600);
+        let min = Math.floor((rem % 3600) / 60);
+        let sec = Math.floor(rem % 60);
+        let frame = Math.floor(((rem % 1) * framerate));
+        // Blink vid nollan
+        if (rem <= 0.15) {
+            let t = Math.floor(getCentralSeconds() * 2) % 2;
+            countdownBlink = t === 0;
+        } else {
+            countdownBlink = false;
+        }
+        let pad = n => n.toString().padStart(2, '0');
+        timeText = `${pad(hrs)}:${pad(min)}:${pad(sec)}:${pad(frame)}`;
+    } else {
+        const now = new Date();
+        const hrs = now.getHours().toString().padStart(2, '0');
+        const min = now.getMinutes().toString().padStart(2, '0');
+        const sec = now.getSeconds().toString().padStart(2, '0');
+        const frame = Math.floor((now.getMilliseconds() / 1000) * framerate).toString().padStart(2, '0');
+        timeText = `${hrs}:${min}:${sec}:${frame}`;
+    }
+    timecode.textContent = timeText;
+    timecode.style.opacity = (countdownBlink ? 0.25 : 1);
+}
+
+function updateSync() {
+    let syncHtml = '';
+    let showLipSync = (syncState === STATE_SYNC && lipSyncCount < lipSyncFrames);
+    let showSyncData = (syncState === STATE_SYNC && lipSyncCount >= lipSyncFrames);
+    if (syncState === STATE_MOS) {
+        syncHtml = `<span class="sync-main">MOS</span>`;
+    } else if (syncState === STATE_STEREOIDENT) {
+        syncHtml = `<span class="sync-main">STEREO IDENT</span>`;
+    } else if (showLipSync) {
+        syncHtml = `<span class="sync-main">LIP SYNC</span>`;
+        lipSyncCount++;
+    } else if (showSyncData) {
+        let cs = getCentralSeconds();
+        let flashPeriod = 4.0;
+        let nearestFlash = Math.round(cs / flashPeriod) * flashPeriod;
+        let msOffset = Math.round((cs - nearestFlash) * 1000);
+        let absMs = Math.abs(msOffset);
+        let showSync = absMs < 25;
+        let syncVal = showSync ? "SYNC" : `${absMs}`;
+        let audioText = showSync ? "&nbsp;" : (msOffset < 0 ? "audio early" : "audio late");
+
+        // Uppdaterad struktur
+        syncHtml = `
+            <span class="sync-ms-row">
+                <span class="sync-ms-val">${syncVal}</span>
+                <span class="sync-ms-label">${showSync ? "" : "ms"}</span>
+                <span class="sync-audio-block">${audioText}</span>
+            </span>
+        `;
+    }
+    syncInfo.innerHTML = syncHtml;
+}
+
+// === AUDIO LAUNCH & CLICKABLE STATES ===
+let audioStarted = false;
+function startAudioOnceAndRemoveCover() {
+    if (!audioStarted) {
+        audioStarted = true;
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioStarter.style.display = "none";
+
+        // === STATE via URL – sätts först när ljud är tillåtet ===
+        const stateParam = (params.get('state') || "").toLowerCase();
+
+        if (stateParam === "mos") {
+            syncState = STATE_MOS;
+            stopStereoIdent();
+        } else if (stateParam === "stereo" || stateParam === "stereoident") {
+            syncState = STATE_STEREOIDENT;
+            startStereoIdent();
+        } else if (stateParam === "sync") {
+            syncState = STATE_SYNC;
+            lipSyncCount = 0;
+            stopStereoIdent();
+        }
+    }
+}
+
+
+audioStarter.onclick = startAudioOnceAndRemoveCover;
+window.onclick = function(e) {
+    if (!audioStarted) {
+        startAudioOnceAndRemoveCover();
+        return;
+    }
+    stopAllAudio();
+
+    let nextState = (syncState + 1) % 3;
+    if (nextState === STATE_SYNC) {
+        lipSyncCount = 0;
+        stopStereoIdent();
+    }
+    syncState = nextState;
+    if (syncState === STATE_STEREOIDENT) {
+        startStereoIdent();
+    } else {
+        stopStereoIdent();
+    }
+};
+
+// ==========================================
+// UNIFIED UPDATE LOOP
+// ==========================================
+
+const UPDATE_INTERVALS = {
+    stereoIdent: 45,
+    syncPip: 17,
+    syncInfo: 23,
+    timecode: 1000 / framerate,
+    waveform: 27,
+    broadcast: 17 // WebRTC timecode broadcast
+};
+
+let lastUpdate = {
+    stereoIdent: 0,
+    syncPip: 0,
+    syncInfo: 0,
+    timecode: 0,
+    waveform: 0,
+    broadcast: 0
+};
+
+function updateLoop() {
+    const now = performance.now();
+
+    // Update stereo ident (every 45ms)
+    if (now - lastUpdate.stereoIdent > UPDATE_INTERVALS.stereoIdent) {
+        if (syncState === STATE_STEREOIDENT) updateStereoIdent();
+        lastUpdate.stereoIdent = now;
+    }
+
+    // Update sync pip (every 17ms - ~60fps)
+    if (now - lastUpdate.syncPip > UPDATE_INTERVALS.syncPip) {
+        if (syncState === STATE_SYNC) playPipIfNeeded();
+        lastUpdate.syncPip = now;
+    }
+
+    // Update sync info display (every 23ms)
+    if (now - lastUpdate.syncInfo > UPDATE_INTERVALS.syncInfo) {
+        updateSync();
+        lastUpdate.syncInfo = now;
+    }
+
+    // Update timecode (frame-rate dependent)
+    if (now - lastUpdate.timecode > UPDATE_INTERVALS.timecode) {
+        updateTimecode();
+        lastUpdate.timecode = now;
+    }
+
+    // Update waveform visualization (every 27ms)
+    if (now - lastUpdate.waveform > UPDATE_INTERVALS.waveform) {
+        fakeAudioPeaks(syncState);
+        updateWaveformBoxes();
+        lastUpdate.waveform = now;
+    }
+
+    // Broadcast timecode to slaves (every 17ms, master only)
+    if (now - lastUpdate.broadcast > UPDATE_INTERVALS.broadcast) {
+        broadcastTimecode();
+        lastUpdate.broadcast = now;
+    }
+
+    requestAnimationFrame(updateLoop);
+}
+
+function init() {
+    resizeCanvas();
+    drawFrame();
+    updateLoop(); // Start unified update loop
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+
+        // Q - Toggle QR code overlay
+        if (key === 'q') {
+            if (syncOverlayData) {
+                toggleSyncOverlay(!syncOverlayVisible);
+                console.log(`[QR] Overlay ${syncOverlayVisible ? 'shown' : 'hidden'}`);
+            } else {
+                console.log('[QR] No sync data available. Run initMaster() or initSlave() first.');
+            }
+        }
+    });
+
+    // Auto-initialize WebRTC sync if room parameter is set
+    if (SYNC_CONFIG.room) {
+        if (SYNC_CONFIG.role === 'master') {
+            console.log('[SYNC] Auto-initializing as MASTER for room:', SYNC_CONFIG.room);
+            initMaster().then(() => {
+                console.log('[SYNC] Master initialized. Waiting for slave connection...');
+            }).catch(err => {
+                console.error('[SYNC] Master initialization failed:', err);
+                connectionState = 'failed';
+            });
+        } else {
+            console.log('[SYNC] Room set, but role not "master". Use console commands:');
+            console.log('  - Master: initMaster()');
+            console.log('  - Slave: initSlave("offer_data_here")');
+        }
+    }
+}
+init();
+</script>
+<!-- 
+    TSG Suite - Thåst Signal Generator
+    A browser-based toolkit for broadcast line-up, tone, PLUGE, testcards, and visual sync references.
+    Built entirely in HTML, CSS, and vanilla JavaScript.
+    All templates are standalone .html files. No build steps. No dependencies. Load locally or via any web server.
+-->
+</body>
+</html>

@@ -1,0 +1,1646 @@
+<!doctype html>
+<!--
+ ═══════════════════════════════════════════════════════════════════════════════
+ TSG Suite – broadcast tools for alignment, metering, and signal verification
+ Maintained by David Thåst  ·  https://github.com/FiLORUX
+
+ Built with the assumption that behaviour should be predictable,
+ output should be verifiable, and silence should mean silence
+
+ david@thast.se  ·  +46 700 30 30 60
+ ═══════════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TSG Suite | VERO-BAAMBI</title>
+  <!--
+  ═══════════════════════════════════════════════════════════════════════════════
+  TSG SUITE | VERO BAAMBI | BROADCAST AUDIO ALIGNMENT  & METER BRIDGE INTERFACE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  PURPOSE
+  ───────
+  Professional-grade audio metering for broadcast, streaming, and production.
+  Implements EBU R128 (Europe), ITU BS.1770-4 (international), and legacy
+  Nordic PPM (IEC 60268-10 Type I) standards within a single unified interface.
+
+  SIGNAL FLOW
+  ───────────
+  Source → Channel Splitter → K-weighting Filter → LUFS Integration
+                           ↓
+                     Analysis Bus → True Peak Detection (4× oversampling)
+                           ↓
+                     Goniometer → Phase Correlation → Stereo Width
+
+  STANDARDS ADHERENCE
+  ───────────────────
+  • EBU R128 / R128s1: Programme loudness, LRA, True Peak
+  • ITU-R BS.1770-4: K-weighting, gating algorithm, LUFS/LKFS
+  • ITU-R BS.1771-1: Loudness metering requirements
+  • EBU Tech 3341/3342: Loudness meters, loudness range
+  • IEC 60268-10 Type I: Nordic PPM ballistics (5ms attack, 1.7s/20dB decay)
+  • EBU R68: Reference level alignment (0 dBu = −18 dBFS peak)
+  • ITU-R BR.1385: Stereo identification signal
+
+  ARCHITECTURAL NOTES
+  ───────────────────
+  • Web Audio API with AudioWorklet for sample-accurate processing
+  • K-weighting via cascaded biquad filters (HP 38Hz + HS +4dB@4kHz)
+  • True Peak via time-domain analysis with 4× interpolation
+  • 400ms momentary / 3s short-term integration windows per BS.1770
+  • Relative gating at −10 LU below ungated integrated loudness
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ═══════════════════════════════════════════════════════════════════════
+       DESIGN SYSTEM: BROADCAST CONTROL ROOM PALETTE
+       ═══════════════════════════════════════════════════════════════════════
+       Colour semantics aligned with broadcast monitoring conventions:
+       • Green (--ok): Within tolerance, nominal operation
+       • Amber (--warn): Approaching limit, attention required
+       • Orange (--caution): Near limit, corrective action advised
+       • Red (--hot): Exceeds limit, immediate attention
+       • Cyan (--cyan): Reference/alignment markers (−18 dBFS = 0 dBu)
+    */
+    :root{
+      --bg:#141618; --panel:#1b1f23; --ink:#e8eef9; --muted:#a9b2c7; --outline:#2a2f36; --grid:#29323b;
+      --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
+      --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
+      --meter-gap: 1.2em;
+      /* Layout and animation constants */
+      --drag-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --canvas-border-radius: 10px;
+      --vectorscope-min-size: 160px;
+      --resize-debounce-delay: 16ms;
+      --visibility-threshold: 0.1;
+    }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
+    h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
+
+    /* ===== TWO-COLUMN STEREO LAYOUT ===== */
+    .stereoContainer {
+      display: flex;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Left column: Goniometer + Phase Correlation (stacked) */
+    .stereoLeftCol {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      min-height: 0;
+    }
+
+    /* Vectorscope - keeps aspect ratio, JS sets size */
+    .gonioSquare {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    /* Phase correlation widget under goniometer - takes remaining height */
+    .corrWidget {
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Right column: 2x2 grid + spectrum spanning full width */
+    .stereoRightCol {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr 2fr;
+      gap: 6px;
+      flex: 1;
+      min-height: 0;
+      min-width: 180px;
+    }
+
+    /* Spectrum spans both columns and double height */
+    .stereoRightCol .histogramWidget {
+      grid-column: 1 / -1;
+    }
+
+    /* Individual widgets in right column */
+    .phaseWidget {
+      background: rgba(15, 18, 20, 0.6);
+      border: 1px solid var(--outline);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: 6px 8px;
+    }
+
+    /* Widget label */
+    .widgetLabel {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Phase correlation, L/R balance, rotation and spectrum wraps */
+    .phaseWidget .corrWrap,
+    .phaseWidget .monoDevWrap,
+    .phaseWidget .rotationWrap,
+    .phaseWidget .spectrumWrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .phaseWidget .corrWrap .canvasPad,
+    .phaseWidget .monoDevWrap .canvasPad,
+    .phaseWidget .rotationWrap .canvasPad,
+    .phaseWidget .spectrumWrap .canvasPad {
+      width: 100%;
+      height: 100%;
+    }
+
+    .phaseWidget .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      transform: translateX(-50%);
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(0,0,0,.5);
+      border-radius: 4px;
+    }
+
+    /* Canvas in widgets (direct children only, not inside .canvasPad) */
+    .phaseWidget > canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      min-height: clamp(2em, 8%, 4em);
+      border-radius: 0.25em;
+      background: #0a0c0e;
+    }
+
+    /* Rotation axis labels */
+    .rotationAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+    .rotationAxis span:nth-child(2) {
+      font-weight: 700;
+    }
+
+    /* L/R Balance axis - same style as rotationAxis */
+    .balanceAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+    .balanceAxis span:nth-child(2) {
+      font-family: ui-monospace, 'SF Mono', monospace;
+      font-weight: 600;
+      opacity: 1;
+      color: var(--cyan);
+    }
+
+    /* M/S Meter */
+    .msCompact {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      justify-content: center;
+    }
+    .msBar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .msLabel {
+      font-size: 10px;
+      font-weight: 700;
+      width: 14px;
+      color: var(--muted);
+    }
+    .msTrack {
+      flex: 1;
+      height: 12px;
+      background: #0a0c0e;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .msFill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.05s linear;
+    }
+    .msFillM { background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; }
+    .msFillS { background: linear-gradient(90deg, #22d3ee, #67e8f9); width: 0%; }
+    .msValue {
+      font-size: 10px;
+      font-weight: 600;
+      width: 52px;
+      text-align: right;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Histogram widget */
+    .histogramWidget {
+      flex: 1.2;
+    }
+    .histogramAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+
+    /* Responsive: stack columns vertically on narrow screens */
+    @media (max-width: 700px) {
+      .stereoContainer {
+        flex-direction: column;
+      }
+      .stereoLeftCol {
+        flex-direction: row;
+        gap: 8px;
+      }
+      .stereoRightCol {
+        flex-direction: row;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .phaseWidget {
+        flex: 1 1 45%;
+        min-width: 120px;
+      }
+    }
+
+    /* Goniometer canvas + overlay */
+    .gonioSquare .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .gonioSquare .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 8px;
+      transform: translateX(-50%);
+      z-index: 2;
+      pointer-events: none;
+      background: rgba(0,0,0,.4);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    /* ===== LOUDNESS DISPLAY (right column) ===== */
+    .loudnessModule {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      height: 100%;
+      min-height: 0;
+      align-items: center;
+    }
+
+    /* Radar wrapper – JS sets dimensions */
+    .radarWrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    #loudnessRadar {
+      width: 100%;
+      height: 100%;
+      background: #181c20;
+      border-radius: 50%;
+      border: 2px solid var(--outline);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      display: block;
+    }
+
+    .radar-lufs-value {
+      display: none; /* Dold - LUFS visas i R128-panelen under radarn */
+    }
+
+    /* Peak LED - DOM-based (outside canvas border-radius) */
+    .peak-led {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 4px 3px 6px;
+      border-radius: 8px;
+      background: rgba(20, 24, 28, 0.7);
+      pointer-events: none;
+      z-index: 10;
+    }
+    .peak-led::after {
+      content: '';
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      background: #3a1c1c;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+      transition: all 0.1s;
+      flex-shrink: 0;
+    }
+    .peak-led span {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1;
+      transition: color 0.1s;
+    }
+    .peak-led.on::after {
+      background: #ff4e2d;
+      box-shadow: 0 0 8px 3px rgba(255,78,45,0.7), inset 0 1px 2px rgba(255,255,255,0.3);
+    }
+    .peak-led.on span {
+      color: #ff6655;
+    }
+
+    /* R128 value panel below radar */
+    .r128-panel {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      overflow-y: auto;
+    }
+
+    /* R128 values – responsive */
+    .r128 .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .r128 .big {
+      font-size: clamp(14px, 2.5vw, 20px);
+      font-weight: 700;
+      letter-spacing: .2px;
+      white-space: nowrap;
+    }
+    .r128 small {
+      color: #a9b2c7;
+      font-size: clamp(10px, 1.5vw, 12px);
+      white-space: nowrap;
+    }
+
+    .wrap{
+      box-sizing:border-box;
+      padding:20px;
+      display:grid;
+      gap:16px;
+      grid-template-columns: var(--sidebar-width, 360px) 1fr;
+      grid-template-rows: 1fr;
+      height:calc(100dvh - 56px);
+    }
+
+    /*
+     * Sidebar Collapse System
+     * Synchronised animation for sidebar + grid
+     */
+    .sidebar-container {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sidebar-content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: auto;
+      min-height: 0;
+    }
+
+    /* Animated transitions – added after page load */
+    .sidebar-ready .wrap {
+      transition: grid-template-columns 0.35s ease-out,
+                  gap 0.35s ease-out,
+                  padding-left 0.35s ease-out;
+    }
+
+    .sidebar-ready .sidebar-content {
+      transition: transform 0.35s ease-out,
+                  opacity 0.25s ease-out;
+    }
+
+    /* Collapsed state – sidebar fully hidden */
+    .wrap.sidebar-collapsed {
+      grid-template-columns: 0px 1fr;
+      gap: 0;
+      padding-left: 20px; /* maintain same margin as right side */
+    }
+
+    .wrap.sidebar-collapsed .sidebar-content {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Initial collapsed state (ingen animation vid page load) */
+    .sidebar-start-collapsed .wrap {
+      grid-template-columns: 0px 1fr;
+      gap: 0;
+      padding-left: 20px;
+    }
+
+    .sidebar-start-collapsed .sidebar-content {
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .collapse-toggle {
+      position: fixed;
+      left: calc(var(--sidebar-width, 360px) + 20px - 24px);
+      top: 50%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.1));
+      border: 1px solid var(--outline);
+      border-radius: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      opacity: 0; /* hidden by default */
+    }
+
+    /* Collapsed state – repositioned (toggle is inside .wrap) */
+    .wrap.sidebar-collapsed .collapse-toggle,
+    .sidebar-start-collapsed .collapse-toggle {
+      left: 24px;
+    }
+
+    /* Transition */
+    .sidebar-ready .collapse-toggle {
+      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  opacity 0.2s ease;
+    }
+    /* Toggle shown/hidden via JavaScript based on mouse movement */
+    
+    .collapse-toggle:hover {
+      background: linear-gradient(135deg, rgba(147, 197, 253, 0.2), rgba(34, 211, 238, 0.1));
+      box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 16px rgba(147, 197, 253, 0.3);
+      transform: translateY(-50%) scale(1.05);
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+    
+    .collapse-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--ink);
+    }
+
+    .sidebar-ready .collapse-toggle svg {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .wrap.sidebar-collapsed .collapse-toggle svg,
+    .sidebar-start-collapsed .collapse-toggle svg {
+      transform: rotate(180deg);
+    }
+
+    .collapse-toggle:hover svg {
+      fill: rgba(147, 197, 253, 0.9);
+    }
+    .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0}
+    /* Sidebar cards: no internal scroll, sidebar scrolls instead */
+    .sidebar-content .card{overflow:visible;flex-shrink:0}
+    .sidebar-content{overflow-y:auto;overflow-x:hidden;height:100%}
+    .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
+
+    /* Collapsible Panel System */
+    .card.collapsible {
+      transition: padding 0.2s ease;
+    }
+    .card.collapsible.collapsed {
+      padding-bottom: 14px;
+    }
+    .card.collapsible h2 {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      transition: margin 0.2s ease;
+    }
+    .card.collapsible.collapsed h2 {
+      margin-bottom: 0;
+    }
+    .card.collapsible h2::before {
+      content: '';
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-left: 5px solid var(--muted);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .card.collapsible:not(.collapsed) h2::before {
+      transform: rotate(90deg);
+    }
+    .card.collapsible h2:hover {
+      color: var(--ink);
+    }
+    .card.collapsible h2:hover::before {
+      border-left-color: var(--ink);
+    }
+    /* Smooth collapse animation using CSS Grid */
+    .card.collapsible .card-body-wrapper {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.25s ease-out;
+    }
+    .card.collapsible.collapsed .card-body-wrapper {
+      grid-template-rows: 0fr;
+    }
+    .card.collapsible .card-body {
+      overflow: hidden;
+      min-height: 0;
+    }
+    /* Collapsed summary text */
+    .card.collapsible .collapse-summary {
+      font-size: 11px;
+      color: var(--cyan);
+      margin-left: auto;
+      font-weight: 500;
+      font-family: monospace;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
+    }
+    .card.collapsible.collapsed .collapse-summary {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.15s ease 0.25s, visibility 0.15s ease 0.25s;
+    }
+
+    .visning{
+      grid-column:2;
+      grid-row:1;
+      display:grid;
+      grid-template-rows:auto 1fr;
+      gap:12px;
+      min-height:0;
+    }
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{background:var(--btn);border:0;color:white;padding:9px 12px;border-radius:11px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .btn-ghost{background:var(--btn-ghost);color:var(--ink);border:1px solid #2a3a5f}
+    .btn-active{background:var(--btn-dark)}
+    .btn-muted{background:var(--hot);color:white}
+
+    label{font-size:12px;color:var(--muted)}
+    code.small{font-size:12px;color:var(--muted)}
+
+    /* Inline editable value fields */
+    .inline-edit {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--ink);
+      font-size: 12px;
+      font-family: monospace;
+      padding: 2px 4px;
+      width: 44px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .inline-edit:hover {
+      border-color: var(--outline);
+      background: rgba(255,255,255,0.05);
+    }
+    .inline-edit:focus {
+      border-color: var(--cyan);
+      background: rgba(0,0,0,0.3);
+      outline: none;
+    }
+    /* Fixed-width control buttons for consistent alignment */
+    .btn-ctrl {
+      width: 56px;
+      flex-shrink: 0;
+      padding: 6px 0;
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Sidebar buttons - match meter-tab Nordic-minimal style
+       ═══════════════════════════════════════════════════════════════════════ */
+    .sidebar-content button,
+    .sidebar-content .btn-ghost,
+    .sidebar-content .btn-ctrl {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border: 1px solid var(--outline);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .sidebar-content button:hover,
+    .sidebar-content .btn-ghost:hover,
+    .sidebar-content .btn-ctrl:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: #9fb3c7;
+      border-color: rgba(147, 197, 253, 0.3);
+    }
+    .sidebar-content button:active,
+    .sidebar-content .btn-ghost:active,
+    .sidebar-content .btn-ctrl:active {
+      transform: scale(0.98);
+    }
+    .sidebar-content .btn-active {
+      background: #1e2832;
+      color: #e8f0f8;
+      box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.15),
+                  0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    .sidebar-content .btn-muted {
+      background: rgba(255, 90, 99, 0.15);
+      color: var(--hot);
+      border-color: rgba(255, 90, 99, 0.3);
+    }
+
+    /* Reset button in loudness panel - same Nordic-minimal style */
+    #r128Reset {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border: 1px solid var(--outline);
+      border-radius: 8px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    #r128Reset:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: #9fb3c7;
+      border-color: rgba(147, 197, 253, 0.3);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Gray minimalist range sliders
+       ═══════════════════════════════════════════════════════════════════════ */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #4a5568;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #6b7d8f;
+      transform: scale(1.1);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #4a5568;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-moz-range-thumb:hover {
+      background: #6b7d8f;
+      transform: scale(1.1);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Discrete checkbox styling
+       ═══════════════════════════════════════════════════════════════════════ */
+    input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 3px;
+      cursor: pointer;
+      vertical-align: middle;
+      margin-right: 6px;
+      position: relative;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    input[type="checkbox"]:hover {
+      border-color: rgba(147, 197, 253, 0.4);
+    }
+    input[type="checkbox"]:checked {
+      background: #1e2832;
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+    input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 10px;
+      color: var(--cyan);
+      font-weight: 700;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Discrete dropdown/select styling
+       ═══════════════════════════════════════════════════════════════════════ */
+    select {
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 6px;
+      color: var(--ink);
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    select:hover {
+      border-color: rgba(147, 197, 253, 0.3);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    select:focus {
+      outline: none;
+      border-color: rgba(147, 197, 253, 0.4);
+      box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.1);
+    }
+    select option {
+      background: #1b1f23;
+      color: var(--ink);
+    }
+
+    /* Source panels container - collapse-swap-expand animation */
+    .source-panels-container {
+      display: grid;
+      grid-template-rows: 1fr;
+      overflow: hidden;
+      transition: grid-template-rows 0.2s ease-out;
+    }
+    .source-panels-container.collapsed {
+      grid-template-rows: 0fr;
+    }
+    .source-panels-container-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* Individual source panels - simple show/hide */
+    .source-panel {
+      display: none;
+    }
+    .source-panel.source-panel-active {
+      display: block;
+    }
+    .source-panel-content {
+      /* Just a wrapper for content */
+    }
+
+    /* Visning */
+    .meters{
+      display:grid;
+      grid-template-columns:3fr 1fr;
+      grid-template-rows:1fr;
+      height:100%;
+      gap:12px;
+      min-height:0;
+      overflow:hidden;
+    }
+    .stack-left{
+      display: grid;
+      grid-template-rows: 2fr 1fr;  /* Vectorscope 2/3, active meter 1/3 */
+      gap: 12px;
+      min-height: 0;
+      align-items: stretch;
+      height: 100%;
+    }
+
+    /* Meter mode switch */
+    .meter-switcher {
+      background: #111416;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .meter-switcher > header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--outline);
+      flex-shrink: 0;
+    }
+    /* ═══════════════════════════════════════════════════════════════════════
+       Meter mode segmented control (TP/RMS/PPM) - Nordic-minimal pill toggle
+       ═══════════════════════════════════════════════════════════════════════ */
+    .meter-tabs {
+      display: inline-flex;
+      background: #0d1114;
+      border-radius: 10px;
+      padding: 3px;
+      gap: 0;
+      border: 1px solid var(--outline);
+    }
+    .meter-tab {
+      position: relative;
+      background: transparent;
+      color: #6b7d8f;
+      border: none;
+      padding: 10px 18px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: inherit;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: color 0.15s ease, background 0.15s ease;
+      min-width: 44px;
+      min-height: 40px;
+      border-radius: 7px;
+    }
+    /* First segment - left rounded */
+    .meter-tab:first-child {
+      border-radius: 7px 0 0 7px;
+    }
+    /* Last segment - right rounded */
+    .meter-tab:last-child {
+      border-radius: 0 7px 7px 0;
+    }
+    /* Middle segments - no rounding */
+    .meter-tab:not(:first-child):not(:last-child) {
+      border-radius: 0;
+    }
+    /* Dividers between unselected tabs */
+    .meter-tab:not(.active) + .meter-tab:not(.active)::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 20%;
+      height: 60%;
+      width: 1px;
+      background: #2a3642;
+    }
+    /* Hover state - subtle brightening */
+    .meter-tab:hover:not(.active) {
+      color: #9fb3c7;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    /* Focus state - visible outline for a11y */
+    .meter-tab:focus-visible {
+      outline: 2px solid rgba(147, 197, 253, 0.6);
+      outline-offset: -2px;
+      z-index: 1;
+    }
+    /* Active/pressed state - micro feedback */
+    .meter-tab:active:not(.active) {
+      transform: scale(0.98);
+    }
+    /* Selected state - highlighted but minimal */
+    .meter-tab.active {
+      background: #1e2832;
+      color: #e8f0f8;
+      box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.15),
+                  0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    /* Remove divider next to active tab */
+    .meter-tab.active + .meter-tab::before,
+    .meter-tab:has(+ .meter-tab.active)::before {
+      display: none;
+    }
+    .meter-panels {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      overflow: hidden;
+      perspective: 600px;
+      perspective-origin: center center;
+    }
+    /* Cylinder container - rotates as a unit */
+    .meter-cylinder {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      /* Rotation driven by --cylinder-angle CSS variable */
+      /* Animation handled by JS physics - no CSS transition */
+      transform: rotateX(calc(var(--cylinder-angle, 0) * 1deg));
+      will-change: transform;
+    }
+    .meter-panel {
+      position: absolute;
+      inset: 0;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      backface-visibility: hidden;
+      /* Each panel positioned on cylinder surface at 120° intervals */
+      transform-origin: center center;
+      pointer-events: none;
+      opacity: 0;
+    }
+    /* Panel 0 (TP): front face */
+    .meter-panel[data-meter="tp"] {
+      transform: rotateX(0deg) translateZ(80px);
+    }
+    /* Panel 1 (RMS): bottom face (120° down) */
+    .meter-panel[data-meter="rms"] {
+      transform: rotateX(-120deg) translateZ(80px);
+    }
+    /* Panel 2 (PPM): top face (240° down = 120° up) */
+    .meter-panel[data-meter="ppm"] {
+      transform: rotateX(-240deg) translateZ(80px);
+    }
+    /* Active panel (facing viewer) gets pointer events and opacity */
+    .meter-panel.facing {
+      pointer-events: auto;
+      opacity: 1;
+    }
+    .meter-carousel-ready .meter-panel {
+      transition: opacity 200ms ease-out;
+    }
+    .meter-panel .hMeter {
+      flex: 1;
+      min-height: 0;
+    }
+    .stack-right{display:grid;grid-template-rows:1fr;gap:12px;min-height:0}
+    .meter{
+      background: #111416;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      padding: var(--meter-gap) 2vw;
+      position: relative;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 0;
+      height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .meter header{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--meter-gap);
+    }
+    .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--outline);background:#0f1214;color:#cfe1ff}
+    .tiny{opacity:.85;font-size:12px}
+
+    canvas{display:block;width:100%;height:160px;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
+
+    /* Canvas for goniometer and correlation */
+    #xy, #corr, #monoDev {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+/*
+ * Tabular Numbers – Future-proof implementation
+ *
+ * font-variant-numeric: tabular-nums ensures ALL digits render at equal width
+ * regardless of typeface (provided the font supports OpenType tnum feature).
+ *
+ * This is the modern standard (CSS Fonts Module Level 4) and allows
+ * free typeface substitution without numeric "jitter".
+ *
+ * Fallback: font-feature-settings for older browsers.
+ * Monospace fallback only if font lacks tnum support.
+ */
+.tabular-nums,
+.mono-num,
+.big,
+.hLabel b,
+.overlay b,
+#r128Time,
+#corrVal,
+#monoDevVal,
+#lufsM,
+#lufsS,
+#lufsI,
+#lra,
+#r128TpMax {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1; /* fallback for older browsers */
+}
+
+/*
+ * For elements requiring absolute fixed-width (e.g. timers, counters)
+ * add monospace as an additional safeguard:
+ */
+.mono-num-strict {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Mono Deviation meter – same width as goniometer */
+.monoDevWrap {
+  width: var(--gonio-size, 280px);
+  margin: 0 auto;
+  padding: 4px 0;
+}
+.monoDevWrap .canvasPad {
+  height: 32px;
+  width: 100%;
+}
+.monoDevWrap canvas {
+  border-radius: 6px !important;
+}
+
+/* Canvas-pad gemensamma regler */
+.canvasPad {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.canvasPad > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--outline);
+  background: #0d0f11;
+  box-sizing: border-box;
+}
+
+    /* Horisontella stapel-metrar */
+    .hMeter{position:relative;height:100%;min-height:80px;margin-bottom: var(--meter-gap);}
+    .hMeter canvas{position:absolute;inset:0;width:100%;height:100%}
+    .hScale{position:absolute;inset:0;pointer-events:none}
+    /* TP meter: add left/right margin so bars don't touch frame */
+    #tpCard .hMeter canvas{left:1%;right:1%;width:98%}
+    #tpCard .hScale{left:1%;right:1%}
+    .hLabel{position:absolute;bottom:4px;left:8px;font-size:11px;color:#cfe1ff;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;border:1px solid #2a2f36}
+
+    .overlay{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36;text-align:left}
+
+    /* R128 – sifferpanel (huvudregler finns ovan) */
+    .r128{display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden}
+
+    .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+    .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
+    .kv small{display:block;font-size:11px;color:#a9b2c7}
+    .kv .wide{grid-column:span 2}
+
+    /* Settings rows */
+    .setting-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--outline)}
+    .setting-row:last-child{border-bottom:none}
+    .setting-row label{font-size:12px;color:var(--muted);flex-shrink:0}
+    .setting-row select{min-width:140px}
+    /* Uniform dropdown width in Metering Settings */
+    #panelMeteringSettings .setting-row select{width:170px}
+
+    input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
+    .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
+    .brand{flex:1 1 60%;min-width:480px}
+    .brand svg{display:block;height:64px;width:100%}
+    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
+    .brand svg{display:block;height:60px;width:auto}
+    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
+
+    /* Divider/linje under rubrik */
+    .meter .divider {
+      border: none;
+      border-top: 1px solid var(--outline);
+      margin: 0 0 var(--meter-gap) 0;
+      width: 100%;
+      background: none;
+    }
+    .hMeter {
+      position: relative;
+      height: 160px;
+      margin-bottom: var(--meter-gap);
+    }
+
+    /* Drag & Drop Responsive Panels */
+    .meter {
+      cursor: grab;
+    }
+
+    .meter.dragging {
+      cursor: grabbing;
+        transition: var(--drag-transition);
+        position: relative;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+
+      .meter:hover {
+        box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 20px rgba(147, 197, 253, 0.3);
+        border-color: rgba(147, 197, 253, 0.5);
+        background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.03));
+      }
+
+      .meter:hover h2 {
+        color: rgba(147, 197, 253, 0.9);
+        text-shadow: 0 0 8px rgba(147, 197, 253, 0.3);
+      }
+
+      .meter.dragging {
+        cursor: grabbing;
+        transform: scale(0.95);
+        box-shadow: 0 16px 48px rgba(0,0,0,.6), 0 0 32px rgba(147, 197, 253, 0.2);
+        border: 2px solid rgba(147, 197, 253, 0.3);
+        z-index: 1000;
+        background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.02));
+      }
+
+      .meter.dragging::before {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: 16px;
+        background: linear-gradient(45deg, rgba(147, 197, 253, 0.3), rgba(34, 211, 238, 0.3));
+        z-index: -1;
+        filter: blur(8px);
+      }
+
+      .meter.drag-over {
+        border: 2px dashed rgba(147, 197, 253, 0.6);
+        background: rgba(147, 197, 253, 0.05);
+        animation: pulse-glow 1s ease-in-out infinite alternate;
+      }
+
+      .meter.transitioning {
+        transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
+
+      @keyframes pulse-glow {
+        0% { box-shadow: 0 0 16px rgba(147, 197, 253, 0.3); }
+        100% { box-shadow: 0 0 24px rgba(147, 197, 253, 0.5); }
+      }
+  </style>
+  <!-- Sidebar state BEFORE render - prevents "flash" -->
+  <script>
+    (function() {
+      if (localStorage.getItem('tsg-sidebar-collapsed') === 'true') {
+        document.documentElement.classList.add('sidebar-start-collapsed');
+      }
+    })();
+  </script>
+</head>
+<body>
+<header>
+  <div class="hdr">
+    <div class="brand">
+      <!-- Vector logo: VEROBAAMBI without space, BAAMBI tighter -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 4000 200"
+     width="100%" height="auto"
+     preserveAspectRatio="xMidYMid meet"
+     role="img"
+     aria-label="TSG Suite | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
+  <defs>
+    <linearGradient id="lock-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+
+  <text x="2%" y="50%" dominant-baseline="middle"
+        font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
+        font-size="100">
+
+    <!-- TSG Suite i samma cyan som tagline -->
+    <tspan fill="#93C5FD" font-weight="800" letter-spacing="0.75">TSG Suite</tspan>
+
+    <!-- separator -->
+    <tspan fill="#6B7280" font-weight="300" dx="1.2em">|</tspan>
+
+    <!-- VERO = extra bold -->
+    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="1.2em">VERO</tspan>
+    <!-- BAAMBI = very thin and tight -->
+    <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
+
+    <!-- separator -->
+    <tspan fill="#6B7280" font-weight="300" dx="1.2em">|</tspan>
+
+    <!-- Tagline i samma cyan som TSG Suite -->
+    <tspan fill="#93C5FD" font-weight="600" font-size="75" letter-spacing="2.5" dx="1.2em">
+      Broadcast Audio Alignment &amp; Meter Bridge Interface
+    </tspan>
+  </text>
+</svg>
+    </div>
+  </div>
+</header>
+
+<div id="wrap" class="wrap">
+  <div class="sidebar-container">
+    <div class="sidebar-content">
+      <section class="card collapsible" id="panelInputSources" data-panel="inputSources">
+        <h2>Input Sources <span class="collapse-summary" id="inputSourceSummary">–</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <!-- Source Mode Selector (3 buttons) -->
+          <div class="row" style="margin-bottom:8px;gap:4px">
+            <button id="btnModeBrowser" class="btn-active" style="flex:1;line-height:1.2">Browser<br>Tab</button>
+            <button id="btnModeExternal" class="btn-ghost" style="flex:1;line-height:1.2">External<br>Device</button>
+            <button id="btnModeGenerator" class="btn-ghost" style="flex:1;line-height:1.2">Internal<br>Generator</button>
+          </div>
+
+          <!-- Unified Start/Stop Capture -->
+          <div class="row" style="margin-bottom:10px">
+            <button id="btnStartCapture" class="btn-ghost" style="flex:1">Start Capture</button>
+            <button id="btnStopCapture" class="btn-ghost" style="flex:1" disabled>Stop Capture</button>
+          </div>
+
+          <!-- Source Panels Container (for collapse-swap-expand animation) -->
+          <div id="sourcePanelsContainer" class="source-panels-container">
+          <div class="source-panels-container-inner">
+          <!-- Browser Source Panel -->
+          <div id="browserSourcePanel" class="source-panel source-panel-active">
+            <div class="source-panel-content">
+            <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>.</p>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="sysMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="sysMonVal" class="inline-edit" value="20" />
+              <button id="btnSysMonMute" class="btn-muted btn-ctrl">Mute</button>
+            </div>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" style="flex:1;min-width:60px" />
+              <input type="text" id="sysTrimVal" class="inline-edit" value="-12" />
+              <button id="sysTrimReset" class="btn-ghost btn-ctrl">Reset</button>
+            </div>
+            <div class="kv" id="info">
+              <div><small>Source</small><span id="srcKind">–</span></div>
+              <div><small>Channels</small><span id="cc">–</span></div>
+              <div><small>Sample rate</small><span id="sr">–</span></div>
+              <div><small>Stereo OK?</small><span id="stOK">–</span></div>
+            </div>
+            <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you enable the monitor.</p>
+            </div>
+          </div>
+
+          <!-- External Source Panel (hidden by default) -->
+          <div id="externalSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Device:</label>
+              <select id="extDeviceSelect" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <option value="">– Select audio input –</option>
+              </select>
+              <button id="btnExtRefresh" class="btn-ghost btn-ctrl" title="Refresh device list">↻</button>
+            </div>
+            <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, DVS, NDI etc.</p>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="extMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="extMonVal" class="inline-edit" value="20" />
+              <button id="btnExtMonMute" class="btn-muted btn-ctrl">Mute</button>
+            </div>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" style="flex:1;min-width:60px" />
+              <input type="text" id="extTrimVal" class="inline-edit" value="0" />
+              <button id="extTrimReset" class="btn-ghost btn-ctrl">Reset</button>
+            </div>
+            <div class="kv" id="extInfo">
+              <div><small>Device</small><span id="extDevice">–</span></div>
+              <div><small>Channels</small><span id="extCc">–</span></div>
+              <div><small>Sample rate</small><span id="extSr">–</span></div>
+              <div><small>Status</small><span id="extStatus">–</span></div>
+            </div>
+            <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable.</p>
+            <p class="tiny">No AGC, no noise suppression, no echo cancellation.</p>
+            </div>
+          </div>
+
+          <!-- Generator Source Panel (hidden by default) -->
+          <div id="generatorSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
+              <select id="genPreset" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <optgroup label="Line-Up Tones">
+                  <option value="ebu400" data-type="sine" data-freq="400" data-db="-18" data-routing="stereo" selected>400 Hz · EBU Broadcast Line-Up                      −18 dBFS</option>
+                  <option value="smpte1k" data-type="sine" data-freq="1000" data-db="-20" data-routing="stereo">1 kHz · SMPTE Broadcast Line-Up                       −20 dBFS</option>
+                  <option value="aes1k" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo">1 kHz · AES Digital Reference                         −18 dBFS</option>
+                  <option value="fft997" data-type="sine" data-freq="997" data-db="-18" data-routing="stereo">997 Hz · FFT-Optimised                                −18 dBFS</option>
+                  <option value="musical440" data-type="sine" data-freq="440" data-db="-18" data-routing="stereo">440 Hz · Musical A                                    −18 dBFS</option>
+                  <option value="lfe80" data-type="sine" data-freq="80" data-db="-18" data-routing="mono">80 Hz · LFE Reference                                 −18 dBFS</option>
+                </optgroup>
+                <optgroup label="EBU Stereo-ID (L Pulsed)">
+                  <option value="ebu400-pulsed" data-type="sine" data-freq="400" data-db="-18" data-routing="stereo" data-pulsed="true">400 Hz · EBU Line-Up + L Pulsed                       −18 dBFS</option>
+                  <option value="smpte1k-pulsed" data-type="sine" data-freq="1000" data-db="-20" data-routing="stereo" data-pulsed="true">1 kHz · SMPTE Line-Up + L Pulsed                      −20 dBFS</option>
+                  <option value="aes1k-pulsed" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo" data-pulsed="true">1 kHz · AES Reference + L Pulsed                      −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Reference Noise">
+                  <option value="ebu-pink-ref" data-type="pink" data-lo="500" data-hi="2000" data-db="-23" data-routing="mono">Pink Noise · EBU Reference (500–2k Hz)                −23 dBFS</option>
+                  <option value="pink-full-mono" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="mono">Pink Noise · Fullband Mono                            −18 dBFS</option>
+                  <option value="pink-full-stereo" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="stereo-uncorr">Pink Noise · Fullband Stereo (uncorr)                 −18 dBFS</option>
+                  <option value="white-full" data-type="white" data-lo="20" data-hi="20000" data-db="-20" data-routing="stereo-uncorr">White Noise · Fullband                                −20 dBFS</option>
+                  <option value="brown-lf" data-type="brown" data-lo="20" data-hi="200" data-db="-20" data-routing="mono">Brown Noise · LF (20–200 Hz)                          −20 dBFS</option>
+                  <option value="brown-full" data-type="brown" data-lo="20" data-hi="20000" data-db="-22" data-routing="mono">Brown Noise · Fullband                                −22 dBFS</option>
+                </optgroup>
+                <optgroup label="Test Sequences">
+                  <option value="glits" data-type="glits" data-db="-18">GLITS · Stereo Ident Sequence                         −18 dBFS</option>
+                  <option value="sweep-log" data-type="sweep" data-lo="20" data-hi="20000" data-db="-18" data-duration="20" data-routing="stereo">Sine Sweep · Log 20Hz–20kHz (20s)                     −18 dBFS</option>
+                  <option value="sweep-slow" data-type="sweep" data-lo="20" data-hi="20000" data-db="-18" data-duration="60" data-routing="stereo">Sine Sweep · Log 20Hz–20kHz (60s)                     −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Phase & Polarity Tests">
+                  <option value="phase-corr" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo">1 kHz · L=R (correlated)                              −18 dBFS</option>
+                  <option value="phase-anti" data-type="sine" data-freq="1000" data-db="-18" data-routing="anti-phase">1 kHz · L=−R (anti-phase)                             −18 dBFS</option>
+                  <option value="phase-left" data-type="sine" data-freq="1000" data-db="-18" data-routing="left-only">1 kHz · Left Only                                     −18 dBFS</option>
+                  <option value="phase-right" data-type="sine" data-freq="1000" data-db="-18" data-routing="right-only">1 kHz · Right Only                                    −18 dBFS</option>
+                  <option value="pink-corr" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="mono">Pink · Correlated (mono)                              −18 dBFS</option>
+                  <option value="pink-anti" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="anti-phase">Pink · Anti-phase                                     −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Goniometer Patterns">
+                  <option value="liss-mono" data-type="lissajous" data-freq="1000" data-phase="0" data-db="-18">Lissajous · Mono (0° phase)                           −18 dBFS</option>
+                  <option value="liss-circle" data-type="lissajous" data-freq="1000" data-phase="90" data-db="-18">Lissajous · Circle (90° phase)                        −18 dBFS</option>
+                  <option value="liss-anti" data-type="lissajous" data-freq="1000" data-phase="180" data-db="-18">Lissajous · Anti-phase (180°)                         −18 dBFS</option>
+                  <option value="liss-21" data-type="lissajous" data-freq="1000" data-ratio="2:1" data-db="-18">Lissajous · 2:1 Figure                                −18 dBFS</option>
+                  <option value="liss-32" data-type="lissajous" data-freq="1000" data-ratio="3:2" data-db="-18">Lissajous · 3:2 Figure                                −18 dBFS</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="kv" id="genInfo">
+              <div><small>Gen Mode</small><span id="genModeVal">400 Hz −18 dBFS</span></div>
+              <div><small>Stereo ID</small><span id="genStereoIdVal">No</span></div>
+            </div>
+            <div class="row" style="margin-top:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="monGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="monVal" class="inline-edit" value="20" />
+              <button id="btnMonMute" class="btn-ghost btn-ctrl">Mute</button>
+            </div>
+            </div>
+          </div>
+          </div><!-- /source-panels-container-inner -->
+          </div><!-- /sourcePanelsContainer -->
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelMeteringSettings" data-panel="meteringSettings">
+        <h2>Metering Settings <span class="collapse-summary">−23 LUFS / −1 dBTP</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <!-- LUFS Target -->
+          <div class="setting-row">
+            <label for="targetPreset">Loudness Target</label>
+            <select id="targetPreset">
+              <option value="-23">−23 LUFS (EBU R128)</option>
+              <option value="-24">−24 LUFS (ATSC A/85)</option>
+              <option value="-16">−16 LUFS (Streaming)</option>
+              <option value="-14">−14 LUFS (Podcast)</option>
+            </select>
+          </div>
+
+          <!-- TP Limit -->
+          <div class="setting-row">
+            <label for="tpLimit">True Peak Limit</label>
+            <select id="tpLimit">
+              <option value="-1">−1 dBTP (Broadcast)</option>
+              <option value="-2">−2 dBTP (Streaming)</option>
+              <option value="-3">−3 dBTP (Safe)</option>
+            </select>
+          </div>
+
+          <!-- Radar Sweep -->
+          <div class="setting-row">
+            <label for="radarSweep">Radar Sweep Time</label>
+            <select id="radarSweep">
+              <option value="30">30 seconds</option>
+              <option value="60" selected>60 seconds</option>
+              <option value="120">120 seconds</option>
+            </select>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelStatus" data-panel="status">
+        <h2>Status & Live Data <span class="collapse-summary" id="statusSummary">–</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <div class="kv">
+            <div class="wide"><small>Uptime</small><span id="uptime" style="font-family:monospace">00:00:00.0</span></div>
+            <div><small>AudioContext</small><span id="ctxState">–</span></div>
+            <div><small>Tab Capture</small><span id="dbgTab">–</span></div>
+            <div><small>External</small><span id="dbgExt">–</span></div>
+            <div><small>Generator</small><span id="dbgGen">–</span></div>
+            <div class="wide"><small>Monitor</small><span id="monitorStatus" class="tiny">Tab: <b>–</b> · Ext: <b>–</b> · Gen: <b>–</b></span></div>
+          </div>
+        </div></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Toggle outside sidebar-container so position:fixed works correctly -->
+  <div class="collapse-toggle" id="sidebarToggle">
+    <svg viewBox="0 0 24 24">
+      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+    </svg>
+  </div>
+
+  <section class="card visning">
+    <div class="meters" id="meters">
+      <div class="stack-left">
+        <!-- NY: Goniometer + Correlation (tidigare vectorscope) -->
+        <div class="meter" id="xyCard">
+          <header><label>Spatial Analysis</label><span class="badge">Goniometer + Phase Correlation</span></header>
+          <div class="stereoContainer">
+            <!-- Left column: Goniometer + Phase Correlation -->
+            <div class="stereoLeftCol">
+              <div class="gonioSquare" id="xyWrap">
+                <div class="canvasPad"><canvas id="xy"></canvas></div>
+              </div>
+              <div class="phaseWidget corrWidget">
+                <div class="widgetLabel">Phase Correlation <span style="float:right">ρ = <b id="corrVal">+-.--</b></span></div>
+                <div class="corrWrap">
+                  <div class="canvasPad"><canvas id="corr"></canvas></div>
+                </div>
+              </div>
+            </div>
+            <!-- Right column: 2x2 grid + Spectrum (full width, double height) -->
+            <div class="stereoRightCol">
+              <!-- Row 1, Col 1: Balance Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Balance</div>
+                <div class="monoDevWrap">
+                  <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                </div>
+                <div class="balanceAxis">
+                  <span>L</span>
+                  <span id="monoDevVal">--.- dB</span>
+                  <span>R</span>
+                </div>
+              </div>
+              <!-- Row 1, Col 2: Width Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Width</div>
+                <canvas id="widthMeter"></canvas>
+                <div class="rotationAxis"><span>M</span><span></span><span>S</span></div>
+              </div>
+              <!-- Row 2, Col 1: Phase Axis Rotation Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Phase Axis Rotation</div>
+                <div class="rotationWrap">
+                  <div class="canvasPad"><canvas id="rotationCanvas"></canvas></div>
+                </div>
+                <div class="rotationAxis"><span>L-Phase</span><span>Mono Axis</span><span>R-Phase</span></div>
+              </div>
+              <!-- Row 2, Col 2: M/S Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">M/S Meter</div>
+                <div class="msCompact">
+                  <div class="msBar">
+                    <span class="msLabel">M</span>
+                    <div class="msTrack"><div class="msFill msFillM" id="msFillM"></div></div>
+                    <span class="msValue" id="msValueM">--.- dB</span>
+                  </div>
+                  <div class="msBar">
+                    <span class="msLabel">S</span>
+                    <div class="msTrack"><div class="msFill msFillS" id="msFillS"></div></div>
+                    <span class="msValue" id="msValueS">--.- dB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Row 3-4: Spectrum Analyser (full width, double height) -->
+              <div class="phaseWidget histogramWidget">
+                <div class="widgetLabel">Spectrum</div>
+                <div class="spectrumWrap">
+                  <div class="canvasPad"><canvas id="spectrumAnalyzer"></canvas></div>
+                </div>
+                <div class="histogramAxis">
+                  <span>Lo</span><span></span><span>Hi</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Meter switcher: TP / RMS / PPM -->
+        <div class="meter-switcher" id="meterSwitcher">
+          <header>
+            <div class="meter-tabs" role="tablist" aria-label="Meter type">
+              <button class="meter-tab active" role="tab" aria-selected="true" tabindex="0" data-meter="tp">TP</button>
+              <button class="meter-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="rms">RMS</button>
+              <button class="meter-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="ppm">PPM</button>
+            </div>
+            <span class="badge" id="meterBadge">True Peak Level (dBTP)</span>
+          </header>
+          <div class="meter-panels">
+            <div class="meter-cylinder" id="meterCylinder">
+              <div class="meter-panel facing" id="tpCard" data-meter="tp">
+                <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> · R: <b id="tpR">--.-</b> dBTP</span>
+                <div class="hMeter">
+                  <canvas id="tp" height="160"></canvas>
+                  <div class="hScale" id="tpScale"></div>
+                </div>
+              </div>
+              <div class="meter-panel" id="dbfsCard" data-meter="rms">
+                <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> · R: <b id="dbR">--.-</b> dBFS</span>
+                <div class="hMeter">
+                  <canvas id="dbfs" height="160"></canvas>
+                  <div class="hScale" id="dbfsScale"></div>
+                </div>
+              </div>
+              <div class="meter-panel" id="ppmCard" data-meter="ppm">
+                <span class="hLabel" id="ppmLabel">L: <b id="ppmLVal">--.-</b> · R: <b id="ppmRVal">--.-</b> PPM</span>
+                <div class="hMeter">
+                  <canvas id="ppmCanvas" height="160"></canvas>
+                  <div class="hScale" id="ppmScale"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stack-right">
+        <!-- Loudness (radar on top, values below) -->
+        <div class="meter" id="loudnessCard">
+          <header><label>Loudness</label><span class="badge">Radar + EBU R128</span></header>
+          <div class="loudnessModule">
+            <div class="radarWrap">
+              <canvas id="loudnessRadar"></canvas>
+              <div class="radar-lufs-value" id="radarLufsValue">—</div>
+              <div class="peak-led" id="peakLed"><span>Peak</span></div>
+            </div>
+            <div class="r128-panel">
+              <div class="r128">
+                <div class="row"><small>M</small><span class="big" id="lufsM">--.- LUFS</span></div>
+                <div class="row"><small>S</small><span class="big" id="lufsS">--.- LUFS</span></div>
+                <div class="row"><small>I</small><span class="big" id="lufsI">--.- LUFS</span></div>
+                <div class="row"><small>LRA</small><span class="big" id="lra">--.- LU</span></div>
+                <div class="row"><small>TP</small><span class="big" id="r128TpMax">--.- dBTP</span></div>
+                <div class="row"><small>Crest</small><span class="big" id="r128Crest">--.- dB</span></div>
+                <div class="row"><small title="Time since start or reset">Elapsed</small><span class="big" id="r128Time">--:--:--</span></div>
+                <div class="row" style="margin-top:4px"><button class="btn-ghost" id="r128Reset" style="width:100%;padding:6px 0;font-size:11px">Reset</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODULAR ESM BOOTSTRAP
+     ═══════════════════════════════════════════════════════════════════════════
+     Loads the modular version instead of inline JavaScript.
+     For legacy fallback, use audio-meters-grid.html
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script type="module" src="./src/app/bootstrap.js"></script>
+
+</body>
+</html>
