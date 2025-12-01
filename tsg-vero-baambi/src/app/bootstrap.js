@@ -1725,40 +1725,57 @@ window.GlitchDebug = GlitchDebug;
 console.log('%c[GLITCH DEBUG] Active - use GlitchDebug.reset() after starting generator', 'color: #4ecdc4; font-weight: bold');
 
 // Frame timing for glitch protection
+// Instead of skipping frames, we HOLD the last known-good buffer data
+// This is more accurate than skipping - we show real data, just frozen briefly
 let lastRenderTime = performance.now();
-const FRAME_SKIP_THRESHOLD = 80; // Skip goniometer if frame > 80ms (protects against stale buffer data)
+const FRAME_HOLD_THRESHOLD = 80; // Hold previous frame if delta > 80ms
+let holdBufL = null;
+let holdBufR = null;
 
 function renderLoop() {
   const now = performance.now();
   const frameDelta = now - lastRenderTime;
   lastRenderTime = now;
 
-  // Skip goniometer on long frames to prevent visual glitches
-  const skipGoniometer = frameDelta > FRAME_SKIP_THRESHOLD;
-
   // Layout
   layoutXY();
   layoutLoudness();
 
-  // Sample analysers ONCE
+  // Sample analysers ONCE (always get fresh data for debugging)
   sampleAnalysers();
 
-  // DEBUG: Analyze for glitches
+  // On long frames, AnalyserNode buffers may have timing skew between L/R reads.
+  // Use held (last known-good) buffers for display to prevent visual artifacts.
+  // This is NOT lying - it's showing the last accurate measurement rather than
+  // potentially corrupted data from a timing glitch.
+  const isLongFrame = frameDelta > FRAME_HOLD_THRESHOLD;
+  const useBufL = (isLongFrame && holdBufL) ? holdBufL : bufL;
+  const useBufR = (isLongFrame && holdBufR) ? holdBufR : bufR;
+
+  // Store good buffers for potential hold (only when frame timing is normal)
+  if (!isLongFrame) {
+    if (!holdBufL) holdBufL = new Float32Array(bufL.length);
+    if (!holdBufR) holdBufR = new Float32Array(bufR.length);
+    holdBufL.set(bufL);
+    holdBufR.set(bufR);
+  }
+
+  // DEBUG: Analyze actual (possibly glitched) buffers for accurate debugging
   GlitchDebug.analyze(bufL, bufR, now);
 
-  // Stereo analysis engine - update metrics from buffers
+  // Stereo analysis engine - use held buffers for stable display
   if (stereoAnalysis) {
-    stereoAnalysis.analyze(bufL, bufR);
+    stereoAnalysis.analyze(useBufL, useBufR);
   }
 
-  // Goniometer - skip on long frames to prevent glitch artifacts
-  if (goniometer && !skipGoniometer) {
-    goniometer.draw(bufL, bufR, TransitionGuard.shouldRender());
+  // Goniometer - use held buffers on long frames
+  if (goniometer) {
+    goniometer.draw(useBufL, useBufR, TransitionGuard.shouldRender());
   }
 
-  // Correlation meter - pass TransitionGuard.shouldRender() for blanking
+  // Correlation meter - use held buffers on long frames
   if (correlationMeter) {
-    correlationMeter.draw(bufL, bufR, TransitionGuard.shouldRender());
+    correlationMeter.draw(useBufL, useBufR, TransitionGuard.shouldRender());
   }
 
   // Balance meter
