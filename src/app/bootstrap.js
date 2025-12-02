@@ -829,36 +829,8 @@ startMeasureLoop();
 // RENDER LOOP (60 Hz) - Extracted to render-loop.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Initialise render loop with dependencies
-initRenderLoop({
-  dom: {
-    lufsM, xyCard, ppmCanvas, ppmLVal, ppmRVal,
-    dbfs, dbL, dbR, tp, tpL, tpR,
-    uptimeEl, statusSummary
-  },
-  meters: {
-    bufL, bufR, ppmMeter, truePeakMeter
-  },
-  uiComponents: {
-    goniometer, correlationMeter, balanceMeterUI,
-    spectrumAnalyzerUI, msMeterUI, widthMeterUI,
-    rotationMeterUI, radar, stereoAnalysis
-  },
-  config: {
-    getSampleRate: () => ac.sampleRate,
-    getRadarMaxSeconds: () => radarMaxSeconds,
-    getTpLimit: () => TP_LIMIT
-  },
-  helpers: {
-    layoutXY, layoutLoudness, sampleAnalysers,
-    drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM
-  },
-  TransitionGuard,
-  GlitchDebug
-});
-
-// Start the 60 Hz render loop
-startRenderLoop();
+// NOTE: initRenderLoop() must be called AFTER initUIComponents() to ensure
+// UI component references are properly initialised. This is done in init().
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVENT BINDINGS
@@ -1181,6 +1153,34 @@ function init() {
     setLayoutFrozen: (v) => { isDragLayoutFrozen = v; }
   });
   setupDragAndDrop();
+
+  // Initialize render loop with dependencies (MUST be after initUIComponents)
+  initRenderLoop({
+    dom: {
+      lufsM, xyCard, ppmCanvas, ppmLVal, ppmRVal,
+      dbfs, dbL, dbR, tp, tpL, tpR,
+      uptimeEl, statusSummary
+    },
+    meters: {
+      bufL, bufR, ppmMeter, truePeakMeter
+    },
+    uiComponents: {
+      goniometer, correlationMeter, balanceMeterUI,
+      spectrumAnalyzerUI, msMeterUI, widthMeterUI,
+      rotationMeterUI, radar, stereoAnalysis
+    },
+    config: {
+      getSampleRate: () => ac.sampleRate,
+      getRadarMaxSeconds: () => radarMaxSeconds,
+      getTpLimit: () => TP_LIMIT
+    },
+    helpers: {
+      layoutXY, layoutLoudness, sampleAnalysers,
+      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM
+    },
+    TransitionGuard,
+    GlitchDebug
+  });
 
   // Start render loop
   startRenderLoop();
