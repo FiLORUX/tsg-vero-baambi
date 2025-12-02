@@ -12,37 +12,44 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * APPLICATION MODULE INDEX
+ * SIGNAL GENERATORS INDEX
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Re-exports all application integration modules.
+ * Central export point for all signal generator modules.
+ * Import from this file to access all generator functionality.
  *
- * @module app
+ * @module generators
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// State management
+// Noise generators
 export {
-  InputMode,
-  DEFAULT_STATE,
-  StateStore,
-  appState
-} from './state.js';
+  getWhiteNoiseBuffer,
+  createNoiseBuffer,
+  createNoiseSource,
+  clearNoiseBufferCache
+} from './noise.js';
 
-// Input source control
+// Oscillator generators
 export {
-  ALIGNMENT_TONE_HZ,
-  ALIGNMENT_LEVEL_DBFS,
-  SignalType,
-  RoutingMode,
-  SourceController,
-  getAudioInputDevices,
-  requestMicrophonePermission
-} from './sources.js';
+  createSineOscillator,
+  createSweepOscillator,
+  createGlitsOscillator
+} from './oscillators.js';
 
-// Render loop
+// Lissajous generators
 export {
-  RenderLoop,
-  MeterRenderer,
-  renderLoop
-} from './renderer.js';
+  createLissajousWithPhase,
+  createLissajousDualFreq,
+  parseFrequencyRatio
+} from './lissajous.js';
+
+// Preset configuration
+export {
+  getPresetConfig,
+  formatPresetDisplay,
+  dbToLinear
+} from './presets.js';
+
+// THÅST Vector Text (already exists)
+export { ThastVectorTextGenerator, buildTextPath, DEFAULT_CONFIG as VECTOR_TEXT_CONFIG } from './thast-vector-text.js';

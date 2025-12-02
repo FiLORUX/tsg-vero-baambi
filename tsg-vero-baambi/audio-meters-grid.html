@@ -667,6 +667,106 @@
       text-align: center;
     }
 
+    /* ═══════════════════════════════════════════════════════════════════════════
+       NORDIC-MINIMAL SIDEBAR STYLING
+       Matches meter-tab button style for consistent UI
+       ═══════════════════════════════════════════════════════════════════════════ */
+
+    /* Sidebar buttons - match meter-tab style */
+    .sidebar-content button,
+    .sidebar-content .btn-ghost,
+    .sidebar-content .btn-ctrl {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border: 1px solid var(--outline);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .sidebar-content button:hover,
+    .sidebar-content .btn-ghost:hover {
+      background: #1a2030;
+      color: var(--ink);
+    }
+    .sidebar-content button.btn-active,
+    .sidebar-content button[class*="active"] {
+      background: var(--btn);
+      color: white;
+      border-color: var(--btn);
+    }
+    .sidebar-content button.btn-muted {
+      background: var(--hot);
+      color: white;
+      border-color: var(--hot);
+    }
+    .sidebar-content button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Gray minimalist range sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+      height: 20px;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: #2a2f36;
+      height: 4px;
+      border-radius: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #6b7280;
+      border-radius: 50%;
+      margin-top: -5px;
+      border: none;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #9ca3af;
+      transform: scale(1.1);
+    }
+    input[type="range"]::-webkit-slider-thumb:active {
+      background: var(--cyan);
+    }
+    /* Firefox */
+    input[type="range"]::-moz-range-track {
+      background: #2a2f36;
+      height: 4px;
+      border-radius: 2px;
+      border: none;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #6b7280;
+      border-radius: 50%;
+      border: none;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-moz-range-thumb:hover {
+      background: #9ca3af;
+      transform: scale(1.1);
+    }
+    input[type="range"]:focus {
+      outline: none;
+    }
+    input[type="range"]:focus::-webkit-slider-thumb {
+      box-shadow: 0 0 0 2px rgba(105, 191, 255, 0.3);
+    }
+    input[type="range"]:focus::-moz-range-thumb {
+      box-shadow: 0 0 0 2px rgba(105, 191, 255, 0.3);
+    }
+
     /* Source panels container - collapse-swap-expand animation */
     .source-panels-container {
       display: grid;

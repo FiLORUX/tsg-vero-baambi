@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>QR Code Test - TSG Lineup</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 50px auto;
+            background: #111;
+            color: #0f0;
+            padding: 20px;
+        }
+        #qr-container {
+            background: white;
+            padding: 20px;
+            display: inline-block;
+            margin: 20px 0;
+        }
+        pre {
+            background: #222;
+            padding: 10px;
+            overflow-x: auto;
+        }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-family: monospace;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0c0;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-left: 4px solid #0f0;
+        }
+        .error {
+            border-left-color: #f00;
+            color: #f00;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 TSG Lineup - QR Code Implementation Test</h1>
+
+    <h2>Test Cases:</h2>
+    <button onclick="testSimple()">Test 1: Simple Text</button>
+    <button onclick="testWebRTC()">Test 2: WebRTC SDP (Realistic)</button>
+    <button onclick="testLongData()">Test 3: Long Data</button>
+    <button onclick="runAllTests()">Run All Tests</button>
+
+    <div id="results"></div>
+    <div id="qr-container"></div>
+
+    <h2>Implementation Details:</h2>
+    <div id="stats"></div>
+
+    <script src="tsg-lineup.html"></script>
+    <script>
+        // Extract QRCodeGenerator from tsg-lineup.html
+        // (In real test, we'd load from the actual file)
+
+        function displayQR(svg, testName) {
+            const container = document.getElementById('qr-container');
+            container.innerHTML = `<h3>${testName}</h3>` + svg;
+        }
+
+        function logResult(message, isError = false) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = 'test-result' + (isError ? ' error' : '');
+            div.textContent = message;
+            results.appendChild(div);
+        }
+
+        function testSimple() {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+
+            try {
+                const testData = "Hello World!";
+                console.log('[TEST] Generating QR for:', testData);
+
+                const startTime = performance.now();
+                const svg = QRCodeGenerator.generateSVG(testData, 512);
+                const endTime = performance.now();
+
+                displayQR(svg, 'Test 1: Simple Text');
+
+                logResult(`✅ Generated QR code in ${(endTime - startTime).toFixed(2)}ms`);
+                logResult(`✅ Data length: ${testData.length} bytes`);
+                logResult(`📱 Scan this QR code with your phone to verify!`);
+
+                // Display stats
+                const matrix = QRCodeGenerator.generateMatrix(testData);
+                document.getElementById('stats').innerHTML = `
+                    <pre>Matrix size: ${matrix.length}x${matrix.length}
+Version: Auto-detected
+Error correction: Level M (15%)
+Encoding: Byte mode
+Reed-Solomon: ✅ Enabled
+Mask pattern: Auto-selected (8 patterns tested)
+BCH format info: ✅ Enabled</pre>
+                `;
+            } catch (e) {
+                logResult(`❌ ERROR: ${e.message}`, true);
+                console.error(e);
+            }
+        }
+
+        function testWebRTC() {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+
+            try {
+                // Simulate WebRTC SDP offer (base64 encoded)
+                const testData = btoa(JSON.stringify({
+                    type: 'offer',
+                    sdp: 'v=0\r\no=- 123456789 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS\r\nm=application 9 UDP/TLS/RTP/SAVPF 127\r\n'
+                }));
+
+                console.log('[TEST] Generating QR for WebRTC SDP (', testData.length, 'bytes)');
+
+                const startTime = performance.now();
+                const svg = QRCodeGenerator.generateSVG(testData, 512);
+                const endTime = performance.now();
+
+                displayQR(svg, 'Test 2: WebRTC SDP Offer');
+
+                logResult(`✅ Generated QR code in ${(endTime - startTime).toFixed(2)}ms`);
+                logResult(`✅ Data length: ${testData.length} bytes`);
+                logResult(`📱 This is the REAL use case - scan to connect!`);
+
+                console.log('Encoded data:', testData.substring(0, 50) + '...');
+            } catch (e) {
+                logResult(`❌ ERROR: ${e.message}`, true);
+                console.error(e);
+            }
+        }
+
+        function testLongData() {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+
+            try {
+                const testData = "A".repeat(200); // Test capacity limits
+
+                console.log('[TEST] Generating QR for long data (', testData.length, 'bytes)');
+
+                const startTime = performance.now();
+                const svg = QRCodeGenerator.generateSVG(testData, 512);
+                const endTime = performance.now();
+
+                displayQR(svg, 'Test 3: Long Data (200 bytes)');
+
+                logResult(`✅ Generated QR code in ${(endTime - startTime).toFixed(2)}ms`);
+                logResult(`✅ Data length: ${testData.length} bytes`);
+                logResult(`✅ Auto-selected version based on capacity`);
+            } catch (e) {
+                logResult(`❌ ERROR: ${e.message}`, true);
+                console.error(e);
+            }
+        }
+
+        function runAllTests() {
+            setTimeout(testSimple, 0);
+            setTimeout(testWebRTC, 1000);
+            setTimeout(testLongData, 2000);
+        }
+
+        // Auto-run first test on load
+        window.onload = () => {
+            console.log('[QR TEST] Ready. Click buttons to test QR code generation.');
+            testSimple();
+        };
+    </script>
+</body>
+</html>

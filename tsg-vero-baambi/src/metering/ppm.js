@@ -58,6 +58,14 @@
 export const PPM_ATTACK_MS = 5;
 
 /**
+ * Hysteresis threshold in dB to prevent meter instability.
+ * Prevents constant attack/decay switching due to minor sample variations.
+ * A constant tone should show a stable reading per IEC 60268-10.
+ * @type {number}
+ */
+const PPM_HYSTERESIS_DB = 0.1;
+
+/**
  * Fall time: 20dB decay in 1.7 seconds.
  * @type {number}
  */
@@ -226,17 +234,20 @@ export class PPMMeter {
     const decayDb = PPM_DECAY_DB_PER_S * dt;
 
     // Apply IEC Type I ballistics: instant attack, linear decay
+    // With hysteresis to prevent instability on constant tones
     // Left channel
     if (peakDbL > this.holdL) {
       this.holdL = peakDbL;  // Instant attack
-    } else {
+    } else if (peakDbL < this.holdL - PPM_HYSTERESIS_DB) {
+      // Only decay if peak is significantly below hold (prevents oscillation)
       this.holdL = Math.max(PPM_MIN_DBFS, this.holdL - decayDb);  // Linear decay
     }
+    // else: within hysteresis zone, hold current value
 
     // Right channel
     if (peakDbR > this.holdR) {
       this.holdR = peakDbR;
-    } else {
+    } else if (peakDbR < this.holdR - PPM_HYSTERESIS_DB) {
       this.holdR = Math.max(PPM_MIN_DBFS, this.holdR - decayDb);
     }
 
