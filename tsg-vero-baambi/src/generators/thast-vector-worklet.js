@@ -30,7 +30,13 @@ const LETTERS = {
   T: [polyline([[0, 1], [1, 1]]), polyline([[0.5, 1], [0.5, 0]])],
   H: [polyline([[0, 0], [0, 1]]), polyline([[1, 0], [1, 1]]), polyline([[0, 0.5], [1, 0.5]])],
   Å: [polyline([[0, 0], [0.5, 1], [1, 0]]), polyline([[0.2, 0.4], [0.8, 0.4]]), createRing(0.5, 1.22, 0.12)],
-  S: [polyline([[0.9, 0.95], [0.1, 0.95], [0.1, 0.55], [0.9, 0.55], [0.9, 0.45], [0.1, 0.45], [0.1, 0.05], [0.9, 0.05]])]
+  // S: proper vector S - top bar, down left, middle bar, down right, bottom bar
+  S: [polyline([
+    [0.9, 1.0], [0.1, 1.0],  // top bar (right to left)
+    [0.1, 0.55],              // down left side
+    [0.9, 0.55],              // middle bar (left to right)
+    [0.9, 0.0], [0.1, 0.0]   // down right + bottom bar (right to left)
+  ])]
 };
 
 function resample(stroke, step) {
@@ -90,14 +96,17 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
     const config = options.processorOptions || {};
     this.pointsPerSecond = config.pointsPerSecond || 1200;
     this.outputScale = config.outputScale || 0.8;
+    this.scrollSpeed = config.scrollSpeed || 0.15;  // Scroll cycles per second
     this.path = buildPath('THÅST', config.resampleStep, config.blankingLength, config.normalisationMargin);
     this.index = 0;
+    this.scrollPhase = 0;  // 0 to 1, controls horizontal scroll position
     this.running = true;
 
     this.port.onmessage = (e) => {
       if (e.data.type === 'stop') this.running = false;
       if (e.data.type === 'setScale') this.outputScale = e.data.value;
       if (e.data.type === 'setSpeed') this.pointsPerSecond = e.data.value;
+      if (e.data.type === 'setScrollSpeed') this.scrollSpeed = e.data.value;
     };
   }
 
@@ -115,6 +124,11 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
     const len = path.length;
     const step = pps / sampleRate;
 
+    // Scroll increment per sample
+    const scrollStep = this.scrollSpeed / sampleRate;
+    // Scroll range: text moves from +1.5 to -1.5 (full width across display)
+    const scrollRange = 3.0;
+
     for (let i = 0; i < outL.length; i++) {
       const idx = Math.floor(this.index) % len;
       const next = (idx + 1) % len;
@@ -128,6 +142,11 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
         y = p0.y + (p1.y - p0.y) * frac;
       }
 
+      // Apply horizontal scroll (in audio domain, before rotation)
+      // scrollPhase 0→1 maps to scrollOffset +1.5→-1.5 (right to left)
+      const scrollOffset = (1 - this.scrollPhase * 2) * (scrollRange / 2);
+      x += scrollOffset;
+
       // Mirror horizontally and rotate 45° CCW for proper goniometer alignment
       const cos45 = 0.7071067811865476;
       const mx = -x;  // Mirror on Y-axis
@@ -139,6 +158,10 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
 
       this.index += step;
       if (this.index >= len) this.index -= len;
+
+      // Update scroll phase
+      this.scrollPhase += scrollStep;
+      if (this.scrollPhase >= 1) this.scrollPhase -= 1;
     }
 
     return true;
