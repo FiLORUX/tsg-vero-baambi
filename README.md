@@ -100,9 +100,20 @@ tsg-vero-baambi/
     │
     ├── app/                    # Application integration layer
     │   ├── index.js            # Module exports
-    │   ├── state.js            # Reactive state management
-    │   ├── sources.js          # Input source controller
-    │   └── renderer.js         # Render loop orchestration
+    │   ├── bootstrap.js        # Main initialisation & DOM wiring
+    │   ├── state.js            # Reactive state management (localStorage-backed)
+    │   ├── sources.js          # Unified input source controller
+    │   ├── render-loop.js      # 60 Hz visual rendering (RAF-based)
+    │   ├── measure-loop.js     # 20 Hz measurement updates
+    │   ├── meter-state.js      # Shared meter state between loops
+    │   ├── meter-switcher.js   # Physics-based 3D carousel (TP/RMS/PPM)
+    │   ├── layout.js           # Responsive canvas sizing
+    │   ├── helpers.js          # Display formatting utilities
+    │   ├── drag-drop.js        # Drag-and-drop file handling
+    │   ├── transition-guard.js # EBU pulse visual blanking
+    │   ├── glitch-debug.js     # Buffer discontinuity detection
+    │   ├── renderer.js         # Render loop orchestration
+    │   └── ui.js               # UI event bindings
     │
     ├── config/
     │   └── storage.js          # LocalStorage versioning
@@ -112,32 +123,42 @@ tsg-vero-baambi/
     │
     ├── metering/               # Loudness measurement algorithms
     │   ├── index.js            # Module exports
-    │   ├── k-weighting.js      # ITU-R BS.1770-4 K-weighting filters
     │   ├── lufs.js             # EBU R128 LUFS meter
-    │   ├── ppm.js              # IEC 60268-10 Type I PPM
-    │   └── true-peak.js        # Intersample peak detection
+    │   ├── ppm.js              # IEC 60268-10 Type I PPM (Nordic)
+    │   ├── true-peak.js        # ITU-R BS.1770-4 intersample peak
+    │   └── correlation.js      # Phase correlation & stereo analysis
+    │
+    ├── generators/             # Signal generators for alignment
+    │   ├── index.js            # Module exports
+    │   ├── oscillators.js      # Sine, sweep, GLITS (EBU Tech 3304)
+    │   ├── noise.js            # Pink, white, brown noise
+    │   ├── lissajous.js        # Stereo test patterns
+    │   ├── presets.js          # Generator preset configurations
+    │   ├── thast-vector-text.js      # Vector text for goniometer
+    │   └── thast-vector-worklet.js   # AudioWorklet for vector text
     │
     ├── audio/                  # Web Audio integration
     │   ├── index.js            # Module exports
     │   └── engine.js           # AudioContext management
     │
-    ├── stereo/                 # Stereo analysis
-    │   ├── index.js            # Module exports
-    │   └── correlation.js      # Phase correlation meter
-    │
     ├── ui/                     # Display components
     │   ├── index.js            # Module exports
-    │   ├── colours.js          # Meter colour schemes
-    │   ├── meter-bar.js        # LED bar renderers
-    │   ├── radar.js            # Loudness radar display
-    │   ├── goniometer.js       # M/S vectorscope
-    │   └── correlation-meter.js # Phase correlation display
+    │   ├── goniometer.js       # Stereo vectorscope (Lissajous)
+    │   ├── correlation-meter.js # Phase correlation display
+    │   ├── radar.js            # Loudness history radar
+    │   ├── spectrum.js         # 1/3-octave spectrum analyser
+    │   ├── bar-meter.js        # LED bar renderers (TP, RMS, PPM)
+    │   ├── width-meter.js      # Stereo width indicator
+    │   ├── rotation-meter.js   # Image rotation display
+    │   ├── balance-meter.js    # L/R balance indicator
+    │   ├── ms-meter.js         # Mid/Side level display
+    │   ├── stereo-analysis.js  # Stereo analysis engine
+    │   └── colours.js          # Meter colour schemes
     │
     └── utils/                  # Shared utilities
         ├── index.js            # Module exports
-        ├── format.js           # Display formatting
-        ├── math.js             # Mathematical utilities
-        └── dom.js              # DOM helpers
+        ├── format.js           # Display formatting (fixed-width)
+        └── math.js             # Mathematical utilities (dB, clamp)
 ```
 
 ---
@@ -152,6 +173,16 @@ tsg-vero-baambi/
 | ITU-R BS.1770-4 | Loudness measurement algorithm | K-weighting filter, gated measurement |
 | EBU Tech 3341 | Loudness metering guidance | True Peak, LRA display |
 | IEC 60268-10 Type I | Nordic PPM ballistics | Targets 5ms attack, 20dB/1.7s decay |
+
+### Signal Generators
+
+| Type | Standard | Purpose |
+|------|----------|---------|
+| GLITS | EBU Tech 3304 | Line-up and identification |
+| Stereo identification | EBU Tech 3304 | L/R channel verification (pulsed) |
+| 1/3-octave sweep | — | Frequency response verification |
+| Pink/white/brown noise | — | Acoustic measurement, system noise floor |
+| Lissajous patterns | — | Vectorscope calibration |
 
 ### Reference Levels
 
