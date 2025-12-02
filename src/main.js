@@ -40,7 +40,7 @@
  *               ├─► audio/               - AudioContext, worklets
  *               │   └─► engine.js        - AudioEngine class
  *               ├─► ui/                  - Display components
- *               │   ├─► colors.js        - Meter color schemes
+ *               │   ├─► colours.js       - Meter colour schemes
  *               │   ├─► meter-bar.js     - LED bar renderers
  *               │   ├─► radar.js         - Loudness radar
  *               │   ├─► goniometer.js    - M/S vectorscope

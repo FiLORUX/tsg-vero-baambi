@@ -12,42 +12,44 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * UI MODULE INDEX
+ * SIGNAL GENERATORS INDEX
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * @module ui
+ * Central export point for all signal generator modules.
+ * Import from this file to access all generator functionality.
+ *
+ * @module generators
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// Colours and themes
+// Noise generators
 export {
-  DEFAULT_COLOURS,
-  getLoudnessColour,
-  getRadarColour,
-  getTruePeakColour,
-  getTruePeakBarColour,
-  getPPMBarColour,
-  getCorrelationColour,
-  getBalanceColour,
-  createMeterGradient,
-  createTPGradient,
-  getColoursFromCSS
-} from './colours.js';
+  getWhiteNoiseBuffer,
+  createNoiseBuffer,
+  createNoiseSource,
+  clearNoiseBufferCache
+} from './noise.js';
 
-// Meter bar components
+// Oscillator generators
 export {
-  DBFS_CONFIG,
-  TRUE_PEAK_CONFIG,
-  PPM_CONFIG,
-  MeterBar,
-  StereoMeterBar
-} from './meter-bar.js';
+  createSineOscillator,
+  createSweepOscillator,
+  createGlitsOscillator
+} from './oscillators.js';
 
-// Loudness radar
-export { LoudnessRadar } from './radar.js';
+// Lissajous generators
+export {
+  createLissajousWithPhase,
+  createLissajousDualFreq,
+  parseFrequencyRatio
+} from './lissajous.js';
 
-// Goniometer / vectorscope
-export { Goniometer } from './goniometer.js';
+// Preset configuration
+export {
+  getPresetConfig,
+  formatPresetDisplay,
+  dbToLinear
+} from './presets.js';
 
-// Correlation meter
-export { corrNow, CorrelationMeter } from './correlation-meter.js';
+// THÅST Vector Text (already exists)
+export { ThastVectorTextGenerator, buildTextPath, DEFAULT_CONFIG as VECTOR_TEXT_CONFIG } from './thast-vector-text.js';

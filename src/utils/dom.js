@@ -119,15 +119,15 @@ export function getDPR() {
 }
 
 /**
- * Clear canvas with optional fill color.
+ * Clear canvas with optional fill colour.
  *
  * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {string} [fillColor] - Optional background color
+ * @param {string} [fillColour] - Optional background colour
  */
-export function clearCanvas(ctx, fillColor) {
+export function clearCanvas(ctx, fillColour) {
   const canvas = ctx.canvas;
-  if (fillColor) {
-    ctx.fillStyle = fillColor;
+  if (fillColour) {
+    ctx.fillStyle = fillColour;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   } else {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
