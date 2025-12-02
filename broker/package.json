@@ -1,0 +1,31 @@
+{
+  "name": "vero-baambi-broker",
+  "version": "1.0.0",
+  "description": "WebSocket relay server for VERO-BAAMBI remote metering",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "David Thåst <david@thast.se>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FiLORUX/tsg-vero-baambi"
+  },
+  "keywords": [
+    "broadcast",
+    "audio",
+    "metering",
+    "websocket",
+    "lufs",
+    "ebu-r128"
+  ]
+}
