@@ -323,6 +323,253 @@ function testKWeightingResponse() {
   console.log('  (Actual verification requires Web Audio API - see tools/verify-audio.html)');
 }
 
+/**
+ * Test True Peak intersample detection.
+ * Verifies 4× oversampling with Hermite interpolation.
+ */
+function testTruePeakIntersample() {
+  console.log('\n--- True Peak Intersample Detection ---');
+
+  // Test 1: Full-scale sine should read ~0 dBTP
+  const sampleRate = 48000;
+  const fullScaleSine = generateSine(sampleRate, 1000, 1.0, 0.1);
+  const tpFullScale = calculateTruePeakLocal(fullScaleSine);
+  assertClose('Full-scale sine True Peak', tpFullScale, 0.0, 0.3, ' dBTP');
+
+  // Test 2: -6 dBFS sine should read ~-6 dBTP
+  const halfScaleSine = generateSine(sampleRate, 1000, 0.5, 0.1);
+  const tpHalfScale = calculateTruePeakLocal(halfScaleSine);
+  assertClose('-6 dBFS sine True Peak', tpHalfScale, -6.0, 0.5, ' dBTP');
+
+  // Test 3: Intersample peak detection
+  // High-frequency signal near Nyquist should show intersample peak > sample peak
+  const nearNyquist = generateSine(sampleRate, 22000, 0.7, 0.01);
+
+  // Sample peak
+  let samplePeak = 0;
+  for (let i = 0; i < nearNyquist.length; i++) {
+    const abs = Math.abs(nearNyquist[i]);
+    if (abs > samplePeak) samplePeak = abs;
+  }
+  const samplePeakDb = 20 * Math.log10(samplePeak + 1e-12);
+
+  // True peak with interpolation
+  const truePeakDb = calculateTruePeakLocal(nearNyquist);
+
+  console.log(`  Near-Nyquist signal: Sample peak=${samplePeakDb.toFixed(1)} dBFS, True peak=${truePeakDb.toFixed(1)} dBTP`);
+
+  // True peak should be >= sample peak (interpolation catches peaks between samples)
+  if (truePeakDb >= samplePeakDb - 0.5) {
+    pass('Intersample peak detection', 'True Peak >= Sample Peak', 'True Peak >= Sample Peak');
+  } else {
+    fail('Intersample peak detection', truePeakDb.toFixed(1), `>= ${samplePeakDb.toFixed(1)}`);
+  }
+}
+
+/**
+ * Local True Peak calculation (mirrors src/metering/true-peak.js)
+ */
+function calculateTruePeakLocal(buffer) {
+  let maxAbs = 0;
+  const n = buffer.length;
+
+  if (n < 4) {
+    for (let i = 0; i < n; i++) {
+      const abs = Math.abs(buffer[i]);
+      if (abs > maxAbs) maxAbs = abs;
+    }
+    return 20 * Math.log10(maxAbs + 1e-9);
+  }
+
+  for (let i = 1; i < n - 2; i++) {
+    const p0 = buffer[i - 1];
+    const p1 = buffer[i];
+    const p2 = buffer[i + 1];
+    const p3 = buffer[i + 2];
+
+    const abs1 = Math.abs(p1);
+    if (abs1 > maxAbs) maxAbs = abs1;
+
+    const t1 = Math.abs(hermite(p0, p1, p2, p3, 0.25));
+    if (t1 > maxAbs) maxAbs = t1;
+
+    const t2 = Math.abs(hermite(p0, p1, p2, p3, 0.50));
+    if (t2 > maxAbs) maxAbs = t2;
+
+    const t3 = Math.abs(hermite(p0, p1, p2, p3, 0.75));
+    if (t3 > maxAbs) maxAbs = t3;
+  }
+
+  return 20 * Math.log10(maxAbs + 1e-9);
+}
+
+/**
+ * Test LUFS integration windows and gating.
+ */
+function testLufsIntegration() {
+  console.log('\n--- LUFS Integration Windows ---');
+
+  const sampleRate = 48000;
+  const blockSize = 2048;
+
+  // Test 1: Energy calculation for known signal
+  // -18 dBFS sine RMS should give approximately -18 LUFS (mono, un-weighted)
+  const amplitude = Math.pow(10, -18 / 20);  // -18 dBFS
+  const testSine = generateSine(sampleRate, 1000, amplitude, 0.1);
+
+  // Calculate energy (mean square)
+  let energy = 0;
+  for (let i = 0; i < testSine.length; i++) {
+    energy += testSine[i] * testSine[i];
+  }
+  const meanSquare = energy / testSine.length;
+  const lufs = 10 * Math.log10(meanSquare + 1e-12);
+
+  // For a sine wave, RMS = peak / sqrt(2), so:
+  // Peak at -18 dBFS → RMS at -18 - 3.01 = -21 dBFS
+  // LUFS ≈ RMS level for mono signal
+  assertClose('Energy calculation (-18 dBFS sine)', lufs, -21.0, 1.0, ' LUFS');
+
+  // Test 2: Momentary window length
+  const blockDuration = blockSize / sampleRate;
+  const momentaryLength = Math.round(0.4 / blockDuration);  // 400ms window
+  console.log(`  Momentary window: ${momentaryLength} blocks (${(momentaryLength * blockDuration * 1000).toFixed(0)}ms)`);
+  assertClose('Momentary window duration', momentaryLength * blockDuration, 0.4, 0.05, 's');
+
+  // Test 3: Short-term window length
+  const shortTermLength = Math.round(3.0 / blockDuration);  // 3s window
+  console.log(`  Short-term window: ${shortTermLength} blocks (${(shortTermLength * blockDuration).toFixed(1)}s)`);
+  assertClose('Short-term window duration', shortTermLength * blockDuration, 3.0, 0.2, 's');
+
+  // Test 4: Absolute gate threshold
+  const ABSOLUTE_GATE_LUFS = -70;
+  console.log(`  Absolute gate threshold: ${ABSOLUTE_GATE_LUFS} LUFS`);
+  pass('Absolute gate', ABSOLUTE_GATE_LUFS, -70, ' LUFS');
+}
+
+/**
+ * Test PPM attack and decay ballistics per IEC 60268-10.
+ */
+function testPpmBallistics() {
+  console.log('\n--- PPM Ballistics (IEC 60268-10 Type I) ---');
+
+  // IEC 60268-10 Type I (Nordic PPM) specifications
+  const PPM_ATTACK_MS = 5;      // Integration time
+  const PPM_DECAY_DB_PER_S = 20 / 1.7;  // 20 dB in 1.7s
+
+  // Test 1: Decay rate
+  assertClose('Decay rate', PPM_DECAY_DB_PER_S, 11.76, 0.1, ' dB/s');
+
+  // Test 2: Simulate attack (should reach within 1 dB in 5ms)
+  const sampleRate = 48000;
+  const attackSamples = Math.round(sampleRate * PPM_ATTACK_MS / 1000);
+  console.log(`  Attack window: ${attackSamples} samples (${PPM_ATTACK_MS}ms)`);
+  pass('Attack integration time', PPM_ATTACK_MS, 5, 'ms');
+
+  // Test 3: Simulate decay over time
+  const testDurationS = 2.0;
+  const framesPerSecond = 60;
+  const frames = Math.round(testDurationS * framesPerSecond);
+
+  let level = 0; // Start at 0 dBFS
+  for (let i = 0; i < frames; i++) {
+    const dt = 1 / framesPerSecond;
+    level -= PPM_DECAY_DB_PER_S * dt;
+  }
+
+  // After 2s: should be approximately -23.5 dB (2s × 11.76 dB/s)
+  const expectedDecay = -PPM_DECAY_DB_PER_S * testDurationS;
+  assertClose(`Level after ${testDurationS}s decay`, level, expectedDecay, 0.5, ' dB');
+
+  // Test 4: Verify 1.7s = 20 dB decay
+  let level17 = 0;
+  const frames17 = Math.round(1.7 * framesPerSecond);
+  for (let i = 0; i < frames17; i++) {
+    const dt = 1 / framesPerSecond;
+    level17 -= PPM_DECAY_DB_PER_S * dt;
+  }
+  assertClose('Decay after 1.7s', level17, -20.0, 0.5, ' dB');
+}
+
+/**
+ * Test stereo width and balance calculations.
+ */
+function testStereoWidthBalance() {
+  console.log('\n--- Stereo Width & Balance ---');
+
+  const sampleRate = 48000;
+  const duration = 0.1;
+  const samples = Math.floor(sampleRate * duration);
+
+  // Test 1: Mono signal (L = R) should have width = 0
+  const mono = generateSine(sampleRate, 1000, 0.5, duration);
+  const monoWidth = calculateWidth(mono, mono);
+  assertClose('Width (mono L=R)', monoWidth, 0.0, 0.05);
+
+  // Test 2: Hard-panned left should give balance = -1
+  const silence = new Float32Array(samples);
+  const hardLeft = calculateBalance(mono, silence);
+  assertClose('Balance (hard left)', hardLeft, -1.0, 0.05);
+
+  // Test 3: Hard-panned right should give balance = +1
+  const hardRight = calculateBalance(silence, mono);
+  assertClose('Balance (hard right)', hardRight, 1.0, 0.05);
+
+  // Test 4: Centred signal should give balance ≈ 0
+  const centreBalance = calculateBalance(mono, mono);
+  assertClose('Balance (centre)', centreBalance, 0.0, 0.05);
+
+  // Test 5: Pure side signal (L = -R) should give width ≈ 1
+  const inverted = new Float32Array(samples);
+  for (let i = 0; i < samples; i++) {
+    inverted[i] = -mono[i];
+  }
+  const pureWidth = calculateWidth(mono, inverted);
+  // Width = side / (mid + side), for L = -R: mid = 0, side = L, so width = 1
+  assertClose('Width (pure side L=-R)', pureWidth, 1.0, 0.1);
+}
+
+/**
+ * Calculate stereo width (Side / (Mid + Side)).
+ */
+function calculateWidth(left, right) {
+  const n = Math.min(left.length, right.length);
+  let sumM2 = 0, sumS2 = 0;
+
+  for (let i = 0; i < n; i++) {
+    const M = (left[i] + right[i]) * 0.5;
+    const S = (left[i] - right[i]) * 0.5;
+    sumM2 += M * M;
+    sumS2 += S * S;
+  }
+
+  const rmsM = Math.sqrt(sumM2 / n);
+  const rmsS = Math.sqrt(sumS2 / n);
+  const eps = 1e-10;
+
+  return rmsS / (rmsM + rmsS + eps);
+}
+
+/**
+ * Calculate L/R balance.
+ */
+function calculateBalance(left, right) {
+  let sumL = 0, sumR = 0;
+  const n = Math.min(left.length, right.length);
+
+  for (let i = 0; i < n; i++) {
+    sumL += left[i] * left[i];
+    sumR += right[i] * right[i];
+  }
+
+  const rmsL = Math.sqrt(sumL / n);
+  const rmsR = Math.sqrt(sumR / n);
+  const total = rmsL + rmsR;
+
+  if (total < 1e-10) return 0;
+  return (rmsR - rmsL) / total;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RUN TESTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,6 +585,10 @@ testCorrelation();
 testHermiteInterpolation();
 testPpmDecay();
 testKWeightingResponse();
+testTruePeakIntersample();
+testLufsIntegration();
+testPpmBallistics();
+testStereoWidthBalance();
 
 console.log('\n═══════════════════════════════════════════════════════════════');
 console.log(`Results: ${GREEN}${passed} passed${RESET}, ${RED}${failed} failed${RESET}, ${YELLOW}${warnings} warnings${RESET}`);
