@@ -104,14 +104,14 @@ export function drawHBar_DBFS(canvas, valueL, valueR) {
   ctx.fillRect(0, 0, w, h);
 
   // Colour (unchanged - all green for dBFS)
-  function segColor() {
+  function segColour() {
     return getCss('--ok');
   }
 
   // Draw a single channel with RTW segment form
   function drawChannel(yTop, val) {
     const displayVal = Math.max(dbMin, Math.min(dbMax, val));
-    const col = segColor();
+    const col = segColour();
 
     // Draw segments for each base step with sub-resolution
     for (let d = dbMin; d < dbMax; d += baseStep) {
@@ -188,7 +188,7 @@ export function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR) {
   }
 
   // Colour zones (unchanged from original)
-  function segColor(db) {
+  function segColour(db) {
     if (db >= 0) return '#ff2020';   // Above 0 dBTP: aggressive bright red
     if (db >= -1) return getCss('--hot');
     if (db >= -3) return getCss('--caution');
@@ -224,7 +224,7 @@ export function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR) {
       for (let sub = 0; sub < mult; sub++) {
         const subDb = d + sub * subStep;
         const subX = x0Base + sub * subCellWidth;
-        const col = segColor(subDb + subStep / 2); // Color at sub-cell center
+        const col = segColour(subDb + subStep / 2); // Colour at sub-cell centre
 
         // Check if this sub-cell contains the peak-hold position
         if (peakDb >= subDb && peakDb < subDb + subStep) {
@@ -258,7 +258,7 @@ export function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR) {
 
     // Peak-hold segment: same geometry, increased luminance, subtle tight glow
     if (peakSubX >= 0 && peakHold > dbMin) {
-      const pCol = segColor(peakSubDb + 0.25);
+      const pCol = segColour(peakSubDb + 0.25);
       ctx.globalAlpha = 1;
       ctx.shadowColor = pCol;
       ctx.shadowBlur = (peakSubDb >= 0) ? PEAK_GLOW_MULT * 1.5 * dpr : PEAK_GLOW_MULT * dpr;
@@ -312,7 +312,7 @@ export function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR) {
   ctx.fillRect(0, 0, w, h);
 
   // Nordic PPM colour zones (unchanged from original)
-  function segColor(db) {
+  function segColour(db) {
     const ppm = db + 18; // dBFS -> PPM/dBu
     if (ppm >= 6) return getCss('--hot');      // +6..+9: red (over PML)
     if (ppm >= 0) return getCss('--caution');  // 0..+6: amber (nominal / varning)
@@ -340,7 +340,7 @@ export function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR) {
       for (let sub = 0; sub < mult; sub++) {
         const subDb = d + sub * subStep;
         const subX = x0Base + sub * subCellWidth;
-        const col = segColor(subDb + subStep / 2); // Color at sub-cell center
+        const col = segColour(subDb + subStep / 2); // Colour at sub-cell centre
 
         // OFF state: always visible silhouette
         ctx.globalAlpha = ALPHA_OFF;
@@ -359,7 +359,7 @@ export function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR) {
     // Peak-hold marker (RTW-style: same geometry, increased luminance, subtle glow)
     if (peakHold !== undefined && peakHold > dbMin) {
       const xPeak = xFromDb(peakHold);
-      const peakCol = segColor(peakHold);
+      const peakCol = segColour(peakHold);
 
       // Find the segment width at peak position
       const mult = getResolutionMultiplier(peakHold, RESOLUTION_PROFILE_PPM_EXTENDED);

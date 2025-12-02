@@ -51,6 +51,18 @@ import { MSMeter } from '../ui/ms-meter.js';
 import { BalanceMeter } from '../ui/balance-meter.js';
 // Bar meters
 import { drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM, layoutDBFSScale, layoutTPScale, layoutPPMScale, setTpLimit, updateTpLimitDisplay } from '../ui/bar-meter.js';
+// Signal generators
+import {
+  createNoiseSource,
+  createSineOscillator,
+  createSweepOscillator,
+  createGlitsOscillator,
+  createLissajousWithPhase,
+  createLissajousDualFreq,
+  parseFrequencyRatio,
+  getPresetConfig as getPresetConfigFromModule,
+  dbToLinear
+} from '../generators/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSITIONGUARD - EXACT from audio-meters-grid.html lines 1848-1885
@@ -467,7 +479,7 @@ function formatTime(ms) {
 }
 
 // EXACT from audio-meters-grid.html lines 3691-3698
-function loudnessColor(lufs) {
+function loudnessColour(lufs) {
   if (!isFinite(lufs)) return 'var(--muted)';
   const offset = lufs - LOUDNESS_TARGET;
   if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 to −22: green (on target)
@@ -866,137 +878,27 @@ let genFilterNodes = [];  // Array of filter nodes
 let sweepInterval = null;
 let glitsInterval = null;
 let glitsPhase = 0;
+let activeSweepGenerator = null;  // Reference to sweep generator for cleanup
+let activeGlitsGenerator = null;  // Reference to GLITS generator for cleanup
 let vectorWorkletNode = null;  // AudioWorklet node for vector text generator
 let vectorWorkletLoaded = false;  // Track if worklet module is loaded
 
-// dB to linear amplitude
-const dbToLinear = db => Math.pow(10, db / 20);
-
-// Create white noise buffer (reusable, with crossfade for seamless looping)
-let whiteNoiseBuffer = null;
-function getWhiteNoiseBuffer() {
-  if (whiteNoiseBuffer && whiteNoiseBuffer.sampleRate === ac.sampleRate) {
-    return whiteNoiseBuffer;
-  }
-  whiteNoiseBuffer = createNoiseBuffer();
-  return whiteNoiseBuffer;
-}
-
-// Create a NEW noise buffer (for uncorrelated stereo - each channel needs unique data)
-// EBU Tech 3341: Uncorrelated noise requires statistically independent L/R signals
-function createNoiseBuffer() {
-  const bufferSize = 10 * ac.sampleRate; // 10 seconds for less frequent looping
-  const crossfadeSize = Math.floor(0.05 * ac.sampleRate); // 50ms crossfade
-  const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
-  const data = buffer.getChannelData(0);
-
-  // Fill with white noise (unique random sequence)
-  for (let i = 0; i < bufferSize; i++) {
-    data[i] = Math.random() * 2 - 1;
-  }
-
-  // Apply crossfade at loop point for seamless transition
-  for (let i = 0; i < crossfadeSize; i++) {
-    const fadeIn = i / crossfadeSize;
-    const fadeOut = 1 - fadeIn;
-    const endIdx = bufferSize - crossfadeSize + i;
-    data[endIdx] = data[endIdx] * fadeOut + data[i] * fadeIn;
-  }
-
-  return buffer;
-}
-
 // Create noise source with optional filtering
+// Wrapper around imported createNoiseSource that handles genFilterNodes
 // Set uniqueBuffer=true for uncorrelated stereo (EBU requirement)
-function createNoiseSource(type, loFreq, hiFreq, uniqueBuffer = false) {
-  const noise = ac.createBufferSource();
-  noise.buffer = uniqueBuffer ? createNoiseBuffer() : getWhiteNoiseBuffer();
-  noise.loop = true;
-
-  // For pink/brown noise, we need filtering
-  if (type === 'white') {
-    // Bandpass filter for bandwidth limiting
-    if (loFreq > 20 || hiFreq < 20000) {
-      const bp = ac.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = Math.sqrt(loFreq * hiFreq);
-      bp.Q.value = bp.frequency.value / (hiFreq - loFreq);
-      noise.connect(bp);
-      genFilterNodes.push(bp);
-      return { source: noise, output: bp };
-    }
-    return { source: noise, output: noise };
+function createNoiseSourceLocal(type, loFreq, hiFreq, uniqueBuffer = false) {
+  const result = createNoiseSource(ac, type, loFreq, hiFreq, uniqueBuffer);
+  // Push filter nodes to the tracking array
+  if (result.filters && result.filters.length > 0) {
+    genFilterNodes.push(...result.filters);
   }
-
-  if (type === 'pink') {
-    // Pink noise: -3dB/octave slope using multiple filters
-    // Approximate with cascaded lowpass filters
-    const lp1 = ac.createBiquadFilter();
-    lp1.type = 'lowpass';
-    lp1.frequency.value = hiFreq;
-
-    const hp1 = ac.createBiquadFilter();
-    hp1.type = 'highpass';
-    hp1.frequency.value = loFreq;
-
-    // Pink filter approximation: gentle lowpass rolloff
-    const pinkFilter = ac.createBiquadFilter();
-    pinkFilter.type = 'lowshelf';
-    pinkFilter.frequency.value = 1000;
-    pinkFilter.gain.value = -3;
-
-    noise.connect(hp1);
-    hp1.connect(lp1);
-    lp1.connect(pinkFilter);
-    genFilterNodes.push(hp1, lp1, pinkFilter);
-    return { source: noise, output: pinkFilter };
-  }
-
-  if (type === 'brown') {
-    // Brown noise: -6dB/octave (integrate white noise)
-    const lp1 = ac.createBiquadFilter();
-    lp1.type = 'lowpass';
-    lp1.frequency.value = hiFreq;
-    lp1.Q.value = 0.5;
-
-    const hp1 = ac.createBiquadFilter();
-    hp1.type = 'highpass';
-    hp1.frequency.value = loFreq;
-
-    // Strong lowpass for brown characteristic
-    const brownFilter = ac.createBiquadFilter();
-    brownFilter.type = 'lowpass';
-    brownFilter.frequency.value = 200;
-    brownFilter.Q.value = 0.7;
-
-    noise.connect(brownFilter);
-    brownFilter.connect(hp1);
-    hp1.connect(lp1);
-    genFilterNodes.push(brownFilter, hp1, lp1);
-    return { source: noise, output: lp1 };
-  }
-
-  return { source: noise, output: noise };
+  return { source: result.source, output: result.output };
 }
 
 // Get preset configuration from selected option
+// Uses imported getPresetConfigFromModule from generators/presets.js
 function getPresetConfig() {
-  if (!genPreset) return null;
-  const opt = genPreset.options[genPreset.selectedIndex];
-  if (!opt) return null;
-
-  return {
-    type: opt.dataset.type || 'sine',
-    freq: parseFloat(opt.dataset.freq) || 1000,
-    db: parseFloat(opt.dataset.db) || -18,
-    lo: parseFloat(opt.dataset.lo) || 20,
-    hi: parseFloat(opt.dataset.hi) || 20000,
-    routing: opt.dataset.routing || 'stereo',
-    phase: parseFloat(opt.dataset.phase) || 0,
-    ratio: opt.dataset.ratio || '1:1',
-    duration: parseFloat(opt.dataset.duration) || 20,
-    pulsed: opt.dataset.pulsed === 'true'
-  };
+  return getPresetConfigFromModule(genPreset);
 }
 
 // Update Gen Mode display
@@ -1035,8 +937,23 @@ function updateGenModeDisplay() {
 
 // Clean up generator nodes
 function cleanupGeneratorNodes() {
-  if (sweepInterval) { clearInterval(sweepInterval); sweepInterval = null; }
-  if (glitsInterval) { clearInterval(glitsInterval); glitsInterval = null; }
+  // Clean up sweep generator interval (via module or legacy)
+  if (activeSweepGenerator) {
+    activeSweepGenerator.clearInterval();
+    activeSweepGenerator = null;
+  } else if (sweepInterval) {
+    clearInterval(sweepInterval);
+  }
+  sweepInterval = null;
+
+  // Clean up GLITS generator interval (via module or legacy)
+  if (activeGlitsGenerator) {
+    activeGlitsGenerator.clearInterval();
+    activeGlitsGenerator = null;
+  } else if (glitsInterval) {
+    clearInterval(glitsInterval);
+  }
+  glitsInterval = null;
 
   // Cancel any scheduled automation events before disconnecting
   [genGain, leftGain, rightGain, genMonGain].forEach(n => {
@@ -1139,9 +1056,7 @@ async function createGeneratorSignal(existingMonitorGain = null) {
 
   // Create signal based on type
   if (config.type === 'sine') {
-    const osc = ac.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = config.freq;
+    const { osc } = createSineOscillator(ac, config.freq);
     osc.connect(genGain);
     osc.start();
     genOsc = osc;
@@ -1154,8 +1069,8 @@ async function createGeneratorSignal(existingMonitorGain = null) {
     if (config.routing === 'stereo-uncorr') {
       // Uncorrelated: separate INDEPENDENT noise for L and R
       // EBU Tech 3341: Each channel must have statistically independent noise
-      const noiseL = createNoiseSource(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
-      const noiseR = createNoiseSource(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
+      const noiseL = createNoiseSourceLocal(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
+      const noiseR = createNoiseSourceLocal(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
 
       const gainL = ac.createGain();
       const gainR = ac.createGain();
@@ -1173,7 +1088,7 @@ async function createGeneratorSignal(existingMonitorGain = null) {
       genFilterNodes.push(gainL, gainR);
     } else {
       // Correlated: same noise to both channels
-      const noise = createNoiseSource(config.type, config.lo, config.hi);
+      const noise = createNoiseSourceLocal(config.type, config.lo, config.hi);
       noise.output.connect(genGain);
       genGain.connect(leftGain);
       genGain.connect(rightGain);
@@ -1183,174 +1098,69 @@ async function createGeneratorSignal(existingMonitorGain = null) {
 
   } else if (config.type === 'sweep') {
     // AES17-compliant continuous logarithmic sine sweep
-    // Uses Web Audio API automation for glitch-free, sample-accurate frequency change
-    const osc = ac.createOscillator();
-    osc.type = 'sine';
-    osc.connect(genGain);
-    genOsc = osc;
-    genSourceNodes.push(osc);
+    // Uses createSweepOscillator from generators/oscillators.js
+    const sweep = createSweepOscillator(ac, config.lo, config.hi, config.duration);
+    sweep.osc.connect(genGain);
+    genOsc = sweep.osc;
+    genSourceNodes.push(sweep.osc);
+    activeSweepGenerator = sweep;  // Store reference for cleanup
 
     genGain.connect(leftGain);
     genGain.connect(rightGain);
 
-    const startFreq = config.lo;
-    const endFreq = config.hi;
-    const durationSec = config.duration;
-
-    // Schedule continuous logarithmic sweep using exponentialRampToValueAtTime
-    // This creates a true logarithmic sweep (constant octaves per second)
-    function scheduleSweepCycle(startTime) {
-      // Set start frequency
-      osc.frequency.setValueAtTime(startFreq, startTime);
-      // Exponential ramp to end frequency (logarithmic in frequency domain)
-      osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + durationSec);
-    }
-
-    // Start first sweep
-    const now = ac.currentTime;
-    scheduleSweepCycle(now);
-    osc.start(now);
-
-    // Schedule repeating sweeps (lookahead scheduling)
-    let nextSweepTime = now + durationSec;
-    sweepInterval = setInterval(() => {
-      // Schedule next sweep when we're within 1 second of it
-      const currentTime = ac.currentTime;
-      if (nextSweepTime - currentTime < 1.0) {
-        scheduleSweepCycle(nextSweepTime);
-        nextSweepTime += durationSec;
-      }
-    }, 200);
+    // Start the sweep (handles scheduling internally)
+    sweep.startSweep();
+    sweepInterval = sweep.getInterval();  // Keep reference for legacy checks
 
   } else if (config.type === 'glits') {
     // GLITS (EBU Tech 3304): 1kHz tone with channel identification pattern
-    // Uses pre-scheduled Web Audio automation for glitch-free operation
-    const osc = ac.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = 1000;
-    osc.connect(genGain);
-    genOsc = osc;
-    genSourceNodes.push(osc);
+    // Uses createGlitsOscillator from generators/oscillators.js
+    const glits = createGlitsOscillator(ac, leftGain, rightGain);
+    glits.osc.connect(genGain);
+    genOsc = glits.osc;
+    genSourceNodes.push(glits.osc);
+    activeGlitsGenerator = glits;  // Store reference for cleanup
 
     genGain.connect(leftGain);
     genGain.connect(rightGain);
 
-    // GLITS pattern timing (4 second cycle):
-    // Left:  mute at 0-250ms
-    // Right: mute at 500-750ms and 1000-1250ms
-    const CYCLE_SEC = 4.0;
-    const RAMP_SEC = 0.002; // 2ms ramp to avoid clicks
-
-    function scheduleGlitsCycle(cycleStart) {
-      // Left channel: mute 0-250ms
-      leftGain.gain.setValueAtTime(1, cycleStart);
-      leftGain.gain.linearRampToValueAtTime(0, cycleStart + RAMP_SEC);
-      leftGain.gain.setValueAtTime(0, cycleStart + 0.250 - RAMP_SEC);
-      leftGain.gain.linearRampToValueAtTime(1, cycleStart + 0.250);
-
-      // Right channel: mute 500-750ms
-      rightGain.gain.setValueAtTime(1, cycleStart + 0.500);
-      rightGain.gain.linearRampToValueAtTime(0, cycleStart + 0.500 + RAMP_SEC);
-      rightGain.gain.setValueAtTime(0, cycleStart + 0.750 - RAMP_SEC);
-      rightGain.gain.linearRampToValueAtTime(1, cycleStart + 0.750);
-
-      // Right channel: mute 1000-1250ms
-      rightGain.gain.setValueAtTime(1, cycleStart + 1.000);
-      rightGain.gain.linearRampToValueAtTime(0, cycleStart + 1.000 + RAMP_SEC);
-      rightGain.gain.setValueAtTime(0, cycleStart + 1.250 - RAMP_SEC);
-      rightGain.gain.linearRampToValueAtTime(1, cycleStart + 1.250);
-    }
-
-    // Initialize gains
-    leftGain.gain.setValueAtTime(1, ac.currentTime);
-    rightGain.gain.setValueAtTime(1, ac.currentTime);
-
-    // Start oscillator and first cycle
-    const now = ac.currentTime;
-    osc.start(now);
-    scheduleGlitsCycle(now);
-
-    // Lookahead scheduling for seamless cycles
-    let nextCycleTime = now + CYCLE_SEC;
-    glitsInterval = setInterval(() => {
-      const currentTime = ac.currentTime;
-      // Schedule next cycle when within 1 second
-      if (nextCycleTime - currentTime < 1.0) {
-        scheduleGlitsCycle(nextCycleTime);
-        nextCycleTime += CYCLE_SEC;
-      }
-    }, 200);
+    // Start the GLITS pattern (handles scheduling internally)
+    glits.startGlits();
+    glitsInterval = glits.getInterval();  // Keep reference for legacy checks
 
   } else if (config.type === 'lissajous') {
     // Lissajous patterns: precise phase relationships for goniometer testing
-    // Uses DelayNode for sample-accurate, drift-free phase offset
-    let freqL = config.freq;
-    let freqR = config.freq;
-
-    // Parse frequency ratio if present (for complex Lissajous figures)
-    if (config.ratio && config.ratio !== '1:1') {
-      const [ratioL, ratioR] = config.ratio.split(':').map(Number);
-      freqL = config.freq;
-      freqR = config.freq * (ratioR / ratioL);
-    }
+    // Uses createLissajousWithPhase/createLissajousDualFreq from generators/lissajous.js
+    const { freqL, freqR } = parseFrequencyRatio(config.freq, config.ratio);
 
     // For same-frequency Lissajous (phase offset patterns), use single oscillator + delay
     // This ensures zero drift between channels
     if (freqL === freqR && config.phase !== 0) {
-      const osc = ac.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = freqL;
+      const lissajous = createLissajousWithPhase(ac, freqL, config.phase, amplitude);
 
-      const gainL = ac.createGain();
-      const gainR = ac.createGain();
-      gainL.gain.value = amplitude;
-      gainR.gain.value = amplitude;
+      // Connect to routing gains
+      lissajous.gainL.connect(leftGain);
+      lissajous.gainR.connect(rightGain);
 
-      // DelayNode for precise phase offset (phase in degrees -> delay in seconds)
-      const phaseDelaySec = (config.phase / 360) * (1 / freqR);
-      const delayNode = ac.createDelay(1.0); // Max 1 second delay
-      delayNode.delayTime.value = phaseDelaySec;
-
-      // Left: direct from oscillator
-      osc.connect(gainL);
-      gainL.connect(leftGain);
-
-      // Right: through delay for phase offset
-      osc.connect(delayNode);
-      delayNode.connect(gainR);
-      gainR.connect(rightGain);
-
-      osc.start();
-      genSourceNodes.push(osc);
-      genFilterNodes.push(gainL, gainR, delayNode);
+      lissajous.osc.start();
+      genSourceNodes.push(lissajous.osc);
+      genFilterNodes.push(...lissajous.nodes);
 
     } else {
-      // Different frequencies (complex Lissajous) - use two oscillators
+      // Different frequencies (complex Lissajous) or no phase offset - use two oscillators
       // Start synchronized for consistent pattern
-      const oscL = ac.createOscillator();
-      const oscR = ac.createOscillator();
-      oscL.type = 'sine';
-      oscR.type = 'sine';
-      oscL.frequency.value = freqL;
-      oscR.frequency.value = freqR;
+      const lissajous = createLissajousDualFreq(ac, freqL, freqR, amplitude);
 
-      const gainL = ac.createGain();
-      const gainR = ac.createGain();
-      gainL.gain.value = amplitude;
-      gainR.gain.value = amplitude;
-
-      oscL.connect(gainL);
-      oscR.connect(gainR);
-      gainL.connect(leftGain);
-      gainR.connect(rightGain);
+      // Connect to routing gains
+      lissajous.gainL.connect(leftGain);
+      lissajous.gainR.connect(rightGain);
 
       // Start both at exact same time for synchronized pattern
-      const startTime = ac.currentTime + 0.01;
-      oscL.start(startTime);
-      oscR.start(startTime);
+      lissajous.oscL.start(lissajous.startTime);
+      lissajous.oscR.start(lissajous.startTime);
 
-      genSourceNodes.push(oscL, oscR);
-      genFilterNodes.push(gainL, gainR);
+      genSourceNodes.push(lissajous.oscL, lissajous.oscR);
+      genFilterNodes.push(...lissajous.nodes);
     }
 
   } else if (config.type === 'vector-text') {
@@ -1545,7 +1355,7 @@ function measureLoop() {
     const mDisp = readings.momentary;
     if (elapsedSec >= DELAY_M && isFinite(mDisp)) {
       lufsM.textContent = formatLUFS(mDisp);
-      lufsM.style.color = loudnessColor(mDisp);
+      lufsM.style.color = loudnessColour(mDisp);
     } else {
       lufsM.textContent = '--.- LUFS';
       lufsM.style.color = '';
@@ -1556,7 +1366,7 @@ function measureLoop() {
     const sDisp = readings.shortTerm;
     if (elapsedSec >= DELAY_S && isFinite(sDisp)) {
       lufsS.textContent = formatLUFS(sDisp);
-      lufsS.style.color = loudnessColor(sDisp);
+      lufsS.style.color = loudnessColour(sDisp);
     } else {
       lufsS.textContent = '--.- LUFS';
       lufsS.style.color = '';
@@ -1566,7 +1376,7 @@ function measureLoop() {
     const iDisp = readings.integrated;
     if (elapsedSec >= DELAY_I && isFinite(iDisp)) {
       lufsI.textContent = formatLUFS(iDisp);
-      lufsI.style.color = loudnessColor(iDisp);
+      lufsI.style.color = loudnessColour(iDisp);
     } else {
       lufsI.textContent = '--.- LUFS';
       lufsI.style.color = '';

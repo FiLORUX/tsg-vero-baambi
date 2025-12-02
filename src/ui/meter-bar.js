@@ -18,12 +18,12 @@
  * PURPOSE
  * ───────
  * LED-style horizontal bar meters for broadcast displays.
- * Supports dBFS, True Peak (dBTP), and PPM scales with proper color zones.
+ * Supports dBFS, True Peak (dBTP), and PPM scales with proper colour zones.
  *
  * VISUAL STYLE
  * ────────────
  * - Discrete LED cells with gaps (RTW/DK-Audio style)
- * - Color zones based on level (green → amber → red)
+ * - Colour zones based on level (green → amber → red)
  * - Peak hold indicator with glow effect
  * - High-DPI aware rendering
  *
@@ -33,7 +33,7 @@
 
 import { getDPR } from '../utils/dom.js';
 import { clamp, mapRange } from '../utils/math.js';
-import { DEFAULT_COLORS } from './colours.js';
+import { DEFAULT_COLOURS } from './colours.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // METER CONFIGURATIONS
@@ -48,7 +48,7 @@ export const DBFS_CONFIG = {
   maxDb: 0,
   cellCount: 120,
   cellsPerDb: 2,
-  getColor: (db, colors = DEFAULT_COLORS) => colors.ok,
+  getColour: (db, colours = DEFAULT_COLOURS) => colours.ok,
   referenceDb: null
 };
 
@@ -61,14 +61,14 @@ export const TRUE_PEAK_CONFIG = {
   maxDb: 3,
   cellCount: 126,
   cellsPerDb: 2,
-  getColor: (db, colors = DEFAULT_COLORS) => {
+  getColour: (db, colours = DEFAULT_COLOURS) => {
     if (db >= 0) return '#ff2020';        // Above 0 dBTP: bright red
-    if (db >= -1) return colors.hot;       // -1 to 0: red
-    if (db >= -3) return colors.caution;   // -3 to -1: orange
-    if (db >= -6) return colors.warn;      // -6 to -3: amber
-    return colors.ok;                       // Below -6: green
+    if (db >= -1) return colours.hot;       // -1 to 0: red
+    if (db >= -3) return colours.caution;   // -3 to -1: orange
+    if (db >= -6) return colours.warn;      // -6 to -3: amber
+    return colours.ok;                       // Below -6: green
   },
-  getPeakColor: (db, colors = DEFAULT_COLORS) => {
+  getPeakColour: (db, colours = DEFAULT_COLOURS) => {
     if (db >= 0) return '#ff4040';
     if (db >= -1) return '#ff6b5b';
     if (db >= -3) return '#ffb74d';
@@ -76,7 +76,7 @@ export const TRUE_PEAK_CONFIG = {
     return '#7dff7d';
   },
   referenceDb: 0,
-  referenceColor: 'hot'
+  referenceColour: 'hot'
 };
 
 /**
@@ -88,14 +88,14 @@ export const PPM_CONFIG = {
   maxDb: -9,
   cellCount: 90,
   cellsPerDb: 2,
-  getColor: (dbfs, colors = DEFAULT_COLORS) => {
+  getColour: (dbfs, colours = DEFAULT_COLOURS) => {
     const ppm = dbfs + 18;  // dBFS to PPM conversion
-    if (ppm >= 6) return colors.hot;       // +6 to +9: red (over)
-    if (ppm >= 0) return colors.caution;   // 0 to +6: amber (nominal)
-    return colors.ok;                       // Below 0: green
+    if (ppm >= 6) return colours.hot;       // +6 to +9: red (over)
+    if (ppm >= 0) return colours.caution;   // 0 to +6: amber (nominal)
+    return colours.ok;                       // Below 0: green
   },
   referenceDb: -18,  // 0 PPM = -18 dBFS
-  referenceColor: 'cyan'
+  referenceColour: 'cyan'
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ export class MeterBar {
    * @param {HTMLCanvasElement} canvas - Canvas element to render to
    * @param {Object} config - Meter configuration (e.g., TRUE_PEAK_CONFIG)
    * @param {Object} [options] - Additional options
-   * @param {Object} [options.colors] - Color overrides
+   * @param {Object} [options.colours] - Colour overrides
    * @param {number} [options.barHeight=0.12] - Bar height as fraction of canvas
    * @param {number} [options.gap=1] - Gap between LED cells in pixels
    */
@@ -130,7 +130,7 @@ export class MeterBar {
     this.ctx = canvas.getContext('2d');
     this.config = config;
 
-    this.colors = options.colors || DEFAULT_COLORS;
+    this.colours = options.colours || DEFAULT_COLOURS;
     this.barHeightRatio = options.barHeight || 0.12;
     this.gapPx = options.gap ?? 1;
 
@@ -194,7 +194,7 @@ export class MeterBar {
 
     // Draw reference line if configured
     if (config.referenceDb !== null) {
-      this._drawReferenceLine(config.referenceDb, config.referenceColor);
+      this._drawReferenceLine(config.referenceDb, config.referenceColour);
     }
   }
 
@@ -203,8 +203,8 @@ export class MeterBar {
    * @private
    */
   _drawChannel(yTop, value, peakHold) {
-    const { ctx, config, cellWidth, cellGap, barHeight, colors, dpr } = this;
-    const { minDb, maxDb, cellCount, getColor, getPeakColor } = config;
+    const { ctx, config, cellWidth, cellGap, barHeight, colours, dpr } = this;
+    const { minDb, maxDb, cellCount, getColour, getPeakColour } = config;
 
     const displayDb = clamp(value, minDb, maxDb);
     const dbPerCell = (maxDb - minDb) / cellCount;
@@ -217,11 +217,11 @@ export class MeterBar {
     for (let cell = 0; cell < cellCount; cell++) {
       const cellDb = minDb + cell * dbPerCell;
       const cellX = cell * (cellWidth + cellGap);
-      const color = getColor(cellDb + dbPerCell / 2, colors);
+      const colour = getColour(cellDb + dbPerCell / 2, colours);
 
       // Background (dimmed)
       ctx.globalAlpha = 0.14;
-      ctx.fillStyle = color;
+      ctx.fillStyle = colour;
       ctx.fillRect(cellX, yTop, cellWidth, barHeight);
 
       // Active cell
@@ -235,7 +235,7 @@ export class MeterBar {
           ctx.globalAlpha = 0.9;
           ctx.shadowBlur = 0;
         }
-        ctx.fillStyle = color;
+        ctx.fillStyle = colour;
         ctx.fillRect(cellX, yTop, cellWidth, barHeight);
         ctx.shadowBlur = 0;
       }
@@ -245,14 +245,14 @@ export class MeterBar {
     if (peakCell >= 0 && peakHold > minDb) {
       const peakCellDb = minDb + peakCell * dbPerCell;
       const cellX = peakCell * (cellWidth + cellGap);
-      const peakColor = getPeakColor
-        ? getPeakColor(peakCellDb, colors)
-        : getColor(peakCellDb, colors);
+      const peakColour = getPeakColour
+        ? getPeakColour(peakCellDb, colours)
+        : getColour(peakCellDb, colours);
 
       ctx.globalAlpha = 1;
-      ctx.shadowColor = peakColor;
+      ctx.shadowColor = peakColour;
       ctx.shadowBlur = (peakCellDb >= 0) ? 8 * dpr : 4 * dpr;
-      ctx.fillStyle = peakColor;
+      ctx.fillStyle = peakColour;
       ctx.fillRect(cellX, yTop, cellWidth, barHeight);
       ctx.shadowBlur = 0;
     }
@@ -264,14 +264,14 @@ export class MeterBar {
    * Draw reference line.
    * @private
    */
-  _drawReferenceLine(refDb, colorKey) {
-    const { ctx, width, height, config, colors, dpr } = this;
+  _drawReferenceLine(refDb, colourKey) {
+    const { ctx, width, height, config, colours, dpr } = this;
     const { minDb, maxDb } = config;
 
     const x = mapRange(refDb, minDb, maxDb, 0, width);
 
     ctx.globalAlpha = 0.95;
-    ctx.fillStyle = colors[colorKey] || colors.hot;
+    ctx.fillStyle = colours[colourKey] || colours.hot;
     ctx.fillRect(Math.round(x) - 1, height * 0.25, 2, height * 0.5);
     ctx.globalAlpha = 1;
   }

@@ -224,7 +224,7 @@ export class SpectrumAnalyzer {
 
         // Only draw lit cells (up to displayDb)
         if (cellDb < displayDb) {
-          // Color based on dB level
+          // Colour based on dB level
           if (cellDb >= 0) {
             ctx.fillStyle = '#ff3b2f';  // Red: above 0 dB
           } else if (cellDb >= -6) {
