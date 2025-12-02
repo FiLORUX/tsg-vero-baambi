@@ -12,383 +12,171 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * STEREO GONIOMETER / VECTORSCOPE
+ * M/S GONIOMETER (VECTORSCOPE)
  * ═══════════════════════════════════════════════════════════════════════════════
+ * Lissajous-style stereo phase display in the Mid/Side domain.
+ * Visual gain calibrated so −18 dBFS mono tone reaches ~70% of radius,
+ * matching RTW, DK-Audio, and TC Electronic hardware implementations.
  *
- * PURPOSE
- * ───────
- * M/S (Mid/Side) vectorscope display for stereo imaging analysis.
- * Shows the stereo field as a rotated Lissajous pattern.
+ * Coordinate system (DK/RTW convention):
+ *   Y-axis (vertical)   = Mid   = (L+R)/√2  = mono/centre content
+ *   X-axis (horizontal) = Side  = (L−R)/√2  = stereo difference
  *
- * DISPLAY ORIENTATION
- * ───────────────────
- * - Vertical axis (12 o'clock): M (mono, L+R)
- * - Horizontal axis (3 o'clock): S (side, L-R)
- * - 45° left (10:30): Left channel
- * - 45° right (1:30): Right channel
- *
- * INTERPRETATION
- * ──────────────
- * - Vertical line: Mono signal (L = R)
- * - Horizontal line: Out-of-phase (L = -R)
- * - 45° ellipse: Normal stereo
- * - Wide pattern: Wide stereo image
- * - Collapsed pattern: Narrow/mono-ish
+ * Visual interpretation:
+ *   • Vertical line       → mono signal (full correlation)
+ *   • Horizontal line     → out-of-phase (anti-correlated)
+ *   • 45° diagonal (L+)   → hard left
+ *   • 45° diagonal (R+)   → hard right
+ *   • Circular/elliptical → complex stereo field
  *
  * @module ui/goniometer
- * @see DK-Audio MSD600 series
- * @see RTW TouchMonitor vectorscope
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-import { getDPR } from '../utils/dom.js';
-import { clamp } from '../utils/math.js';
-import { DEFAULT_COLORS } from './colors.js';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GONIOMETER CONSTANTS
-// ─────────────────────────────────────────────────────────────────────────────
+// EXACT from original audio-meters-grid.html line 2369
+const VECTORSCOPE_GAIN = 3.5;
 
 /**
- * Rotation angle for M/S display (45° = π/4).
- * Rotates so M (mono) is vertical, S (side) is horizontal.
- * @type {number}
- */
-export const MS_ROTATION = Math.PI / 4;
-
-/**
- * Default phosphor decay factor per frame (60fps assumed).
- * 0.92 gives approximately 0.5s decay to 1% brightness.
- * @type {number}
- */
-export const DEFAULT_DECAY = 0.92;
-
-/**
- * Number of samples to display per frame.
- * @type {number}
- */
-export const DEFAULT_SAMPLE_COUNT = 512;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GONIOMETER CLASS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Stereo Goniometer / Vectorscope renderer.
- *
- * @example
- * const gonio = new Goniometer(canvas, { decay: 0.94 });
- *
- * // In animation loop:
- * gonio.draw(leftSamples, rightSamples);
+ * Goniometer renderer - EXACT extraction from audio-meters-grid.html drawXY()
  */
 export class Goniometer {
   /**
-   * @param {HTMLCanvasElement} canvas - Canvas element
-   * @param {Object} [options] - Configuration options
-   * @param {number} [options.decay=0.92] - Phosphor decay factor (0-1)
-   * @param {number} [options.gain=1] - Display gain multiplier
-   * @param {Object} [options.colors] - Color overrides
-   * @param {boolean} [options.showGrid=true] - Show grid lines
-   * @param {boolean} [options.showLabels=true] - Show L/R/M/S labels
+   * @param {HTMLCanvasElement} canvas - Canvas element (xy)
    */
-  constructor(canvas, options = {}) {
+  constructor(canvas) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
-
-    this.decay = options.decay ?? DEFAULT_DECAY;
-    this.gain = options.gain ?? 1.0;
-    this.colors = options.colors || DEFAULT_COLORS;
-    this.showGrid = options.showGrid !== false;
-    this.showLabels = options.showLabels !== false;
-
-    // Cached dimensions
-    this.width = 0;
-    this.height = 0;
-    this.cx = 0;
-    this.cy = 0;
-    this.radius = 0;
-
-    // Phosphor buffer for persistence
-    this.phosphorCanvas = null;
-    this.phosphorCtx = null;
+    this.ctx = canvas ? canvas.getContext('2d') : null;
   }
 
   /**
-   * Update canvas dimensions and create phosphor buffer.
+   * Draw the goniometer with audio samples.
+   * EXACT extraction from audio-meters-grid.html lines 2381-2483
+   *
+   * @param {Float32Array} bufL - Left channel samples
+   * @param {Float32Array} bufR - Right channel samples
+   * @param {boolean} shouldRender - TransitionGuard.shouldRender() result
+   */
+  draw(bufL, bufR, shouldRender = true) {
+    if (!this.ctx || !this.canvas) return;
+
+    const w = this.canvas.width, h = this.canvas.height;
+    if (!w || !h) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = this.ctx;
+
+    // Clear canvas
+    ctx.fillStyle = '#0d0f11';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw samples if TransitionGuard allows
+    if (shouldRender && bufL && bufR) {
+      const n = Math.min(bufL.length, bufR.length);
+
+      ctx.globalAlpha = 0.85;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(105,191,255,.85)';
+      const px = Math.max(1, Math.floor(dpr));
+
+      // Line settings - thicker with round caps
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      let prevX = null, prevY = null;
+      for (let i = 0; i < n; i += 2) {
+        const L = bufL[i];
+        const R = bufR[i];
+
+        // M/S transform (DK/RTW standard)
+        const M = 0.5 * (L + R);  // Mid = mono content
+        const S = 0.5 * (R - L);  // Side: +S = right, -S = left
+
+        // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
+        const x = (S * VECTORSCOPE_GAIN * w / 2) + w / 2;
+        const y = h / 2 - (M * VECTORSCOPE_GAIN * h / 2);
+
+        if (prevX !== null) {
+          // Glow layer first (wider, more transparent)
+          ctx.globalAlpha = .15;
+          ctx.strokeStyle = 'rgba(105,191,255,.5)';
+          ctx.lineWidth = 3 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+
+          // Main line (thicker than before)
+          ctx.globalAlpha = .35;
+          ctx.strokeStyle = 'rgba(105,191,255,.35)';
+          ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = .85;
+        ctx.fillRect(x, y, px, px);
+        prevX = x; prevY = y;
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Grid lines: M/S cross + L/R diagonals
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#3a4855';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    // Vertical center line (MONO axis)
+    ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
+    // Horizontal center line (SIDE axis)
+    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+    // Diagonal lines (L and R directions)
+    ctx.moveTo(0, 0); ctx.lineTo(w, h);      // L direction (top-left to bottom-right)
+    ctx.moveTo(w, 0); ctx.lineTo(0, h);      // R direction (top-right to bottom-left)
+    ctx.stroke();
+
+    // Axis labels (DK/RTW style)
+    const fontSize = Math.round(9 * dpr);
+    ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillStyle = '#6b7a8a';
+    ctx.textBaseline = 'middle';
+
+    // Top row: +L / +M / +R
+    const margin = 12 * dpr;
+    ctx.textAlign = 'left';
+    ctx.fillText('+L', margin, margin);
+    ctx.textAlign = 'center';
+    ctx.fillText('+M', w / 2, margin);
+    ctx.textAlign = 'right';
+    ctx.fillText('+R', w - margin, margin);
+
+    // Middle row: –S / +S
+    ctx.textAlign = 'left';
+    ctx.fillText('–S', margin, h / 2);
+    ctx.textAlign = 'right';
+    ctx.fillText('+S', w - margin, h / 2);
+
+    // Bottom row: –L / –M / –R
+    ctx.textAlign = 'left';
+    ctx.fillText('–L', margin, h - margin);
+    ctx.textAlign = 'center';
+    ctx.fillText('–M', w / 2, h - margin);
+    ctx.textAlign = 'right';
+    ctx.fillText('–R', w - margin, h - margin);
+  }
+
+  /**
+   * Resize canvas to match element size
    */
   resize() {
-    const dpr = getDPR();
+    if (!this.canvas) return;
+    const dpr = window.devicePixelRatio || 1;
     const rect = this.canvas.getBoundingClientRect();
-
-    this.width = Math.floor(rect.width * dpr);
-    this.height = Math.floor(rect.height * dpr);
-
-    if (this.canvas.width !== this.width || this.canvas.height !== this.height) {
-      this.canvas.width = this.width;
-      this.canvas.height = this.height;
-
-      // Recreate phosphor buffer
-      this.phosphorCanvas = document.createElement('canvas');
-      this.phosphorCanvas.width = this.width;
-      this.phosphorCanvas.height = this.height;
-      this.phosphorCtx = this.phosphorCanvas.getContext('2d');
+    const w = Math.floor(rect.width * dpr);
+    const h = Math.floor(rect.height * dpr);
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
     }
-
-    this.cx = this.width / 2;
-    this.cy = this.height / 2;
-    this.radius = Math.min(this.width, this.height) * 0.42;
-  }
-
-  /**
-   * Draw the goniometer with new audio samples.
-   *
-   * @param {Float32Array} leftSamples - Left channel samples
-   * @param {Float32Array} rightSamples - Right channel samples
-   */
-  draw(leftSamples, rightSamples) {
-    if (this.width === 0) this.resize();
-
-    const { ctx, phosphorCtx, width, height, cx, cy, radius, gain, decay } = this;
-
-    // Clear main canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Decay phosphor buffer
-    if (phosphorCtx) {
-      phosphorCtx.globalCompositeOperation = 'source-over';
-      phosphorCtx.fillStyle = `rgba(0, 0, 0, ${1 - decay})`;
-      phosphorCtx.fillRect(0, 0, width, height);
-    }
-
-    // Draw background
-    this._drawBackground();
-
-    // Draw grid
-    if (this.showGrid) {
-      this._drawGrid();
-    }
-
-    // Draw new samples to phosphor
-    if (leftSamples && rightSamples && phosphorCtx) {
-      this._drawSamples(leftSamples, rightSamples);
-    }
-
-    // Composite phosphor to main canvas
-    if (this.phosphorCanvas) {
-      ctx.drawImage(this.phosphorCanvas, 0, 0);
-    }
-
-    // Draw labels on top
-    if (this.showLabels) {
-      this._drawLabels();
-    }
-  }
-
-  /**
-   * Clear the phosphor buffer.
-   */
-  clear() {
-    if (this.phosphorCtx) {
-      this.phosphorCtx.clearRect(0, 0, this.width, this.height);
-    }
-  }
-
-  /**
-   * @private
-   */
-  _drawBackground() {
-    const { ctx, cx, cy, radius } = this;
-
-    ctx.save();
-
-    // Circular background with gradient
-    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.1);
-    gradient.addColorStop(0, '#0a0c0e');
-    gradient.addColorStop(0.8, '#0d1014');
-    gradient.addColorStop(1, '#181c20');
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius * 1.05, 0, Math.PI * 2);
-    ctx.fillStyle = gradient;
-    ctx.fill();
-
-    // Outer ring
-    ctx.strokeStyle = '#2a2f36';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  /**
-   * @private
-   */
-  _drawGrid() {
-    const { ctx, cx, cy, radius } = this;
-
-    ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.strokeStyle = '#4a5568';
-    ctx.lineWidth = 1;
-
-    // Concentric circles at 25%, 50%, 75%, 100%
-    [0.25, 0.5, 0.75, 1.0].forEach(t => {
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius * t, 0, Math.PI * 2);
-      ctx.setLineDash(t === 1.0 ? [] : [3, 4]);
-      ctx.stroke();
-    });
-
-    ctx.setLineDash([]);
-
-    // M axis (vertical - mono)
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - radius);
-    ctx.lineTo(cx, cy + radius);
-    ctx.strokeStyle = '#6b7280';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // S axis (horizontal - side/difference)
-    ctx.beginPath();
-    ctx.moveTo(cx - radius, cy);
-    ctx.lineTo(cx + radius, cy);
-    ctx.stroke();
-
-    // L and R axes (45° diagonals)
-    ctx.strokeStyle = '#4a5568';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-
-    // Left channel axis (upper-left to lower-right)
-    const lx = radius * Math.cos(MS_ROTATION + Math.PI);
-    const ly = radius * Math.sin(MS_ROTATION + Math.PI);
-    ctx.beginPath();
-    ctx.moveTo(cx + lx, cy + ly);
-    ctx.lineTo(cx - lx, cy - ly);
-    ctx.stroke();
-
-    // Right channel axis (upper-right to lower-left)
-    const rx = radius * Math.cos(-MS_ROTATION);
-    const ry = radius * Math.sin(-MS_ROTATION);
-    ctx.beginPath();
-    ctx.moveTo(cx + rx, cy + ry);
-    ctx.lineTo(cx - rx, cy - ry);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  /**
-   * @private
-   */
-  _drawSamples(leftSamples, rightSamples) {
-    const { phosphorCtx, cx, cy, radius, gain, colors } = this;
-    const len = Math.min(leftSamples.length, rightSamples.length);
-
-    phosphorCtx.save();
-
-    // Sample points with intensity based on level
-    for (let i = 0; i < len; i++) {
-      const l = leftSamples[i] * gain;
-      const r = rightSamples[i] * gain;
-
-      // Convert to M/S coordinates
-      // M = (L + R) / sqrt(2), S = (L - R) / sqrt(2)
-      // Then rotate by 45° so M is vertical
-      const m = (l + r) * 0.7071;  // 1/sqrt(2)
-      const s = (l - r) * 0.7071;
-
-      // Map to screen coordinates
-      // M (mono) goes up (negative Y), S (side) goes right (positive X)
-      const x = cx + clamp(s, -1, 1) * radius;
-      const y = cy - clamp(m, -1, 1) * radius;  // Inverted Y
-
-      // Intensity based on signal level
-      const intensity = Math.sqrt(l * l + r * r);
-      const alpha = clamp(intensity * 2, 0.3, 1.0);
-
-      // Colour based on instantaneous phase relationship
-      // Positive product (L and R same polarity) = green, opposite = red
-      const phaseProduct = l * r;
-      let color;
-      if (phaseProduct >= 0) {
-        color = colors.ok;
-      } else if (phaseProduct > -0.3) {
-        color = colors.warn;
-      } else {
-        color = colors.hot;
-      }
-
-      phosphorCtx.fillStyle = color;
-      phosphorCtx.globalAlpha = alpha;
-      phosphorCtx.fillRect(x - 1, y - 1, 2, 2);
-    }
-
-    phosphorCtx.restore();
-  }
-
-  /**
-   * @private
-   */
-  _drawLabels() {
-    const { ctx, cx, cy, radius, width } = this;
-
-    ctx.save();
-
-    const fontSize = Math.max(10, Math.floor(width * 0.028));
-    ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#9ca3af';
-
-    const labelOffset = radius + fontSize * 1.2;
-
-    // M label (top - mono)
-    ctx.fillStyle = '#a0aec0';
-    ctx.fillText('M', cx, cy - labelOffset);
-
-    // S label (right - side)
-    ctx.fillText('S', cx + labelOffset, cy);
-
-    // L label (upper-left)
-    const lAngle = Math.PI * 0.75;  // 135°
-    ctx.fillStyle = '#718096';
-    ctx.fillText('L', cx + labelOffset * Math.cos(lAngle), cy + labelOffset * Math.sin(lAngle));
-
-    // R label (upper-right)
-    const rAngle = Math.PI * 0.25;  // 45°
-    ctx.fillText('R', cx + labelOffset * Math.cos(rAngle), cy - labelOffset * Math.sin(rAngle));
-
-    ctx.restore();
-  }
-
-  /**
-   * Set display gain.
-   *
-   * @param {number} gain - Gain multiplier (1.0 = 0dB)
-   */
-  setGain(gain) {
-    this.gain = clamp(gain, 0.1, 10);
-  }
-
-  /**
-   * Set phosphor decay rate.
-   *
-   * @param {number} decay - Decay factor (0.9 = fast, 0.98 = slow)
-   */
-  setDecay(decay) {
-    this.decay = clamp(decay, 0.8, 0.99);
-  }
-
-  /**
-   * Dispose and clean up.
-   */
-  dispose() {
-    this.phosphorCanvas = null;
-    this.phosphorCtx = null;
-    this.canvas = null;
-    this.ctx = null;
   }
 }

@@ -181,6 +181,15 @@ export function createStereoKWeightingFilters(audioContext) {
  * Use these for strict compliance testing; the native BiquadFilter
  * approximation is sufficient for most broadcast applications.
  *
+ * @note SAMPLE RATE LIMITATION
+ * These coefficients are calculated specifically for 48kHz. At other sample
+ * rates (e.g., 44.1kHz), the frequency response will deviate from the
+ * ITU-R BS.1770-4 specification. For 44.1kHz applications, dedicated
+ * coefficients would need to be calculated, or accept ~0.1-0.2dB deviation
+ * in high-frequency response. The Web Audio BiquadFilter used in
+ * createKWeightingFilter() automatically adapts to the AudioContext sample
+ * rate but may have minor response deviations compared to the exact spec.
+ *
  * @type {Object}
  */
 export const BS1770_COEFFICIENTS_48K = {
