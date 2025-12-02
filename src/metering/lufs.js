@@ -119,6 +119,27 @@ export const MIN_LRA_BLOCKS = 15;
  * console.log(`M: ${readings.momentary.toFixed(1)} LUFS`);
  */
 export class LUFSMeter {
+  /** @type {number} */
+  sampleRate;
+  /** @type {number} */
+  blockSize;
+  /** @type {number} */
+  momentaryLength;
+  /** @type {number} */
+  shortTermLength;
+  /** @type {number[]} */
+  momentaryQueue;
+  /** @type {number[]} */
+  shortTermQueue;
+  /** @type {number} */
+  integratedEnergy;
+  /** @type {number} */
+  integratedCount;
+  /** @type {number[]} */
+  shortTermHistory;
+  /** @type {number} */
+  maxHistoryLength;
+
   /**
    * @param {Object} options - Configuration options
    * @param {number} [options.sampleRate=48000] - Audio sample rate
@@ -135,7 +156,9 @@ export class LUFSMeter {
     this.shortTermLength = Math.max(1, Math.round(SHORT_TERM_WINDOW_S / blockDuration));
 
     // Sliding window queues
+    /** @type {number[]} */
     this.momentaryQueue = [];
+    /** @type {number[]} */
     this.shortTermQueue = [];
 
     // Integrated loudness accumulators
@@ -143,6 +166,7 @@ export class LUFSMeter {
     this.integratedCount = 0;
 
     // Short-term history for LRA calculation
+    /** @type {number[]} */
     this.shortTermHistory = [];
     this.maxHistoryLength = Math.round(historyDuration / SHORT_TERM_WINDOW_S);
   }
@@ -188,10 +212,12 @@ export class LUFSMeter {
     if (this.shortTermQueue.length > this.shortTermLength) {
       const shifted = this.shortTermQueue.shift();
 
-      // Add to history for LRA calculation
-      this.shortTermHistory.push(shifted);
-      if (this.shortTermHistory.length > this.maxHistoryLength) {
-        this.shortTermHistory.shift();
+      // Add to history for LRA calculation (shift always returns a value here)
+      if (shifted !== undefined) {
+        this.shortTermHistory.push(shifted);
+        if (this.shortTermHistory.length > this.maxHistoryLength) {
+          this.shortTermHistory.shift();
+        }
       }
     }
 
@@ -240,6 +266,8 @@ export class LUFSMeter {
   /**
    * Calculate LUFS from energy queue.
    * @private
+   * @param {number[]} queue - Energy values
+   * @returns {number} LUFS value
    */
   _queueToLUFS(queue) {
     if (queue.length === 0) return -Infinity;
@@ -250,6 +278,7 @@ export class LUFSMeter {
   /**
    * Calculate current gating threshold.
    * @private
+   * @returns {number} Gate threshold in LUFS
    */
   _calculateGate() {
     if (this.integratedCount === 0) {
@@ -263,6 +292,8 @@ export class LUFSMeter {
   /**
    * Calculate Loudness Range (LRA) from short-term history.
    * @private
+   * @param {number} integratedLUFS - Integrated loudness for gating
+   * @returns {number|null} LRA in LU, or null if insufficient data
    */
   _calculateLRA(integratedLUFS) {
     // Need sufficient data for stable LRA

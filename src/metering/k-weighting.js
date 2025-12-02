@@ -177,6 +177,21 @@ export function createStereoKWeightingFilters(audioContext) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * @typedef {Object} BiquadCoefficients
+ * @property {number} b0 - Feedforward coefficient b0
+ * @property {number} b1 - Feedforward coefficient b1
+ * @property {number} b2 - Feedforward coefficient b2
+ * @property {number} a1 - Feedback coefficient a1
+ * @property {number} a2 - Feedback coefficient a2
+ */
+
+/**
+ * @typedef {Object} BS1770Coefficients
+ * @property {BiquadCoefficients} highpass - Stage 1: High-pass at 38Hz
+ * @property {BiquadCoefficients} highshelf - Stage 2: High-shelf at 4kHz, +4dB
+ */
+
+/**
  * Exact biquad coefficients from ITU-R BS.1770-4 for 48kHz sample rate.
  * Use these for strict compliance testing; the native BiquadFilter
  * approximation is sufficient for most broadcast applications.
@@ -190,7 +205,7 @@ export function createStereoKWeightingFilters(audioContext) {
  * createKWeightingFilter() automatically adapts to the AudioContext sample
  * rate but may have minor response deviations compared to the exact spec.
  *
- * @type {Object}
+ * @type {BS1770Coefficients}
  */
 export const BS1770_COEFFICIENTS_48K = {
   /** Stage 1: High-pass at 38Hz */
