@@ -12,37 +12,39 @@
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * APPLICATION MODULE INDEX
+ * M/S METER
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Re-exports all application integration modules.
+ * DOM-based Mid/Side meter. Updates width percentage on fill elements.
  *
- * @module app
+ * @module ui/ms-meter
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// State management
-export {
-  InputMode,
-  DEFAULT_STATE,
-  StateStore,
-  appState
-} from './state.js';
+export class MSMeter {
+  constructor(msFillM, msFillS, msValueM, msValueS) {
+    this.msFillM = msFillM;
+    this.msFillS = msFillS;
+    this.msValueM = msValueM;
+    this.msValueS = msValueS;
+  }
 
-// Input source control
-export {
-  ALIGNMENT_TONE_HZ,
-  ALIGNMENT_LEVEL_DBFS,
-  SignalType,
-  RoutingMode,
-  SourceController,
-  getAudioInputDevices,
-  requestMicrophonePermission
-} from './sources.js';
+  formatDb(value, decimals = 1, width = 6) {
+    if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
+    return value.toFixed(decimals).padStart(width);
+  }
 
-// Render loop
-export {
-  RenderLoop,
-  MeterRenderer,
-  renderLoop
-} from './renderer.js';
+  update(midDb, sideDb) {
+    if (!this.msFillM || !this.msFillS) return;
+
+    // Map dB to percentage (0 = -60dB, 100% = 0dB)
+    const midPct = Math.max(0, Math.min(100, (midDb + 60) / 60 * 100));
+    const sidePct = Math.max(0, Math.min(100, (sideDb + 60) / 60 * 100));
+
+    this.msFillM.style.width = midPct + '%';
+    this.msFillS.style.width = sidePct + '%';
+
+    if (this.msValueM) this.msValueM.textContent = this.formatDb(midDb, 1, 6) + ' dB';
+    if (this.msValueS) this.msValueS.textContent = this.formatDb(sideDb, 1, 6) + ' dB';
+  }
+}

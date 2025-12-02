@@ -96,9 +96,10 @@ export const PEAK_HOLD_SECONDS = 3;
  * @param {number} t - Interpolation position (0 to 1)
  * @returns {number} Interpolated value
  */
+// EXACT from audio-meters-grid.html line 3564
 export function hermiteInterpolate(p0, p1, p2, p3, t) {
   const a = (-0.5 * p0) + (1.5 * p1) + (-1.5 * p2) + (0.5 * p3);
-  const b = (p0) + (-2.5 * p1) + (2.0 * p2) + (-0.5 * p3);
+  const b = (p0 * (-1)) + (2.5 * p1) + (-2 * p2) + (0.5 * p3);
   const c = (-0.5 * p0) + (0.5 * p2);
   const d = p1;
 

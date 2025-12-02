@@ -118,14 +118,14 @@ export class AudioEngine {
   // ───────────────────────────────────────────────────────────────────────────
 
   /**
-   * Initialize the audio engine.
+   * Initialise the audio engine.
    * Creates AudioContext and loads AudioWorklet if specified.
    *
    * @returns {Promise<void>}
    */
-  async initialize() {
+  async initialise() {
     if (this.context) {
-      console.warn('[AudioEngine] Already initialized');
+      console.warn('[AudioEngine] Already initialised');
       return;
     }
 
@@ -164,7 +164,7 @@ export class AudioEngine {
    */
   async resume() {
     if (!this.context) {
-      throw new Error('AudioEngine not initialized');
+      throw new Error('AudioEngine not initialised');
     }
 
     if (this.context.state === 'suspended') {
@@ -234,7 +234,7 @@ export class AudioEngine {
    */
   createAnalyser({ fftSize, smoothing = DEFAULT_SMOOTHING } = {}) {
     if (!this.context) {
-      throw new Error('AudioEngine not initialized');
+      throw new Error('AudioEngine not initialised');
     }
 
     const analyser = this.context.createAnalyser();
@@ -253,7 +253,7 @@ export class AudioEngine {
    */
   createStereoAnalysers(options = {}) {
     if (!this.context) {
-      throw new Error('AudioEngine not initialized');
+      throw new Error('AudioEngine not initialised');
     }
 
     const splitter = this.context.createChannelSplitter(2);
@@ -363,7 +363,7 @@ export class AudioEngine {
     gain = -18
   } = {}) {
     if (!this.context) {
-      throw new Error('AudioEngine not initialized');
+      throw new Error('AudioEngine not initialised');
     }
 
     const oscillator = this.context.createOscillator();
@@ -414,7 +414,7 @@ export class AudioEngine {
    */
   createWorkletNode(processorName, options = {}) {
     if (!this.context) {
-      throw new Error('AudioEngine not initialized');
+      throw new Error('AudioEngine not initialised');
     }
 
     if (!this.workletLoaded) {
@@ -487,11 +487,19 @@ export class AudioEngine {
     //   this.resume();
     // }
   }
+
+  /**
+   * Alias for backwards compatibility.
+   * @deprecated Use initialise() instead
+   */
+  async initialize() {
+    return this.initialise();
+  }
 }
 
 /**
  * @typedef {Object} AudioEngineState
- * @property {boolean} initialized - Whether engine is initialized
+ * @property {boolean} initialized - Whether engine is initialised
  * @property {string} contextState - AudioContext state ('running', 'suspended', 'closed')
  * @property {number} sampleRate - Current sample rate
  * @property {boolean} workletLoaded - Whether AudioWorklet is loaded

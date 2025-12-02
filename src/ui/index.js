@@ -19,20 +19,20 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// Colors and themes
+// Colours and themes
 export {
-  DEFAULT_COLORS,
-  getLoudnessColor,
-  getRadarColor,
-  getTruePeakColor,
-  getTruePeakBarColor,
-  getPPMBarColor,
-  getCorrelationColor,
-  getBalanceColor,
+  DEFAULT_COLOURS,
+  getLoudnessColour,
+  getRadarColour,
+  getTruePeakColour,
+  getTruePeakBarColour,
+  getPPMBarColour,
+  getCorrelationColour,
+  getBalanceColour,
   createMeterGradient,
   createTPGradient,
-  getColorsFromCSS
-} from './colors.js';
+  getColoursFromCSS
+} from './colours.js';
 
 // Meter bar components
 export {
@@ -44,29 +44,10 @@ export {
 } from './meter-bar.js';
 
 // Loudness radar
-export {
-  RADAR_MIN_LU,
-  RADAR_MAX_LU,
-  RADAR_RANGE_LU,
-  DEFAULT_TARGET_LUFS,
-  GRID_INTERVAL_LU,
-  LoudnessRadar
-} from './radar.js';
+export { LoudnessRadar } from './radar.js';
 
 // Goniometer / vectorscope
-export {
-  MS_ROTATION,
-  DEFAULT_DECAY,
-  DEFAULT_SAMPLE_COUNT,
-  Goniometer
-} from './goniometer.js';
+export { Goniometer } from './goniometer.js';
 
-// Correlation and balance meters
-export {
-  CORR_MIN,
-  CORR_MAX,
-  PEAK_HOLD_MS,
-  PEAK_FALL_RATE,
-  CorrelationMeter,
-  BalanceMeter
-} from './correlation-meter.js';
+// Correlation meter
+export { corrNow, CorrelationMeter } from './correlation-meter.js';

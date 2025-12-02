@@ -25,7 +25,18 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-import { STORAGE_KEY, STORAGE_VERSION, migrateStorage } from '../config/storage.js';
+import { STORAGE_VERSION } from '../config/storage.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Storage key for serialised application state.
+ * Uses the vero_ prefix to avoid collisions with other applications.
+ * @type {string}
+ */
+const APP_STATE_KEY = 'vero_app_state';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DEFAULT STATE
@@ -236,7 +247,7 @@ export class StateStore {
 
     if (clearStorage) {
       try {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(APP_STATE_KEY);
       } catch (e) {
         console.warn('[StateStore] Failed to clear localStorage:', e);
       }
@@ -264,19 +275,22 @@ export class StateStore {
    */
   _loadFromStorage() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(APP_STATE_KEY);
       if (!raw) return;
 
       const data = JSON.parse(raw);
 
-      // Migrate if needed
-      const migrated = migrateStorage(data, STORAGE_VERSION);
-      if (!migrated) return;
+      // Version check — discard incompatible data
+      if (data.version !== STORAGE_VERSION) {
+        console.log(`[StateStore] Storage version mismatch (${data.version} → ${STORAGE_VERSION}), resetting`);
+        localStorage.removeItem(APP_STATE_KEY);
+        return;
+      }
 
       // Apply persisted values
       for (const key of this._persistedKeys) {
-        if (key in migrated && migrated[key] !== undefined) {
-          this._state[key] = migrated[key];
+        if (key in data && data[key] !== undefined) {
+          this._state[key] = data[key];
         }
       }
     } catch (e) {
@@ -297,7 +311,7 @@ export class StateStore {
       for (const key of this._persistedKeys) {
         toSave[key] = this._state[key];
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      localStorage.setItem(APP_STATE_KEY, JSON.stringify(toSave));
     } catch (e) {
       console.warn('[StateStore] Failed to save to localStorage:', e);
     }
