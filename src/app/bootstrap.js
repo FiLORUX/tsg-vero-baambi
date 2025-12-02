@@ -35,17 +35,6 @@ import { StereoMeter, formatCorrelation } from '../metering/correlation.js';
 import { appState, InputMode } from './state.js';
 // Source controller (prepared for phased integration)
 import { SourceController, SignalType, RoutingMode } from './sources.js';
-
-// Helper to get CSS custom property value (for correlation meter colors)
-function getCss(prop) {
-  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
-}
-
-// Format correlation value for display (EXACT from original)
-function formatCorr(v) {
-  const sign = v >= 0 ? '+' : '';
-  return sign + v.toFixed(2);
-}
 // Stereo analysis widgets
 import { StereoAnalysisEngine } from '../ui/stereo-analysis.js';
 import { WidthMeter } from '../ui/width-meter.js';
@@ -70,6 +59,8 @@ import { initDragDrop, setupDragAndDrop } from './drag-drop.js';
 import { GlitchDebug } from './glitch-debug.js';
 // Transition guard for EBU pulse blanking - extracted from bootstrap
 import { TransitionGuard } from './transition-guard.js';
+// Helper functions - extracted from bootstrap
+import { dbToGain, clamp, formatDb, formatDbu, formatTime, getCss, formatCorr, loudnessColour as loudnessColourBase } from './helpers.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURABLE PARAMETERS
@@ -433,43 +424,12 @@ function layoutLoudness() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
+// HELPERS (wrapper for loudnessColour with LOUDNESS_TARGET binding)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const dbToGain = dB => Math.pow(10, dB / 20);
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-function formatDb(value, decimals = 1, width = 5) {
-  if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
-  return value.toFixed(decimals).padStart(width);
-}
-
-// EXACT from audio-meters-grid.html lines 2080-2086
-// formatDbu: With snap-to-zero for PPM, always with +/- sign
-function formatDbu(value, decimals = 1, snapWindow = 0.25, width = 5) {
-  if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
-  const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
-  const sign = snapped >= 0 ? '+' : '';
-  return (sign + snapped.toFixed(decimals)).padStart(width);
-}
-
-function formatTime(ms) {
-  if (!isFinite(ms) || ms < 0) return '--:--:--';
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
-
-// EXACT from audio-meters-grid.html lines 3691-3698
+// Wrapper that binds LOUDNESS_TARGET to imported loudnessColourBase
 function loudnessColour(lufs) {
-  if (!isFinite(lufs)) return 'var(--muted)';
-  const offset = lufs - LOUDNESS_TARGET;
-  if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 to −22: green (on target)
-  if (offset < -1) return getCss('--cyan');                     // Below −24: cyan (too quiet)
-  if (offset <= 3) return getCss('--warn');                     // −22 to −20: amber (bit loud)
-  return getCss('--hot');                                        // Above −20: red (too loud)
+  return loudnessColourBase(lufs, LOUDNESS_TARGET);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
