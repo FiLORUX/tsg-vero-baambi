@@ -33,28 +33,28 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DEFAULT COLOR PALETTE
+// DEFAULT COLOUR PALETTE
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Default color palette for meters.
+ * Default colour palette for meters.
  * Matches CSS variables in the legacy stylesheet.
  * @type {Object<string, string>}
  */
-export const DEFAULT_COLORS = {
+export const DEFAULT_COLOURS = {
   ok: '#00d4aa',        // Green - on target
   cyan: '#4488cc',      // Blue/Cyan - too quiet
   warn: '#ffaa00',      // Amber - bit loud
   caution: '#ff8800',   // Orange - approaching limit
   hot: '#ff4444',       // Red - over limit
-  muted: '#666666',     // Gray - inactive/silent
+  muted: '#666666',     // Grey - inactive/silent
 
-  // Background colors
+  // Background colours
   bgPrimary: '#1a1a2e',
   bgSecondary: '#16213e',
   bgTertiary: '#0d1b2a',
 
-  // Text colors
+  // Text colours
   textPrimary: '#e0e0e0',
   textSecondary: '#88a3bf',
   textMuted: '#4b5563',
@@ -69,142 +69,142 @@ export const DEFAULT_COLORS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LOUDNESS COLORS
+// LOUDNESS COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get color for loudness value relative to target.
+ * Get colour for loudness value relative to target.
  * Based on EBU R128 guidance and TC/RTW conventions.
  *
  * @param {number} lufs - Measured loudness
  * @param {number} [target=-23] - Target loudness
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getLoudnessColor(lufs, target = -23, colors = DEFAULT_COLORS) {
-  if (!isFinite(lufs)) return colors.muted;
+export function getLoudnessColour(lufs, target = -23, colours = DEFAULT_COLOURS) {
+  if (!isFinite(lufs)) return colours.muted;
 
   const offset = lufs - target;
 
-  if (offset >= -1 && offset <= 1) return colors.ok;    // ±1 LU: on target
-  if (offset < -1) return colors.cyan;                   // Below -1 LU: too quiet
-  if (offset <= 3) return colors.warn;                   // +1 to +3 LU: bit loud
-  return colors.hot;                                      // Above +3 LU: too loud
+  if (offset >= -1 && offset <= 1) return colours.ok;    // ±1 LU: on target
+  if (offset < -1) return colours.cyan;                   // Below -1 LU: too quiet
+  if (offset <= 3) return colours.warn;                   // +1 to +3 LU: bit loud
+  return colours.hot;                                      // Above +3 LU: too loud
 }
 
 /**
- * Get color for radar segment based on LUFS.
+ * Get colour for radar segment based on LUFS.
  *
  * @param {number} lufs - Loudness value
  * @param {number} [target=-23] - Target loudness
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getRadarColor(lufs, target = -23, colors = DEFAULT_COLORS) {
-  if (!isFinite(lufs)) return colors.muted;
+export function getRadarColour(lufs, target = -23, colours = DEFAULT_COLOURS) {
+  if (!isFinite(lufs)) return colours.muted;
 
   const lu = lufs - target;
 
   // EBU R128 defines < -12 LU as "low level"
-  if (lu < -12) return colors.cyan;        // Low level (blue)
-  if (lu < -1) return colors.ok;           // Normal low (green)
-  if (lu <= 1) return colors.ok;           // On target (green)
-  if (lu <= 3) return colors.warn;         // Bit loud (amber)
-  return colors.hot;                         // Too loud (red)
+  if (lu < -12) return colours.cyan;        // Low level (blue)
+  if (lu < -1) return colours.ok;           // Normal low (green)
+  if (lu <= 1) return colours.ok;           // On target (green)
+  if (lu <= 3) return colours.warn;         // Bit loud (amber)
+  return colours.hot;                         // Too loud (red)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TRUE PEAK COLORS
+// TRUE PEAK COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get color for True Peak value.
+ * Get colour for True Peak value.
  *
  * @param {number} dbTP - True Peak in dBTP
  * @param {number} [limit=-1] - TP limit (EBU R128 default: -1 dBTP)
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getTruePeakColor(dbTP, limit = -1, colors = DEFAULT_COLORS) {
-  if (!isFinite(dbTP) || dbTP < -60) return colors.muted;
+export function getTruePeakColour(dbTP, limit = -1, colours = DEFAULT_COLOURS) {
+  if (!isFinite(dbTP) || dbTP < -60) return colours.muted;
 
-  if (dbTP >= limit) return colors.hot;           // Over limit
-  if (dbTP >= limit - 3) return colors.caution;   // Approaching limit
-  if (dbTP >= limit - 6) return colors.warn;      // Warning zone
-  return colors.ok;                                 // Safe
+  if (dbTP >= limit) return colours.hot;           // Over limit
+  if (dbTP >= limit - 3) return colours.caution;   // Approaching limit
+  if (dbTP >= limit - 6) return colours.warn;      // Warning zone
+  return colours.ok;                                 // Safe
 }
 
 /**
- * Get color for True Peak bar segment.
+ * Get colour for True Peak bar segment.
  *
  * @param {number} dbTP - Level of this segment
  * @param {number} [limit=-1] - TP limit
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getTruePeakBarColor(dbTP, limit = -1, colors = DEFAULT_COLORS) {
-  if (dbTP >= 0) return colors.hot;              // Clipping
-  if (dbTP >= limit) return colors.caution;      // Over limit
-  if (dbTP >= -6) return colors.warn;            // -6 to limit
-  if (dbTP >= -18) return colors.ok;             // Normal range
-  return colors.cyan;                             // Low level
+export function getTruePeakBarColour(dbTP, limit = -1, colours = DEFAULT_COLOURS) {
+  if (dbTP >= 0) return colours.hot;              // Clipping
+  if (dbTP >= limit) return colours.caution;      // Over limit
+  if (dbTP >= -6) return colours.warn;            // -6 to limit
+  if (dbTP >= -18) return colours.ok;             // Normal range
+  return colours.cyan;                             // Low level
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PPM COLORS
+// PPM COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get color for PPM bar segment based on Nordic/DIN scale.
+ * Get colour for PPM bar segment based on Nordic/DIN scale.
  *
  * @param {number} ppm - PPM level (0 = reference)
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getPPMBarColor(ppm, colors = DEFAULT_COLORS) {
-  if (ppm >= 6) return colors.hot;       // +6 and above (TEST and above)
-  if (ppm >= 0) return colors.warn;      // 0 to +6 (above reference)
-  if (ppm >= -9) return colors.ok;       // -9 to 0 (normal range)
-  return colors.cyan;                     // Below -9 (low level)
+export function getPPMBarColour(ppm, colours = DEFAULT_COLOURS) {
+  if (ppm >= 6) return colours.hot;       // +6 and above (TEST and above)
+  if (ppm >= 0) return colours.warn;      // 0 to +6 (above reference)
+  if (ppm >= -9) return colours.ok;       // -9 to 0 (normal range)
+  return colours.cyan;                     // Below -9 (low level)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CORRELATION COLORS
+// CORRELATION COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get color for phase correlation value.
+ * Get colour for phase correlation value.
  *
  * @param {number} correlation - Correlation coefficient (-1 to +1)
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getCorrelationColor(correlation, colors = DEFAULT_COLORS) {
-  if (!isFinite(correlation)) return colors.muted;
+export function getCorrelationColour(correlation, colours = DEFAULT_COLOURS) {
+  if (!isFinite(correlation)) return colours.muted;
 
-  if (correlation >= 0.3) return colors.ok;      // Good correlation
-  if (correlation >= -0.3) return colors.warn;   // Moderate (wide stereo)
-  return colors.hot;                               // Anti-phase (problem)
+  if (correlation >= 0.3) return colours.ok;      // Good correlation
+  if (correlation >= -0.3) return colours.warn;   // Moderate (wide stereo)
+  return colours.hot;                               // Anti-phase (problem)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BALANCE COLORS
+// BALANCE COLOURS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get color for L/R balance deviation.
+ * Get colour for L/R balance deviation.
  *
  * @param {number} balanceDb - Balance deviation in dB
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
- * @returns {string} CSS color
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
+ * @returns {string} CSS colour
  */
-export function getBalanceColor(balanceDb, colors = DEFAULT_COLORS) {
+export function getBalanceColour(balanceDb, colours = DEFAULT_COLOURS) {
   const abs = Math.abs(balanceDb);
 
-  if (abs < 1.5) return colors.ok;       // Good balance
-  if (abs < 3) return colors.cyan;       // Slight deviation
-  if (abs < 6) return colors.warn;       // Noticeable
-  return colors.hot;                       // Severe imbalance
+  if (abs < 1.5) return colours.ok;       // Good balance
+  if (abs < 3) return colours.cyan;       // Slight deviation
+  if (abs < 6) return colours.warn;       // Noticeable
+  return colours.hot;                       // Severe imbalance
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,10 +220,10 @@ export function getBalanceColor(balanceDb, colors = DEFAULT_COLORS) {
  * @param {number} width - Gradient width
  * @param {number} height - Gradient height
  * @param {'horizontal'|'vertical'} [direction='horizontal'] - Gradient direction
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
  * @returns {CanvasGradient} Meter gradient
  */
-export function createMeterGradient(ctx, x, y, width, height, direction = 'horizontal', colors = DEFAULT_COLORS) {
+export function createMeterGradient(ctx, x, y, width, height, direction = 'horizontal', colours = DEFAULT_COLOURS) {
   let gradient;
   if (direction === 'horizontal') {
     gradient = ctx.createLinearGradient(x, y, x + width, y);
@@ -232,11 +232,11 @@ export function createMeterGradient(ctx, x, y, width, height, direction = 'horiz
   }
 
   // Standard meter gradient: cyan → green → amber → red
-  gradient.addColorStop(0, colors.cyan);
-  gradient.addColorStop(0.4, colors.ok);
-  gradient.addColorStop(0.7, colors.warn);
-  gradient.addColorStop(0.9, colors.caution);
-  gradient.addColorStop(1, colors.hot);
+  gradient.addColorStop(0, colours.cyan);
+  gradient.addColorStop(0.4, colours.ok);
+  gradient.addColorStop(0.7, colours.warn);
+  gradient.addColorStop(0.9, colours.caution);
+  gradient.addColorStop(1, colours.hot);
 
   return gradient;
 }
@@ -250,10 +250,10 @@ export function createMeterGradient(ctx, x, y, width, height, direction = 'horiz
  * @param {number} width - Gradient width
  * @param {number} height - Gradient height
  * @param {'horizontal'|'vertical'} [direction='horizontal'] - Gradient direction
- * @param {Object} [colors=DEFAULT_COLORS] - Color palette
+ * @param {Object} [colours=DEFAULT_COLOURS] - Colour palette
  * @returns {CanvasGradient} TP meter gradient
  */
-export function createTPGradient(ctx, x, y, width, height, direction = 'horizontal', colors = DEFAULT_COLORS) {
+export function createTPGradient(ctx, x, y, width, height, direction = 'horizontal', colours = DEFAULT_COLOURS) {
   let gradient;
   if (direction === 'horizontal') {
     gradient = ctx.createLinearGradient(x, y, x + width, y);
@@ -262,12 +262,12 @@ export function createTPGradient(ctx, x, y, width, height, direction = 'horizont
   }
 
   // TP gradient: more headroom indication
-  gradient.addColorStop(0, colors.cyan);
-  gradient.addColorStop(0.3, colors.ok);
-  gradient.addColorStop(0.8, colors.ok);
-  gradient.addColorStop(0.9, colors.warn);
-  gradient.addColorStop(0.95, colors.caution);
-  gradient.addColorStop(1, colors.hot);
+  gradient.addColorStop(0, colours.cyan);
+  gradient.addColorStop(0.3, colours.ok);
+  gradient.addColorStop(0.8, colours.ok);
+  gradient.addColorStop(0.9, colours.warn);
+  gradient.addColorStop(0.95, colours.caution);
+  gradient.addColorStop(1, colours.hot);
 
   return gradient;
 }
@@ -277,42 +277,25 @@ export function createTPGradient(ctx, x, y, width, height, direction = 'horizont
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Get colors from CSS variables.
+ * Get colours from CSS variables.
  *
- * @returns {Object<string, string>} Colors from CSS
+ * @returns {Object<string, string>} Colours from CSS
  */
-export function getColorsFromCSS() {
+export function getColoursFromCSS() {
   const style = getComputedStyle(document.documentElement);
   const get = (name) => style.getPropertyValue(`--${name}`).trim();
 
   return {
-    ok: get('ok') || DEFAULT_COLORS.ok,
-    cyan: get('cyan') || DEFAULT_COLORS.cyan,
-    warn: get('warn') || DEFAULT_COLORS.warn,
-    caution: get('caution') || DEFAULT_COLORS.caution,
-    hot: get('hot') || DEFAULT_COLORS.hot,
-    muted: get('muted') || DEFAULT_COLORS.muted,
-    bgPrimary: get('bg-primary') || DEFAULT_COLORS.bgPrimary,
-    bgSecondary: get('bg-secondary') || DEFAULT_COLORS.bgSecondary,
-    textPrimary: get('text-primary') || DEFAULT_COLORS.textPrimary,
-    accent: get('accent') || DEFAULT_COLORS.accent
+    ok: get('ok') || DEFAULT_COLOURS.ok,
+    cyan: get('cyan') || DEFAULT_COLOURS.cyan,
+    warn: get('warn') || DEFAULT_COLOURS.warn,
+    caution: get('caution') || DEFAULT_COLOURS.caution,
+    hot: get('hot') || DEFAULT_COLOURS.hot,
+    muted: get('muted') || DEFAULT_COLOURS.muted,
+    bgPrimary: get('bg-primary') || DEFAULT_COLOURS.bgPrimary,
+    bgSecondary: get('bg-secondary') || DEFAULT_COLOURS.bgSecondary,
+    textPrimary: get('text-primary') || DEFAULT_COLOURS.textPrimary,
+    accent: get('accent') || DEFAULT_COLOURS.accent
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BRITISH ENGLISH ALIASES
-// ─────────────────────────────────────────────────────────────────────────────
-// Aliases using British spelling for TCIS compliance.
-// Internal implementation retains "color" for CSS property compatibility.
-
-export {
-  DEFAULT_COLORS as DEFAULT_COLOURS,
-  getLoudnessColor as getLoudnessColour,
-  getRadarColor as getRadarColour,
-  getTruePeakColor as getTruePeakColour,
-  getTruePeakBarColor as getTruePeakBarColour,
-  getPPMBarColor as getPPMBarColour,
-  getCorrelationColor as getCorrelationColour,
-  getBalanceColor as getBalanceColour,
-  getColorsFromCSS as getColoursFromCSS
-};

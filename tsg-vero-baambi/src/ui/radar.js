@@ -37,7 +37,7 @@ function luToNormalized(lu, minLu, maxLu) {
 }
 
 // TC/RTW colour logic for momentary ring
-function colorForLu(lu) {
+function colourForLu(lu) {
   if (lu >= 3) return '#ff4444';       // Red: +3 to +9 (too loud)
   if (lu >= 0) return '#ffd700';       // Yellow: 0 to +3 (over target)
   if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Green: normal level
@@ -46,7 +46,7 @@ function colorForLu(lu) {
 
 // Radar colour zones: LUFS → LU relative to LOUDNESS_TARGET (EBU R128 compliant)
 // EBU R128 defines < -12 LU as "low level"
-function radarColorForLufs(lufs, target) {
+function radarColourForLufs(lufs, target) {
   const lu = lufs - target;
   if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
   if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
@@ -168,7 +168,7 @@ export class LoudnessRadar {
       const endAngle = startAngle + anglePerSegment;
       const lufs = point.v;
       const r = this.lufsToRadius(lufs, rOuter, rInner);
-      const color = radarColorForLufs(lufs, this.target);
+      const colour = radarColourForLufs(lufs, this.target);
 
       // Fade ut sista 15% av livstiden
       let fadeMultiplier = 1.0;
@@ -182,12 +182,12 @@ export class LoudnessRadar {
       ctx.arc(cx, cy, rInner, startAngle, endAngle);
       ctx.arc(cx, cy, r, endAngle, startAngle, true);
       ctx.closePath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = colour;
       ctx.globalAlpha = opacity;
 
       // Fresh segments (first 10%) get subtle glow
       if (normalizedAge < 0.10) {
-        ctx.shadowColor = color;
+        ctx.shadowColor = colour;
         ctx.shadowBlur = 4 * (1 - normalizedAge / 0.10);
       } else {
         ctx.shadowBlur = 0;
@@ -310,7 +310,7 @@ export class LoudnessRadar {
       const isLit = angleDeg <= litAngleDeg;
 
       // Colour: lit = zone-based, unlit = visible grey
-      const color = isLit ? colorForLu(luAtTick) : '#3a4048';
+      const colour = isLit ? colourForLu(luAtTick) : '#3a4048';
       const alpha = isLit ? 0.95 : 0.55;
       // Tjocklek: lit minor 2.5, major 4; unlit minor 2, major 3.5
       const lineWidth = isLit
@@ -320,7 +320,7 @@ export class LoudnessRadar {
       ctx.beginPath();
       ctx.moveTo(cx + tickInnerR * Math.cos(angleRad), cy + tickInnerR * Math.sin(angleRad));
       ctx.lineTo(cx + tickOuterR * Math.cos(angleRad), cy + tickOuterR * Math.sin(angleRad));
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = colour;
       ctx.globalAlpha = alpha;
       ctx.lineWidth = lineWidth;
       ctx.stroke();
@@ -367,10 +367,10 @@ export class LoudnessRadar {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     if (typeof momentaryLufs === 'number' && isFinite(momentaryLufs)) {
-      const color = radarColorForLufs(momentaryLufs, this.target);
-      ctx.shadowColor = color;
+      const colour = radarColourForLufs(momentaryLufs, this.target);
+      ctx.shadowColor = colour;
       ctx.shadowBlur = 10;
-      ctx.fillStyle = color;
+      ctx.fillStyle = colour;
       ctx.fillText(momentaryLufs.toFixed(1), cx, cy);
     } else {
       ctx.fillStyle = '#6b7280';
