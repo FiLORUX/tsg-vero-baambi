@@ -93,3 +93,18 @@ export {
   formatDBu,
   getPPMScaleMarkings
 } from './ppm.js';
+
+// Stereo correlation and phase analysis
+export {
+  calculateCorrelation,
+  calculateBalance,
+  calculateStereoWidth,
+  StereoMeter,
+  lrToMs,
+  msToLr,
+  getCorrelationZone,
+  getCorrelationColor,
+  formatCorrelation,
+  formatBalance,
+  hasPhaseIssue
+} from './correlation.js';

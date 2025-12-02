@@ -68,25 +68,21 @@ import {
   renderLoop
 } from './app/index.js';
 
-// Metering modules
+// Metering modules (including stereo correlation)
 import {
   LUFSMeter,
   TruePeakMeter,
   PPMMeter,
+  StereoMeter,
   createStereoKWeightingFilters,
   DEFAULT_TARGET_LUFS,
   TP_LIMIT_EBU,
   formatLUFS,
   formatTruePeak,
-  formatPPM
-} from './metering/index.js';
-
-// Stereo analysis
-import {
-  StereoMeter,
+  formatPPM,
   formatCorrelation,
   getCorrelationZone
-} from './stereo/index.js';
+} from './metering/index.js';
 
 // Audio engine
 import {
