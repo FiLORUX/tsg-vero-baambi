@@ -212,7 +212,27 @@ const sidebarToggle = $('sidebarToggle');
 // AUDIO CONTEXT AND ROUTING
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+let ac;
+try {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    throw new Error('Web Audio API not supported in this browser');
+  }
+  ac = new AudioContextClass({ sampleRate: 48000 });
+} catch (e) {
+  console.error('[TSG] Failed to create AudioContext:', e);
+  // Show error in UI
+  const errorEl = document.createElement('div');
+  errorEl.className = 'audio-error';
+  errorEl.innerHTML = `
+    <h2>Audio Not Available</h2>
+    <p>Web Audio API is required but not available: ${e.message}</p>
+    <p>Please use a modern browser (Chrome, Firefox, Safari, Edge).</p>
+  `;
+  errorEl.style.cssText = 'position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg,#1a1a2e);color:var(--hot,#ff6b6b);text-align:center;padding:2rem;z-index:9999;';
+  document.body.appendChild(errorEl);
+  throw e; // Re-throw to halt further initialisation
+}
 
 function updateCtxState() {
   if (ctxState) ctxState.textContent = ac.state === 'running' ? 'Yes' : 'No';

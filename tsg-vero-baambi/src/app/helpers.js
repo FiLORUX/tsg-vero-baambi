@@ -15,82 +15,35 @@
  * HELPER FUNCTIONS MODULE
  * ═══════════════════════════════════════════════════════════════════════════════
  *
- * Pure utility functions with no external dependencies.
- * Used throughout the application for common operations.
+ * Re-exports common utilities from utils/ modules plus app-specific helpers.
+ * This module provides a convenient single import for bootstrap.js.
+ *
+ * CANONICAL SOURCES
+ * ─────────────────
+ *   - Math utilities: ../utils/math.js
+ *   - Format utilities: ../utils/format.js
+ *
+ * APP-SPECIFIC (defined here)
+ * ───────────────────────────
+ *   - getCss: Get CSS custom property value
+ *   - loudnessColour: Get colour for LUFS value relative to target
  *
  * @module app/helpers
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MATH HELPERS
+// RE-EXPORTS FROM UTILS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Convert decibels to linear gain.
- * @param {number} dB - Decibel value
- * @returns {number} Linear gain value
- */
-export const dbToGain = dB => Math.pow(10, dB / 20);
+// Math utilities
+export { dbToGain, clamp } from '../utils/math.js';
 
-/**
- * Clamp a value between min and max.
- * @param {number} v - Value to clamp
- * @param {number} min - Minimum value
- * @param {number} max - Maximum value
- * @returns {number} Clamped value
- */
-export const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+// Format utilities
+export { formatDb, formatDbu, formatTime, formatCorr } from '../utils/format.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FORMAT HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Format dB value with fixed precision.
- * @param {number} value - dB value
- * @param {number} [decimals=1] - Decimal places
- * @param {number} [width=5] - Minimum string width
- * @returns {string} Formatted string
- */
-export function formatDb(value, decimals = 1, width = 5) {
-  if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
-  return value.toFixed(decimals).padStart(width);
-}
-
-/**
- * Format dBu value for PPM display with snap-to-zero.
- * EXACT from audio-meters-grid.html lines 2080-2086
- *
- * @param {number} value - dBu value
- * @param {number} [decimals=1] - Decimal places
- * @param {number} [snapWindow=0.25] - Range around zero to snap to zero
- * @param {number} [width=5] - Minimum string width
- * @returns {string} Formatted string with +/- sign
- */
-export function formatDbu(value, decimals = 1, snapWindow = 0.25, width = 5) {
-  if (!isFinite(value) || value < -99) return '--.-'.padStart(width);
-  const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
-  const sign = snapped >= 0 ? '+' : '';
-  return (sign + snapped.toFixed(decimals)).padStart(width);
-}
-
-/**
- * Format milliseconds as HH:MM:SS.
- * @param {number} ms - Milliseconds
- * @returns {string} Formatted time string
- */
-export function formatTime(ms) {
-  if (!isFinite(ms) || ms < 0) return '--:--:--';
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CSS HELPERS
+// APP-SPECIFIC HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -101,20 +54,6 @@ export function formatTime(ms) {
 export function getCss(prop) {
   return getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
 }
-
-/**
- * Format correlation value for display.
- * @param {number} v - Correlation value (-1 to +1)
- * @returns {string} Formatted string with sign
- */
-export function formatCorr(v) {
-  const sign = v >= 0 ? '+' : '';
-  return sign + v.toFixed(2);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LOUDNESS COLOUR
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Get colour for LUFS value relative to target.
