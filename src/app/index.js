@@ -33,6 +33,8 @@ export {
 export {
   ALIGNMENT_TONE_HZ,
   ALIGNMENT_LEVEL_DBFS,
+  SignalType,
+  RoutingMode,
   SourceController,
   getAudioInputDevices,
   requestMicrophonePermission
