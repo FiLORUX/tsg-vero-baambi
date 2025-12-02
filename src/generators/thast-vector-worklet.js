@@ -128,11 +128,11 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
         y = p0.y + (p1.y - p0.y) * frac;
       }
 
-      // Rotate 45° counter-clockwise for proper goniometer alignment
-      // cos(-45°) = sin(-45°) = √2/2 ≈ 0.7071
+      // Mirror horizontally and rotate 45° CCW for proper goniometer alignment
       const cos45 = 0.7071067811865476;
-      const rx = (x + y) * cos45;
-      const ry = (y - x) * cos45;
+      const mx = -x;  // Mirror on Y-axis
+      const rx = (mx + y) * cos45;
+      const ry = (y - mx) * cos45;
 
       outL[i] = rx * scale;
       outR[i] = ry * scale;

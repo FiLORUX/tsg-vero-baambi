@@ -1361,7 +1361,7 @@ async function createGeneratorSignal(existingMonitorGain = null) {
         numberOfOutputs: 1,
         outputChannelCount: [2],
         processorOptions: {
-          pointsPerSecond: 1400,  // Higher for stable display
+          pointsPerSecond: 4000,  // Fast trace for stable, crisp display
           outputScale: amplitude,
           resampleStep: 0.025,
           blankingLength: 8,
