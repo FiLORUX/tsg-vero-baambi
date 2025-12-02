@@ -61,6 +61,8 @@ import { GlitchDebug } from './glitch-debug.js';
 import { TransitionGuard } from './transition-guard.js';
 // Helper functions - extracted from bootstrap
 import { dbToGain, clamp, formatDb, formatDbu, formatTime, getCss, formatCorr, loudnessColour as loudnessColourBase } from './helpers.js';
+// Layout functions - extracted from bootstrap
+import { initLayout, sizeWrap, layoutXY, layoutLoudness } from './layout.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURABLE PARAMETERS
@@ -331,97 +333,10 @@ function initUIComponents() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LAYOUT FUNCTIONS
+// LAYOUT STATE (shared with layout.js and drag-drop.js)
 // ─────────────────────────────────────────────────────────────────────────────
 
 let isDragLayoutFrozen = false;
-
-function sizeWrap() {
-  const headerH = document.querySelector('header')?.offsetHeight || 56;
-  if (wrap) wrap.style.height = `calc(100dvh - ${headerH}px)`;
-}
-
-function layoutXY() {
-  if (isDragLayoutFrozen || !xyCard) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const stereoContainer = xyCard.querySelector('.stereoContainer');
-  if (!stereoContainer) return;
-
-  const availH = stereoContainer.clientHeight;
-  const availW = stereoContainer.clientWidth;
-  const gonioSize = Math.min(availH * 0.85, availW * 0.55);
-
-  // Goniometer
-  const gonioSquare = xyCard.querySelector('.gonioSquare');
-  if (gonioSquare && xy) {
-    gonioSquare.style.width = gonioSize + 'px';
-    gonioSquare.style.height = gonioSize + 'px';
-    const w = Math.floor(gonioSize * dpr);
-    if (xy.width !== w || xy.height !== w) {
-      xy.width = w;
-      xy.height = w;
-    }
-  }
-
-  // Left column width
-  const leftCol = xyCard.querySelector('.stereoLeftCol');
-  if (leftCol) {
-    leftCol.style.width = gonioSize + 'px';
-  }
-
-  // Phase correlation canvas
-  const corrWrapEl = xyCard.querySelector('.corrWrap');
-  if (corrWrapEl && corr) {
-    const rect = corrWrapEl.getBoundingClientRect();
-    const cw = Math.floor(rect.width * dpr);
-    const ch = Math.floor(rect.height * dpr);
-    if (corr.width !== cw || corr.height !== ch) {
-      corr.width = Math.max(10, cw);
-      corr.height = Math.max(10, ch);
-    }
-  }
-
-  // Balance meter
-  const monoDevWrapEl = xyCard.querySelector('.monoDevWrap');
-  if (monoDevWrapEl && monoDev) {
-    const rect = monoDevWrapEl.getBoundingClientRect();
-    const mdw = Math.floor(rect.width * dpr);
-    const mdh = Math.floor(rect.height * dpr);
-    if (monoDev.width !== mdw || monoDev.height !== mdh) {
-      monoDev.width = Math.max(10, mdw);
-      monoDev.height = Math.max(10, mdh);
-    }
-  }
-
-  // Trigger resize on goniometer
-  if (goniometer) goniometer.resize();
-  // Correlation meter handles its own sizing in draw()
-}
-
-function layoutLoudness() {
-  if (isDragLayoutFrozen || !loudnessModule || !radarWrap || !loudnessRadar) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const r128MinHeight = 180;
-  const gap = 12;
-
-  const availH = loudnessModule.clientHeight;
-  const availW = loudnessModule.clientWidth;
-
-  const maxRadarH = availH - r128MinHeight - gap;
-  const radarSize = Math.max(100, Math.min(maxRadarH, availW));
-
-  radarWrap.style.width = radarSize + 'px';
-  radarWrap.style.height = radarSize + 'px';
-
-  const canvasSize = Math.floor(radarSize * dpr);
-  if (loudnessRadar.width !== canvasSize || loudnessRadar.height !== canvasSize) {
-    loudnessRadar.width = canvasSize;
-    loudnessRadar.height = canvasSize;
-  }
-  // Radar handles its own sizing in render() via offsetWidth/Height
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS (wrapper for loudnessColour with LOUDNESS_TARGET binding)
@@ -1417,12 +1332,28 @@ function setupObservers() {
 function init() {
   console.log('[Bootstrap] Initializing VERO-BAAMBI modular version');
 
+  // Initialize UI components first (creates goniometer etc.)
+  initUIComponents();
+
+  // Initialize layout with dependencies
+  initLayout({
+    dom: {
+      wrap,
+      xyCard,
+      xy,
+      corr,
+      monoDev,
+      loudnessModule,
+      radarWrap,
+      loudnessRadar
+    },
+    uiComponents: { goniometer },
+    getLayoutFrozen: () => isDragLayoutFrozen
+  });
+
   // Size wrap
   sizeWrap();
   window.addEventListener('resize', sizeWrap);
-
-  // Initialize UI components
-  initUIComponents();
 
   // Bind events
   bindEvents();
