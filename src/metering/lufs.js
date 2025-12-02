@@ -96,6 +96,25 @@ export const ATSC_TARGET_LKFS = -24;
  */
 export const MIN_LRA_BLOCKS = 15;
 
+/**
+ * ITU-R BS.1770-4 calibration constant.
+ *
+ * This offset compensates for the K-weighting filter's gain at the reference
+ * frequency (997 Hz per IEC 61606). Without this constant, a 0 dBFS sine wave
+ * at 997 Hz would not yield the expected −3.01 LUFS reading.
+ *
+ * From ITU-R BS.1770-4 equation (2):
+ *   L_K = −0.691 + 10 × log₁₀(Σ Gᵢ × zᵢ)  LKFS
+ *
+ * Where:
+ *   - zᵢ = mean square of K-weighted channel i
+ *   - Gᵢ = channel weight (1.0 for L/R/C, 1.41 for Ls/Rs)
+ *
+ * @type {number}
+ * @see ITU-R BS.1770-4 Section 4, Equation (2)
+ */
+export const BS1770_CALIBRATION_OFFSET = -0.691;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LUFS METER CLASS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -333,25 +352,43 @@ export class LUFSMeter {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Convert mean square energy to LUFS.
+ * Convert mean square energy to LUFS per ITU-R BS.1770-4.
  *
- * @param {number} energy - Mean square energy
- * @returns {number} Loudness in LUFS
+ * Applies the BS.1770-4 loudness formula:
+ *   L_K = −0.691 + 10 × log₁₀(energy)
+ *
+ * The −0.691 dB calibration constant ensures that a 0 dBFS sine wave
+ * at 997 Hz yields exactly −3.01 LUFS when measured on a single channel,
+ * matching the RMS-to-peak relationship (20 × log₁₀(1/√2) ≈ −3.01 dB).
+ *
+ * @param {number} energy - Mean square energy from K-weighted signal
+ * @returns {number} Loudness in LUFS (LKFS)
+ *
+ * @example
+ * // 0 dBFS sine wave has mean square energy of 0.5 (RMS² = 0.707² = 0.5)
+ * // energyToLUFS(0.5) = -0.691 + 10 * log10(0.5) = -0.691 + (-3.01) = -3.70 LUFS
+ *
+ * @see ITU-R BS.1770-4 Section 4, Equation (2)
  */
 export function energyToLUFS(energy) {
-  // 10 * log10(energy) gives LUFS for K-weighted signal
-  // Add small epsilon to avoid log(0)
-  return 10 * Math.log10(energy + 1e-12);
+  // BS.1770-4: L_K = −0.691 + 10 × log₁₀(Σ Gᵢ × zᵢ)
+  // Add small epsilon to avoid log(0) for silence
+  return BS1770_CALIBRATION_OFFSET + 10 * Math.log10(energy + 1e-12);
 }
 
 /**
  * Convert LUFS to mean square energy.
  *
+ * Inverse of energyToLUFS(), accounting for the BS.1770-4 calibration offset.
+ *
  * @param {number} lufs - Loudness in LUFS
  * @returns {number} Mean square energy
+ *
+ * @see ITU-R BS.1770-4 Section 4, Equation (2)
  */
 export function lufsToEnergy(lufs) {
-  return Math.pow(10, lufs / 10);
+  // Inverse: energy = 10^((lufs - offset) / 10)
+  return Math.pow(10, (lufs - BS1770_CALIBRATION_OFFSET) / 10);
 }
 
 /**
