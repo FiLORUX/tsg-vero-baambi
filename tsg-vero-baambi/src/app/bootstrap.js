@@ -866,6 +866,8 @@ let genFilterNodes = [];  // Array of filter nodes
 let sweepInterval = null;
 let glitsInterval = null;
 let glitsPhase = 0;
+let vectorWorkletNode = null;  // AudioWorklet node for vector text generator
+let vectorWorkletLoaded = false;  // Track if worklet module is loaded
 
 // dB to linear amplitude
 const dbToLinear = db => Math.pow(10, db / 20);
@@ -1039,6 +1041,15 @@ function cleanupGeneratorNodes() {
   [genGain, leftGain, rightGain, merger, genMonGain, genSplit].forEach(n => {
     try { n && n.disconnect(); } catch {}
   });
+
+  // Clean up vector worklet node
+  if (vectorWorkletNode) {
+    try {
+      vectorWorkletNode.port.postMessage({ type: 'stop' });
+      vectorWorkletNode.disconnect();
+    } catch {}
+    vectorWorkletNode = null;
+  }
 
   genSourceNodes = [];
   genFilterNodes = [];
@@ -1332,6 +1343,44 @@ async function createGeneratorSignal(existingMonitorGain = null) {
 
       genSourceNodes.push(oscL, oscR);
       genFilterNodes.push(gainL, gainR);
+    }
+
+  } else if (config.type === 'vector-text') {
+    // THÅST Vector Text Generator - uses AudioWorklet for efficient processing
+    // Outputs X/Y coordinates as L/R channels for goniometer display
+    try {
+      // Load worklet module if not already loaded
+      if (!vectorWorkletLoaded) {
+        await ac.audioWorklet.addModule('./src/generators/thast-vector-worklet.js');
+        vectorWorkletLoaded = true;
+      }
+
+      // Create worklet node with configuration
+      vectorWorkletNode = new AudioWorkletNode(ac, 'thast-vector-processor', {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        processorOptions: {
+          pointsPerSecond: 1400,  // Higher for stable display
+          outputScale: amplitude,
+          resampleStep: 0.025,
+          blankingLength: 8,
+          normalisationMargin: 0.85
+        }
+      });
+
+      // Create splitter to route stereo to L/R gains
+      const workletSplit = ac.createChannelSplitter(2);
+      vectorWorkletNode.connect(workletSplit);
+      workletSplit.connect(leftGain, 0);
+      workletSplit.connect(rightGain, 1);
+
+      genFilterNodes.push(workletSplit);
+      // Note: vectorWorkletNode is tracked separately for cleanup
+
+    } catch (err) {
+      console.error('[TSG] Vector text generator failed to load:', err);
+      // Fallback: just output silence
     }
   }
 
