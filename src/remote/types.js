@@ -243,34 +243,39 @@ export function generateProbeId() {
  * @returns {{valid: boolean, errors: string[]}}
  */
 export function validateMetricsPacket(packet) {
+  /** @type {string[]} */
   const errors = [];
 
   if (!packet || typeof packet !== 'object') {
     return { valid: false, errors: ['Packet must be an object'] };
   }
 
+  // Cast to partial MetricsPacket for property access
+  /** @type {Partial<MetricsPacket>} */
+  const p = /** @type {Partial<MetricsPacket>} */ (packet);
+
   // Check schema version
-  if (packet.schemaVersion !== METRICS_SCHEMA_VERSION) {
-    errors.push(`Schema version mismatch: expected ${METRICS_SCHEMA_VERSION}, got ${packet.schemaVersion}`);
+  if (p.schemaVersion !== METRICS_SCHEMA_VERSION) {
+    errors.push(`Schema version mismatch: expected ${METRICS_SCHEMA_VERSION}, got ${p.schemaVersion}`);
   }
 
   // Check probe identity
-  if (!packet.probe?.id) {
+  if (!p.probe?.id) {
     errors.push('Missing probe.id');
   }
 
   // Check timestamp
-  if (typeof packet.timestamp?.wallClock !== 'number') {
+  if (typeof p.timestamp?.wallClock !== 'number') {
     errors.push('Missing or invalid timestamp.wallClock');
   }
 
   // Check LUFS metrics
-  if (!packet.lufs || typeof packet.lufs.momentary !== 'number') {
+  if (!p.lufs || typeof p.lufs.momentary !== 'number') {
     errors.push('Missing or invalid lufs.momentary');
   }
 
   // Check True Peak
-  if (!packet.truePeak || typeof packet.truePeak.max !== 'number') {
+  if (!p.truePeak || typeof p.truePeak.max !== 'number') {
     errors.push('Missing or invalid truePeak.max');
   }
 

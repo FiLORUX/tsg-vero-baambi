@@ -324,10 +324,17 @@ export function getCorrelationZone(correlation) {
 }
 
 /**
+ * @typedef {Object} CorrelationColorMap
+ * @property {string} good - Colour for good correlation
+ * @property {string} caution - Colour for caution zone
+ * @property {string} problem - Colour for problem zone
+ */
+
+/**
  * Get CSS colour for correlation value.
  *
  * @param {number} correlation - Correlation value (−1 to +1)
- * @param {Object} [colors] - Colour map
+ * @param {CorrelationColorMap} [colors] - Colour map
  * @returns {string} CSS colour
  */
 export function getCorrelationColor(correlation, colors = {
