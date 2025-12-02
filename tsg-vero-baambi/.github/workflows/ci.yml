@@ -43,6 +43,31 @@ jobs:
           find src -name "*.js" -exec node --check {} \;
           echo "All files passed syntax check"
 
+  type-check:
+    name: Type Check (JSDoc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TypeScript
+        run: npm install typescript@latest --no-save
+
+      - name: Run type check
+        run: |
+          echo "Type-checking JavaScript with JSDoc annotations..."
+          npx tsc --noEmit --allowJs --checkJs --strict \
+            --target ES2022 --module ESNext --moduleResolution bundler \
+            --lib ES2022,DOM,DOM.Iterable \
+            --skipLibCheck \
+            src/metering/*.js src/remote/*.js
+          echo "Type check passed"
+
   test:
     name: Test
     runs-on: ubuntu-latest
