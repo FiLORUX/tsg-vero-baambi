@@ -1,6 +1,6 @@
 # VERO-BAAMBI
 
-**Broadcast-style audio metering for production environments**
+**Broadcast audio metering for production environments**
 
 > A local-first, dependency-free implementation of EBU R128 loudness metering,
 > True Peak detection, and Nordic PPM — designed for verification and monitoring
@@ -85,94 +85,70 @@ python3 -m http.server 8080
 
 ---
 
-## Directory Structure
-
-```
-tsg-vero-baambi/
-├── index.html                  # ESM entry point (modular version)
-├── audio-meters-grid.html      # Legacy monolithic version (fallback)
-├── external-meter-processor.js # AudioWorklet for external sources
-├── README.md                   # This file
-├── smoke-checklist.md          # Manual testing checklist
-│
-└── src/
-    ├── main.js                 # Application entry, initialisation
-    │
-    ├── app/                    # Application integration layer
-    │   ├── index.js            # Module exports
-    │   ├── bootstrap.js        # Main initialisation & DOM wiring
-    │   ├── state.js            # Reactive state management (localStorage-backed)
-    │   ├── sources.js          # Unified input source controller
-    │   ├── render-loop.js      # 60 Hz visual rendering (RAF-based)
-    │   ├── measure-loop.js     # 20 Hz measurement updates
-    │   ├── meter-state.js      # Shared meter state between loops
-    │   ├── meter-switcher.js   # Physics-based 3D carousel (TP/RMS/PPM)
-    │   ├── layout.js           # Responsive canvas sizing
-    │   ├── helpers.js          # Display formatting utilities
-    │   ├── drag-drop.js        # Drag-and-drop file handling
-    │   ├── transition-guard.js # EBU pulse visual blanking
-    │   ├── glitch-debug.js     # Buffer discontinuity detection
-    │   ├── renderer.js         # Render loop orchestration
-    │   └── ui.js               # UI event bindings
-    │
-    ├── config/
-    │   └── storage.js          # LocalStorage versioning
-    │
-    ├── remote/
-    │   └── types.js            # Metrics schema for probe/client
-    │
-    ├── metering/               # Loudness measurement algorithms
-    │   ├── index.js            # Module exports
-    │   ├── lufs.js             # EBU R128 LUFS meter
-    │   ├── ppm.js              # IEC 60268-10 Type I PPM (Nordic)
-    │   ├── true-peak.js        # ITU-R BS.1770-4 intersample peak
-    │   └── correlation.js      # Phase correlation & stereo analysis
-    │
-    ├── generators/             # Signal generators for alignment
-    │   ├── index.js            # Module exports
-    │   ├── oscillators.js      # Sine, sweep, GLITS (EBU Tech 3304)
-    │   ├── noise.js            # Pink, white, brown noise
-    │   ├── lissajous.js        # Stereo test patterns
-    │   ├── presets.js          # Generator preset configurations
-    │   ├── thast-vector-text.js      # Vector text for goniometer
-    │   └── thast-vector-worklet.js   # AudioWorklet for vector text
-    │
-    ├── audio/                  # Web Audio integration
-    │   ├── index.js            # Module exports
-    │   └── engine.js           # AudioContext management
-    │
-    ├── ui/                     # Display components
-    │   ├── index.js            # Module exports
-    │   ├── goniometer.js       # Stereo vectorscope (Lissajous)
-    │   ├── correlation-meter.js # Phase correlation display
-    │   ├── radar.js            # Loudness history radar
-    │   ├── spectrum.js         # 1/3-octave spectrum analyser
-    │   ├── bar-meter.js        # LED bar renderers (TP, RMS, PPM)
-    │   ├── width-meter.js      # Stereo width indicator
-    │   ├── rotation-meter.js   # Image rotation display
-    │   ├── balance-meter.js    # L/R balance indicator
-    │   ├── ms-meter.js         # Mid/Side level display
-    │   ├── stereo-analysis.js  # Stereo analysis engine
-    │   └── colours.js          # Meter colour schemes
-    │
-    └── utils/                  # Shared utilities
-        ├── index.js            # Module exports
-        ├── format.js           # Display formatting (fixed-width)
-        └── math.js             # Mathematical utilities (dB, clamp)
-```
-
----
-
 ## Standards Implementation
 
-### Audio Metering
+### Loudness Metering (EBU R128 / ITU-R BS.1770-4)
 
-| Standard | Description | Implementation |
-|----------|-------------|----------------|
-| EBU R128 | Loudness normalisation | LUFS meters (integrated, short-term, momentary) |
-| ITU-R BS.1770-4 | Loudness measurement algorithm | K-weighting filter, gated measurement |
-| EBU Tech 3341 | Loudness metering guidance | True Peak, LRA display |
-| IEC 60268-10 Type I | Nordic PPM ballistics | Targets 5ms attack, 20dB/1.7s decay |
+| Parameter | Standard | Implementation |
+|-----------|----------|----------------|
+| K-weighting pre-filter | ITU-R BS.1770-4 §2.1 | Two-stage biquad: high-pass (fc=38 Hz, Q=0.5) + high-shelf (+4 dB @ 4 kHz) |
+| Momentary loudness (M) | EBU Tech 3341 | 400 ms sliding window, gated |
+| Short-term loudness (S) | EBU Tech 3341 | 3 s sliding window, gated |
+| Integrated loudness (I) | ITU-R BS.1770-4 §4 | Programme-length, dual-gated |
+| Absolute gate | ITU-R BS.1770-4 §4.1 | −70 LUFS |
+| Relative gate | ITU-R BS.1770-4 §4.2 | −10 LU below ungated integrated |
+| Loudness Range (LRA) | EBU Tech 3342 | 95th − 10th percentile of gated short-term |
+| Target loudness | EBU R128 | −23 LUFS (±1 LU tolerance) |
+
+### True Peak Detection (ITU-R BS.1770-4 Annex 2)
+
+| Parameter | Standard | Implementation |
+|-----------|----------|----------------|
+| Oversampling | ITU-R BS.1770-4 Annex 2 | 4× using Hermite interpolation |
+| Maximum permitted level | EBU R128 | −1 dBTP |
+| Streaming headroom | Industry practice | −2 dBTP (lossy codec margin) |
+
+**Implementation note:** ITU-R BS.1770-4 Annex 2 specifies polyphase FIR reconstruction for laboratory-grade measurement. This implementation uses 4-point Hermite interpolation, which:
+- Provides sufficient accuracy (±0.5 dB) for broadcast monitoring
+- Requires ~8× less computation than polyphase FIR
+- May miss edge-case intersample peaks in near-Nyquist content
+
+Polyphase FIR coefficients and implementation guidance are documented in `true-peak.js` for future laboratory-grade implementation if required.
+
+### PPM Metering (IEC 60268-10 Type I / Nordic)
+
+| Parameter | Standard | Implementation |
+|-----------|----------|----------------|
+| Integration time | IEC 60268-10 Type I | 5 ms (quasi-peak) |
+| Rise time to −1 dB | IEC 60268-10 Type I | 5 ms ± 0.5 ms |
+| Fall time | IEC 60268-10 Type I | 20 dB in 1.7 s (≈11.76 dB/s linear) |
+| Scale range | Nordic convention | −36 to +9 PPM (45 dB) |
+| Peak hold | RTW/DK convention | 3 s |
+| Detector model | IEC 60268-10 | RC circuit (default) or window-max |
+
+**Quasi-peak detector:** Two modes are available:
+- **RC detector** (default): Models analogue rectifier + RC network per IEC 60268-10. Attack time constant τ ≈ 1.7 ms (−1 dB in 5 ms), decay τ ≈ 740 ms. Provides smooth, "analogue" response with correct tone-burst behaviour.
+- **Window mode**: Simplified maximum-within-window approach. Faster computation but may over-read fast transients by ~1 dB.
+
+### Reference Levels (EBU R68 / Alignment)
+
+| Context | Analogue Reference | Digital Reference | PPM Reading |
+|---------|-------------------|-------------------|-------------|
+| EBU alignment tone | 0 dBu | −18 dBFS | 0 PPM |
+| Nordic TEST level | +6 dBu | −12 dBFS | +6 PPM (TEST) |
+| Permitted Maximum Level (PML) | +9 dBu | −9 dBFS | +9 PPM |
+| SMPTE alignment (USA) | +4 dBu | −20 dBFS | — |
+
+**Conversion formula:** PPM = dBFS + 18 (per EBU R68 alignment where 0 dBu = −18 dBFS)
+
+### Stereo Analysis
+
+| Measurement | Standard/Method | Range |
+|-------------|-----------------|-------|
+| Phase correlation | Pearson correlation coefficient | −1 (antiphase) to +1 (mono) |
+| L/R balance | RMS level difference | −1 (full left) to +1 (full right) |
+| Stereo width | M/S energy ratio (Side/Mid) | 0 (mono) to >1 (wide) |
+| Mono compatibility threshold | Broadcast practice | Correlation < −0.3 = warning |
 
 ### Signal Generators
 
@@ -180,50 +156,56 @@ tsg-vero-baambi/
 |------|----------|---------|
 | GLITS | EBU Tech 3304 | Line-up and identification |
 | Stereo identification | EBU Tech 3304 | L/R channel verification (pulsed) |
-| 1/3-octave sweep | — | Frequency response verification |
+| Reference tones | — | 1 kHz @ −18 dBFS (EBU), −20 dBFS (SMPTE) |
 | Pink/white/brown noise | — | Acoustic measurement, system noise floor |
-| Lissajous patterns | — | Vectorscope calibration |
-
-### Reference Levels
-
-| Context | Reference | Digital Equivalent |
-|---------|-----------|-------------------|
-| EBU R68 (Europe) | 0 dBu | −18 dBFS |
-| SMPTE RP 155 (USA) | +4 dBu | −20 dBFS |
-| Nordic PPM | TEST (+6 dBu) | −12 dBFS |
+| Lissajous patterns | — | Vectorscope/goniometer calibration |
 
 ---
 
 ## Accuracy, Methods & Limitations
 
-### What This Project Does
+### K-Weighting Filter
 
-VERO-BAAMBI implements broadcast-standard metering algorithms in pure JavaScript/Web Audio:
+The K-weighting implementation uses Web Audio API `BiquadFilterNode` for real-time efficiency:
 
-- **K-weighting**: Two-stage biquad filter chain (high-pass at 38 Hz, high-shelf +4 dB at 4 kHz) approximating ITU-R BS.1770-4 pre-filter response. Exact BS.1770 coefficients for 48 kHz are included for reference.
+- **Stage 1:** High-pass filter (fc=38 Hz, Q=0.5)
+- **Stage 2:** High-shelf filter (+4 dB @ 4 kHz)
 
-- **LUFS measurement**: Gated loudness per BS.1770-4 with 400 ms momentary, 3 s short-term, and programme-integrated windows. Absolute gate at −70 LUFS, relative gate at −10 LU.
+Exact ITU-R BS.1770-4 biquad coefficients for 48 kHz are included in `k-weighting.js` for reference and offline processing. The Web Audio approximation may deviate by ≤0.1 dB from the specification at extreme frequencies.
 
-- **True Peak**: 4× oversampling using Hermite interpolation to estimate intersample peaks. This is a practical approximation — not a full polyphase FIR reconstruction, but sufficient for detecting most intersample overs in typical programme material.
+**Sample rate consideration:** Coefficients are calculated for 48 kHz. At 44.1 kHz, expect minor deviation (typically <0.2 dB) in high-frequency response.
 
-- **PPM ballistics**: Targets IEC 60268-10 Type I (Nordic) with 5 ms integration time and 20 dB/1.7 s linear decay. Implemented in JavaScript requestAnimationFrame loop, so timing precision depends on browser scheduling.
+### PPM Ballistics
 
-### Validated Against
+PPM timing is implemented using `requestAnimationFrame` scheduling, not hardware timers. Practical implications:
 
-- 1 kHz sine wave reference signals at known levels
-- EBU R128 test sequences (manual comparison)
-- Cross-checked against hardware meters (RTW, TC Electronic) in production environments
+- Attack time (5 ms) depends on audio buffer size and frame timing
+- Decay rate (11.76 dB/s) is calculated per-frame using elapsed time
+- Browser throttling (background tabs) will affect ballistics accuracy
+
+For critical monitoring, use dedicated hardware meters.
+
+### True Peak Interpolation
+
+The 4× oversampling uses Hermite interpolation between sample points:
+
+```
+Interpolation points: t = 0.25, 0.50, 0.75 between each sample pair
+```
+
+This catches most intersample peaks but may miss edge cases that a full polyphase FIR would detect. Typical deviation from "true" True Peak: <0.5 dB for normal programme material.
 
 ### What This Project Does NOT Provide
 
-- **Formal certification**: No third-party laboratory has certified this implementation against ITU-R or EBU specifications.
-- **Guaranteed timing precision**: Web Audio and requestAnimationFrame introduce scheduling variability. Attack/decay times are targeted, not guaranteed to laboratory precision.
-- **Multi-channel support**: Currently stereo only. BS.1770 5.1/7.1 channel weightings are not implemented.
-- **Sample rates beyond 48 kHz**: K-weighting coefficients are optimised for 48 kHz. Other rates use browser BiquadFilter approximations.
+- **Formal certification:** No third-party laboratory has certified this implementation
+- **Guaranteed timing precision:** Web browser scheduling is not deterministic
+- **Multi-channel support:** Stereo only; BS.1770 5.1/7.1 channel weights not implemented
+- **Regulatory compliance:** Not suitable as sole evidence for delivery QC
 
 ### Practical Positioning
 
 This tool is designed for:
+
 - Quick verification during production
 - Confidence monitoring alongside dedicated hardware
 - Educational understanding of broadcast metering concepts
@@ -241,13 +223,64 @@ It is **not** intended to replace certified measurement equipment for delivery Q
 node tests/metering-verification.js
 ```
 
-Runs synthetic signal tests against metering modules. All tests should pass before release.
+Runs 35 synthetic signal tests against metering modules covering:
+
+- dB/gain conversions
+- RMS calculation (sine wave at 0.707× peak)
+- Pearson correlation (mono, antiphase, uncorrelated)
+- Hermite interpolation accuracy
+- PPM ballistics (5 ms attack, 20 dB/1.7 s decay)
+- True Peak intersample detection
+- LUFS integration windows (400 ms, 3 s)
+- Stereo width and balance calculations
 
 ### Manual Verification
 
 Open `tools/verify-audio.html` in a browser for interactive verification with test tones.
 
 See `docs/verification.md` for detailed test procedures using reference signals.
+
+---
+
+## Directory Structure
+
+```
+tsg-vero-baambi/
+├── index.html                  # ESM entry point (modular version)
+├── audio-meters-grid.html      # Legacy monolithic version (fallback)
+├── external-meter-processor.js # AudioWorklet for external sources
+├── README.md                   # This file
+├── smoke-checklist.md          # Manual testing checklist
+│
+└── src/
+    ├── main.js                 # Application entry, initialisation
+    │
+    ├── metering/               # Measurement algorithms
+    │   ├── lufs.js             # EBU R128 / ITU-R BS.1770-4 loudness
+    │   ├── ppm.js              # IEC 60268-10 Type I PPM (Nordic)
+    │   ├── true-peak.js        # ITU-R BS.1770-4 Annex 2 intersample peak
+    │   ├── k-weighting.js      # ITU-R BS.1770-4 pre-filter
+    │   └── correlation.js      # Phase correlation & stereo analysis
+    │
+    ├── generators/             # Signal generators
+    │   ├── oscillators.js      # Sine, sweep, GLITS (EBU Tech 3304)
+    │   ├── noise.js            # Pink, white, brown noise
+    │   └── lissajous.js        # Stereo test patterns
+    │
+    ├── ui/                     # Display components
+    │   ├── goniometer.js       # Stereo vectorscope (Lissajous)
+    │   ├── correlation-meter.js # Phase correlation display
+    │   ├── bar-meter.js        # LED bar renderers (TP, RMS, PPM)
+    │   └── spectrum.js         # 1/3-octave spectrum analyser
+    │
+    ├── app/                    # Application integration
+    │   ├── bootstrap.js        # Main initialisation & DOM wiring
+    │   ├── render-loop.js      # 60 Hz visual rendering (RAF-based)
+    │   └── measure-loop.js     # 20 Hz measurement updates
+    │
+    └── remote/                 # Remote metering (future)
+        └── types.js            # Metrics schema for probe/client
+```
 
 ---
 
@@ -268,71 +301,28 @@ See `docs/verification.md` for detailed test procedures using reference signals.
 
 The application runs directly from source files. No transpilation, bundling, or build process needed.
 
+### CI Pipeline
+
+GitHub Actions runs on every push:
+
+- **ESLint:** Code style enforcement
+- **Syntax check:** `node --check` on all source files
+- **Type check:** `tsc --noEmit --checkJs --strict` on metering modules
+- **Tests:** 35 metering algorithm verification tests
+
 ### Optional Dev Tools
 
-For enhanced development experience, you can optionally use:
+For enhanced development experience:
 
-- **Live Server**: Auto-reload on file changes
-- **TypeScript**: JSDoc type checking (no compilation)
-- **ESLint**: Code style enforcement
-
-```bash
-# Example: Using VSCode Live Server extension
-# Just right-click index.html and "Open with Live Server"
-```
-
-### Testing
-
-See `smoke-checklist.md` for manual testing procedures.
-
-```bash
-# Serve files locally
-python3 -m http.server 8080
-
-# Run through the smoke checklist at http://localhost:8080/
-```
-
----
-
-## Architecture Notes
-
-### AudioWorklet Path Resolution
-
-AudioWorklet processors must be loaded via URL. The modular version uses `import.meta.url` for reliable path resolution:
-
-```javascript
-// Correct: Works regardless of deployment path
-const WORKLET_PATH = new URL('../external-meter-processor.js', import.meta.url).href;
-
-// Incorrect: Breaks if app is in subdirectory
-const WORKLET_PATH = '/external-meter-processor.js';
-```
-
-### LocalStorage Versioning
-
-Settings are stored with a version number to enable migration:
-
-```javascript
-// config/storage.js
-export const STORAGE_VERSION = 1;
-```
-
-When the version changes, the migration logic can transform old settings to the new format.
-
-### Feature Flags (Remote Features)
-
-Remote features are controlled by explicit flags that default to disabled:
-
-```javascript
-// Remote features are never enabled by default
-const REMOTE_ENABLED = localStorage.getItem('vero_remote_enabled') === 'true';
-```
+- **Live Server:** Auto-reload on file changes
+- **TypeScript:** JSDoc type checking without compilation
+- **ESLint:** Code style enforcement
 
 ---
 
 ## Licence
 
-MIT Licence. See `LICENCE` file.
+MIT Licence. Copyright 2025 David Thåst.
 
 Part of TSG Suite.
 Maintained by David Thåst · https://github.com/FiLORUX
