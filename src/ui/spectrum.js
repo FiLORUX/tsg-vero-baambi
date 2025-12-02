@@ -74,6 +74,37 @@ export class SpectrumAnalyzer {
     }
 
     this.lastTime = 0;
+
+    // Pre-computed bin-to-band mapping (computed once when sample rate changes)
+    this._bandBinMapping = null;
+    this._lastSampleRate = 0;
+    this._lastFftSize = 0;
+  }
+
+  /**
+   * Pre-compute bin ranges for each 1/3-octave band.
+   * Called once when sample rate or FFT size changes.
+   * @param {number} sampleRate - Audio sample rate
+   * @param {number} fftSize - FFT size
+   * @param {number} numBins - Number of FFT bins
+   */
+  _computeBinMapping(sampleRate, fftSize, numBins) {
+    const binHz = sampleRate / fftSize;
+    this._bandBinMapping = new Array(SPECTRUM_NUM_BANDS);
+
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const centerFreq = SPECTRUM_CENTER_FREQS[b];
+      const lowFreq = centerFreq / THIRD_OCT_FACTOR;
+      const highFreq = centerFreq * THIRD_OCT_FACTOR;
+
+      this._bandBinMapping[b] = {
+        lowBin: Math.max(1, Math.floor(lowFreq / binHz)),
+        highBin: Math.min(numBins - 1, Math.ceil(highFreq / binHz))
+      };
+    }
+
+    this._lastSampleRate = sampleRate;
+    this._lastFftSize = fftSize;
   }
 
   draw(containerEl, sampleRate) {
@@ -114,17 +145,16 @@ export class SpectrumAnalyzer {
 
     const sr = sampleRate || 48000;
     const fftSize = this.analyserL.fftSize;
-    const binHz = sr / fftSize;
     const numBins = this.spectrumFreqBufL.length;
 
-    // Calculate band values using 1/3-octave boundaries
-    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
-      const centerFreq = SPECTRUM_CENTER_FREQS[b];
-      const lowFreq = centerFreq / THIRD_OCT_FACTOR;
-      const highFreq = centerFreq * THIRD_OCT_FACTOR;
+    // Re-compute bin mapping only when sample rate or FFT size changes
+    if (sr !== this._lastSampleRate || fftSize !== this._lastFftSize || !this._bandBinMapping) {
+      this._computeBinMapping(sr, fftSize, numBins);
+    }
 
-      const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
-      const highBin = Math.min(numBins - 1, Math.ceil(highFreq / binHz));
+    // Calculate band values using pre-computed 1/3-octave bin ranges
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const { lowBin, highBin } = this._bandBinMapping[b];
 
       // Sum linear power (not dB - logarithmic values cannot be averaged)
       let powerSum = 0, count = 0;
