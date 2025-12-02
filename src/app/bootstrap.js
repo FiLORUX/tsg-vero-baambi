@@ -30,7 +30,11 @@ import { LoudnessRadar } from '../ui/radar.js';
 import { LUFSMeter, formatLUFS } from '../metering/lufs.js';
 import { TruePeakMeter, formatTruePeak } from '../metering/true-peak.js';
 import { PPMMeter, formatPPM } from '../metering/ppm.js';
-import { StereoMeter, formatCorrelation } from '../stereo/correlation.js';
+import { StereoMeter, formatCorrelation } from '../metering/correlation.js';
+// Centralised state management
+import { appState, InputMode } from './state.js';
+// Source controller (prepared for phased integration)
+import { SourceController, SignalType, RoutingMode } from './sources.js';
 
 // Helper to get CSS custom property value (for correlation meter colors)
 function getCss(prop) {
@@ -51,18 +55,17 @@ import { MSMeter } from '../ui/ms-meter.js';
 import { BalanceMeter } from '../ui/balance-meter.js';
 // Bar meters
 import { drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM, layoutDBFSScale, layoutTPScale, layoutPPMScale, setTpLimit, updateTpLimitDisplay } from '../ui/bar-meter.js';
-// Signal generators
-import {
-  createNoiseSource,
-  createSineOscillator,
-  createSweepOscillator,
-  createGlitsOscillator,
-  createLissajousWithPhase,
-  createLissajousDualFreq,
-  parseFrequencyRatio,
-  getPresetConfig as getPresetConfigFromModule,
-  dbToLinear
-} from '../generators/index.js';
+// Signal generator preset configuration
+// Signal generation itself handled by SourceController
+import { getPresetConfig as getPresetConfigFromModule } from '../generators/index.js';
+// Measure loop (20 Hz) - extracted from bootstrap
+import { initMeasureLoop, startMeasureLoop, stopMeasureLoop } from './measure-loop.js';
+// Render loop (60 Hz) - extracted from bootstrap
+import { initRenderLoop, startRenderLoop, stopRenderLoop } from './render-loop.js';
+// Shared meter state between measureLoop and renderLoop
+import { meterState, resetMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, PPM_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
+// Drag and drop system - extracted from bootstrap
+import { initDragDrop, setupDragAndDrop } from './drag-drop.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSITIONGUARD - EXACT from audio-meters-grid.html lines 1848-1885
@@ -104,21 +107,16 @@ const TransitionGuard = (function() {
 // CONFIGURABLE PARAMETERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-let LOUDNESS_TARGET = -23;
-let TP_LIMIT = -1;
+// Initialise from centralised state (persisted in localStorage via appState)
+let LOUDNESS_TARGET = appState.get('targetLufs');
+let TP_LIMIT = appState.get('truePeakLimit');
 let radarMaxSeconds = 60;
 
 const TP_SCALE_MIN = -60;
 const TP_SCALE_MAX = 3;
 
-// Radar history (external as in original)
-let radarHistory = [];
-
-// Peak indicator state - EXACT from audio-meters-grid.html lines 3583-3586
-// Uses CURRENT True Peak with 500ms hold (not cumulative max)
+// Peak indicator hold constant - state moved to meterState
 const PEAK_INDICATOR_HOLD_MS = 500;
-let peakIndicatorOn = false;
-let peakIndicatorLastTrigger = 0;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOM ELEMENT REFERENCES
@@ -276,6 +274,15 @@ analyserR.smoothingTimeConstant = 0;
 mixL.connect(analyserL);
 mixR.connect(analyserR);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE CONTROLLER (Phase 1: instantiation and connection)
+// ─────────────────────────────────────────────────────────────────────────────
+// The SourceController manages all audio input sources (browser, external, generator)
+// in a unified way. During phased integration, it runs in parallel with legacy code.
+const sourceController = new SourceController(ac);
+sourceController.connectOutput(mixL, mixR);
+console.log('%c[TSG] SourceController instantiated and connected to analysis bus', 'color: cyan');
+
 // Shared sample buffers (sampled ONCE per frame)
 const FFT_SIZE = 4096;
 const bufL = new Float32Array(FFT_SIZE);
@@ -353,6 +360,15 @@ function initUIComponents() {
   layoutDBFSScale(dbfsScale);
   layoutTPScale(tpScale);
   layoutPPMScale(ppmScale);
+
+  // Synchronise UI controls with persisted state values
+  if (targetPreset) {
+    targetPreset.value = String(LOUDNESS_TARGET);
+  }
+  if (tpLimitSelect) {
+    tpLimitSelect.value = String(TP_LIMIT);
+    setTpLimit(TP_LIMIT);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -496,54 +512,32 @@ function loudnessColour(lufs) {
 let selectedInputMode = 'browser'; // 'browser', 'external', 'generator'
 let activeCapture = null; // null, 'browser', 'external', 'generator'
 
-let currentSource = null;
-let currentStream = null;
-
-// Generator state
-let genOsc = null;
-let genGain = null;
-let leftGain = null;
-let rightGain = null;
-let merger = null;
-let genMonGain = null;
-let genSplit = null;
+// Generator monitor and EBU pulse state
 let monitorMuted = false;
 let ebuModeActive = false;
 let ebuPrevState = true;
 let leftMuteTimer = 0;
 
-// Browser source state - EXACT from audio-meters-grid.html line 3777
-let sysSrc = null;
-let sysSplit = null;
-let sysMonGain = null;
+// Browser source UI state (audio managed by SourceController)
 let sysMonitorMuted = true;
-let sysTrimNode = null;
 let sysTrimDb = 0;
 const SYS_TRIM_DEFAULT = -12;
 const SYS_TRIM_STORAGE_KEY = 'tsg_sysTrimDb';
 
-// External source state - EXACT from audio-meters-grid.html lines 3840-3850
-let extSrc = null;
-let extSplit = null;
-let extMonGainNode = null;
+// External source UI state (audio managed by SourceController)
 let extMonitorMuted = true;
-let extTrimNode = null;
 let extTrimDb = 0;
 const EXT_TRIM_DEFAULT = 0;
 const EXT_TRIM_STORAGE_KEY = 'tsg_extTrimDb';
 const EXT_DEVICE_STORAGE_KEY = 'tsg_extDeviceId';
 
-// Monitor nodes
-const monitorGain = ac.createGain();
-monitorGain.gain.value = 0;
-monitorGain.connect(ac.destination);
-
-// --- Sys (Browser) Trim Control - EXACT from audio-meters-grid.html lines 3780-3796 ---
+// Browser trim control
+// Uses SourceController for unified input gain management
 function setSysTrim(dB, save = true) {
   sysTrimDb = clamp(parseFloat(dB) || SYS_TRIM_DEFAULT, -48, 24);
   if (sysTrimRange) sysTrimRange.value = sysTrimDb;
   if (sysTrimVal) sysTrimVal.value = Math.round(sysTrimDb);
-  if (sysTrimNode) { sysTrimNode.gain.value = dbToGain(sysTrimDb); }
+  sourceController.setBrowserTrim(sysTrimDb);
   if (save) { try { localStorage.setItem(SYS_TRIM_STORAGE_KEY, sysTrimDb.toFixed(1)); } catch(e) {} }
 }
 
@@ -551,12 +545,13 @@ function setSysTrim(dB, save = true) {
 const storedSysTrim = localStorage.getItem(SYS_TRIM_STORAGE_KEY);
 setSysTrim(storedSysTrim !== null ? parseFloat(storedSysTrim) : SYS_TRIM_DEFAULT, false);
 
-// --- Ext Trim Control - EXACT from audio-meters-grid.html lines 4070-4086 ---
+// External trim control
+// Uses SourceController for unified input gain management
 function setExtTrim(dB, save = true) {
   extTrimDb = clamp(parseFloat(dB) || EXT_TRIM_DEFAULT, -48, 24);
   if (extTrimRange) extTrimRange.value = extTrimDb;
   if (extTrimVal) extTrimVal.value = Math.round(extTrimDb);
-  if (extTrimNode) { extTrimNode.gain.value = dbToGain(extTrimDb); }
+  sourceController.setExternalTrim(extTrimDb);
   if (save) try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch (e) {}
 }
 
@@ -564,11 +559,10 @@ function setExtTrim(dB, save = true) {
 const storedExtTrim = localStorage.getItem(EXT_TRIM_STORAGE_KEY);
 setExtTrim(storedExtTrim !== null ? parseFloat(storedExtTrim) : EXT_TRIM_DEFAULT, false);
 
-// --- Toggle Sys Monitor Mute - EXACT from audio-meters-grid.html lines 3819-3827 ---
+// Toggle browser monitor mute
+// Uses SourceController for unified monitor management
 function toggleSysMonitorMute() {
-  if (!sysMonGain) return;
-  sysMonitorMuted = !sysMonitorMuted;
-  sysMonGain.gain.value = sysMonitorMuted ? 0 : parseFloat(sysMonGainEl?.value || 20) / 100;
+  sysMonitorMuted = sourceController.toggleBrowserMonitorMute();
   if (sysMonVal) sysMonVal.value = Math.round(sysMonGainEl?.value || 20);
   // RED when muted, neutral when not muted
   if (sysMonitorMuted) {
@@ -579,11 +573,10 @@ function toggleSysMonitorMute() {
   updateStatusPanel();
 }
 
-// --- Toggle Ext Monitor Mute - EXACT from audio-meters-grid.html lines 4180-4195 ---
+// Toggle external monitor mute
+// Uses SourceController for unified monitor management
 function toggleExtMonitorMute() {
-  if (!extMonGainNode) return;
-  extMonitorMuted = !extMonitorMuted;
-  extMonGainNode.gain.value = extMonitorMuted ? 0 : parseFloat(extMonGainEl?.value || 20) / 100;
+  extMonitorMuted = sourceController.toggleExternalMonitorMute();
   if (extMonVal) extMonVal.value = Math.round(extMonGainEl?.value || 20);
   // RED when muted, neutral when not muted
   if (extMonitorMuted) {
@@ -747,57 +740,27 @@ async function startCapture() {
   }
 }
 
-// Helper function EXACT from audio-meters-grid.html line 2272
-function connectStereoToMix(node) {
-  const split = ac.createChannelSplitter(2);
-  node.connect(split);
-  split.connect(mixL, 0);
-  split.connect(mixR, 1);
-  // Note: kHP_L/kHP_R for K-weighted LUFS would be connected here if available
-  return split;
-}
-
-// EXACT from audio-meters-grid.html lines 3985-4025
+// Browser tab capture via SourceController
+// Captures audio from browser tabs using getDisplayMedia API
 async function startBrowserCapture() {
   try {
     await ac.resume();
-    currentStream = await navigator.mediaDevices.getDisplayMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
-      video: true
-    });
-    currentStream.getVideoTracks().forEach(t => t.stop());
-    const track = currentStream.getAudioTracks()[0];
-    if (!track) throw new Error('No audio track available.');
 
-    // Force stereo if possible
-    try { track.applyConstraints({ advanced: [{ channelCount: 2 }] }); } catch {}
-    track.contentHint = 'music';
+    // Initialise trim from persisted state before capture
+    sourceController.setBrowserTrim(sysTrimDb);
 
-    sysSrc = ac.createMediaStreamSource(currentStream);
+    const track = await sourceController.startBrowserCapture();
 
-    // Trim node for input gain adjustment
-    sysTrimNode = ac.createGain();
-    sysTrimNode.gain.value = dbToGain(sysTrimDb);
-    sysSrc.connect(sysTrimNode);
-
-    // Connect to analysis bus via splitter
-    sysSplit = connectStereoToMix(sysTrimNode);
-
-    // Monitor output
-    sysMonGain = ac.createGain();
-    sysMonGain.gain.value = 0; // Muted by default
-    sysTrimNode.connect(sysMonGain).connect(ac.destination);
+    // Update UI with track metadata
+    const settings = track.getSettings ? track.getSettings() : {};
+    if (srcKind) srcKind.textContent = (track.kind || 'audio').charAt(0).toUpperCase() + (track.kind || 'audio').slice(1);
+    if (cc) cc.textContent = settings.channelCount ?? 'Unknown';
+    if (sr) sr.textContent = ac.sampleRate + ' Hz';
+    if (stOK) stOK.textContent = (settings.channelCount >= 2 ? 'Yes' : 'Uncertain/Mono?');
 
     // Default: muted (RED button)
     if (btnSysMonMute) { btnSysMonMute.classList.add('btn-muted'); btnSysMonMute.classList.remove('btn-ghost'); }
     sysMonitorMuted = true;
-
-    // Update info
-    const set = track.getSettings ? track.getSettings() : {};
-    if (srcKind) srcKind.textContent = (track.kind || 'audio').charAt(0).toUpperCase() + (track.kind || 'audio').slice(1);
-    if (cc) cc.textContent = set.channelCount ?? 'Unknown';
-    if (sr) sr.textContent = ac.sampleRate + ' Hz';
-    if (stOK) stOK.textContent = (set.channelCount >= 2 ? 'Yes' : 'Uncertain/Mono?');
 
     activeCapture = 'browser';
     updateCaptureButtons();
@@ -808,55 +771,31 @@ async function startBrowserCapture() {
   }
 }
 
-// EXACT from audio-meters-grid.html lines 4120-4170
+// External device capture via SourceController
+// Captures audio from microphones and audio interfaces using getUserMedia API
 async function startExternalCapture() {
   try {
     await ac.resume();
     const deviceId = extDeviceSelect?.value;
-    // Save device selection
+
+    // Persist device selection for session restore
     if (deviceId) try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch {}
 
-    currentStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 2
-      }
-    });
+    // Initialise trim from persisted state before capture
+    sourceController.setExternalTrim(extTrimDb);
 
-    const track = currentStream.getAudioTracks()[0];
-    if (!track) throw new Error('No audio track available.');
+    const track = await sourceController.startExternalCapture(deviceId);
 
-    // Force stereo if possible
-    try { track.applyConstraints({ advanced: [{ channelCount: 2 }] }); } catch {}
-    track.contentHint = 'music';
-
-    extSrc = ac.createMediaStreamSource(currentStream);
-
-    // Trim node for input gain adjustment
-    extTrimNode = ac.createGain();
-    extTrimNode.gain.value = dbToGain(extTrimDb);
-    extSrc.connect(extTrimNode);
-
-    // Connect to analysis bus via splitter
-    extSplit = connectStereoToMix(extTrimNode);
-
-    // Monitor output
-    extMonGainNode = ac.createGain();
-    extMonGainNode.gain.value = 0; // Muted by default
-    extTrimNode.connect(extMonGainNode).connect(ac.destination);
+    // Update UI with track metadata
+    const settings = track.getSettings ? track.getSettings() : {};
+    if (extDevice) extDevice.textContent = track.label || 'Unknown';
+    if (extCc) extCc.textContent = settings.channelCount ?? 'Unknown';
+    if (extSr) extSr.textContent = ac.sampleRate + ' Hz';
+    if (extStatus) extStatus.textContent = (settings.channelCount >= 2 ? 'Stereo' : 'Active');
 
     // Default: muted (RED button)
     if (btnExtMonMute) { btnExtMonMute.classList.add('btn-muted'); btnExtMonMute.classList.remove('btn-ghost'); }
     extMonitorMuted = true;
-
-    const set = track.getSettings ? track.getSettings() : {};
-    if (extDevice) extDevice.textContent = track.label || 'Unknown';
-    if (extCc) extCc.textContent = set.channelCount ?? 'Unknown';
-    if (extSr) extSr.textContent = ac.sampleRate + ' Hz';
-    if (extStatus) extStatus.textContent = (set.channelCount >= 2 ? 'Stereo' : 'Active');
 
     activeCapture = 'external';
     updateCaptureButtons();
@@ -868,32 +807,9 @@ async function startExternalCapture() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ADVANCED SIGNAL GENERATOR
-// Supports: sine, pink/white/brown noise, sweep, GLITS, Lissajous patterns
+// SIGNAL GENERATOR CONTROL
+// All signal generation now handled by SourceController
 // ═══════════════════════════════════════════════════════════════════════════════
-
-// Generator state
-let genSourceNodes = [];  // Array of source nodes (oscillators, noise sources)
-let genFilterNodes = [];  // Array of filter nodes
-let sweepInterval = null;
-let glitsInterval = null;
-let glitsPhase = 0;
-let activeSweepGenerator = null;  // Reference to sweep generator for cleanup
-let activeGlitsGenerator = null;  // Reference to GLITS generator for cleanup
-let vectorWorkletNode = null;  // AudioWorklet node for vector text generator
-let vectorWorkletLoaded = false;  // Track if worklet module is loaded
-
-// Create noise source with optional filtering
-// Wrapper around imported createNoiseSource that handles genFilterNodes
-// Set uniqueBuffer=true for uncorrelated stereo (EBU requirement)
-function createNoiseSourceLocal(type, loFreq, hiFreq, uniqueBuffer = false) {
-  const result = createNoiseSource(ac, type, loFreq, hiFreq, uniqueBuffer);
-  // Push filter nodes to the tracking array
-  if (result.filters && result.filters.length > 0) {
-    genFilterNodes.push(...result.filters);
-  }
-  return { source: result.source, output: result.output };
-}
 
 // Get preset configuration from selected option
 // Uses imported getPresetConfigFromModule from generators/presets.js
@@ -935,68 +851,19 @@ function updateGenModeDisplay() {
   }
 }
 
-// Clean up generator nodes
-function cleanupGeneratorNodes() {
-  // Clean up sweep generator interval (via module or legacy)
-  if (activeSweepGenerator) {
-    activeSweepGenerator.clearInterval();
-    activeSweepGenerator = null;
-  } else if (sweepInterval) {
-    clearInterval(sweepInterval);
-  }
-  sweepInterval = null;
-
-  // Clean up GLITS generator interval (via module or legacy)
-  if (activeGlitsGenerator) {
-    activeGlitsGenerator.clearInterval();
-    activeGlitsGenerator = null;
-  } else if (glitsInterval) {
-    clearInterval(glitsInterval);
-  }
-  glitsInterval = null;
-
-  // Cancel any scheduled automation events before disconnecting
-  [genGain, leftGain, rightGain, genMonGain].forEach(n => {
-    try { n && n.gain && n.gain.cancelScheduledValues(0); } catch {}
-  });
-
-  genSourceNodes.forEach(n => { try { n.stop && n.stop(); n.disconnect(); } catch {} });
-  genFilterNodes.forEach(n => { try { n.disconnect(); } catch {} });
-  [genGain, leftGain, rightGain, merger, genMonGain, genSplit].forEach(n => {
-    try { n && n.disconnect(); } catch {}
-  });
-
-  // Clean up vector worklet node
-  if (vectorWorkletNode) {
-    try {
-      vectorWorkletNode.port.postMessage({ type: 'stop' });
-      vectorWorkletNode.disconnect();
-    } catch {}
-    vectorWorkletNode = null;
-  }
-
-  genSourceNodes = [];
-  genFilterNodes = [];
-  genOsc = null;
-  genGain = null;
-  leftGain = null;
-  rightGain = null;
-
-  // Reset EBU state to prevent stale timing affecting new generators
-  ebuModeActive = false;
-  ebuPrevState = true;
-  leftMuteTimer = 0;
-}
-
 // Create and connect generator based on preset
+// Uses SourceController for unified audio source management
 async function startGeneratorCapture() {
-  if (activeCapture === 'generator' && genMonGain) {
-    // Already running - just switch preset
-    switchGeneratorPreset();
+  if (activeCapture === 'generator' && sourceController.isModeActive(InputMode.GENERATOR)) {
+    // Already running - switch to new preset without full restart
+    await switchGeneratorPreset();
     return;
   }
 
-  await createGeneratorSignal();
+  const config = getPresetConfig();
+  if (!config) return;
+
+  await sourceController.startGenerator(config);
 
   activeCapture = 'generator';
   updateCaptureButtons();
@@ -1005,226 +872,15 @@ async function startGeneratorCapture() {
 }
 
 // Switch preset without full restart
-function switchGeneratorPreset() {
+// Uses SourceController.switchGeneratorPreset() to preserve monitor state
+async function switchGeneratorPreset() {
   if (activeCapture !== 'generator') return;
 
-  // Store monitor state
-  const currentMonitorGain = genMonGain ? genMonGain.gain.value : 0;
-  const wasRunning = genSourceNodes.length > 0;
-
-  // Clean up current signal
-  cleanupGeneratorNodes();
-
-  // Create new signal
-  createGeneratorSignal(currentMonitorGain);
-  updateGenModeDisplay();
-}
-
-// Main signal creation function
-async function createGeneratorSignal(existingMonitorGain = null) {
   const config = getPresetConfig();
   if (!config) return;
 
-  const amplitude = dbToLinear(config.db);
-
-  // Create output chain
-  genGain = ac.createGain();
-  genGain.gain.value = amplitude;
-
-  leftGain = ac.createGain();
-  rightGain = ac.createGain();
-  merger = ac.createChannelMerger(2);
-
-  // Apply routing
-  switch (config.routing) {
-    case 'left-only':
-      leftGain.gain.value = 1;
-      rightGain.gain.value = 0;
-      break;
-    case 'right-only':
-      leftGain.gain.value = 0;
-      rightGain.gain.value = 1;
-      break;
-    case 'anti-phase':
-      leftGain.gain.value = 1;
-      rightGain.gain.value = -1;
-      break;
-    default:
-      leftGain.gain.value = 1;
-      rightGain.gain.value = 1;
-  }
-
-  // Create signal based on type
-  if (config.type === 'sine') {
-    const { osc } = createSineOscillator(ac, config.freq);
-    osc.connect(genGain);
-    osc.start();
-    genOsc = osc;
-    genSourceNodes.push(osc);
-
-    genGain.connect(leftGain);
-    genGain.connect(rightGain);
-
-  } else if (config.type === 'pink' || config.type === 'white' || config.type === 'brown') {
-    if (config.routing === 'stereo-uncorr') {
-      // Uncorrelated: separate INDEPENDENT noise for L and R
-      // EBU Tech 3341: Each channel must have statistically independent noise
-      const noiseL = createNoiseSourceLocal(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
-      const noiseR = createNoiseSourceLocal(config.type, config.lo, config.hi, true);  // uniqueBuffer=true
-
-      const gainL = ac.createGain();
-      const gainR = ac.createGain();
-      gainL.gain.value = amplitude;
-      gainR.gain.value = amplitude;
-
-      noiseL.output.connect(gainL);
-      noiseR.output.connect(gainR);
-      gainL.connect(leftGain);
-      gainR.connect(rightGain);
-
-      noiseL.source.start();
-      noiseR.source.start();
-      genSourceNodes.push(noiseL.source, noiseR.source);
-      genFilterNodes.push(gainL, gainR);
-    } else {
-      // Correlated: same noise to both channels
-      const noise = createNoiseSourceLocal(config.type, config.lo, config.hi);
-      noise.output.connect(genGain);
-      genGain.connect(leftGain);
-      genGain.connect(rightGain);
-      noise.source.start();
-      genSourceNodes.push(noise.source);
-    }
-
-  } else if (config.type === 'sweep') {
-    // AES17-compliant continuous logarithmic sine sweep
-    // Uses createSweepOscillator from generators/oscillators.js
-    const sweep = createSweepOscillator(ac, config.lo, config.hi, config.duration);
-    sweep.osc.connect(genGain);
-    genOsc = sweep.osc;
-    genSourceNodes.push(sweep.osc);
-    activeSweepGenerator = sweep;  // Store reference for cleanup
-
-    genGain.connect(leftGain);
-    genGain.connect(rightGain);
-
-    // Start the sweep (handles scheduling internally)
-    sweep.startSweep();
-    sweepInterval = sweep.getInterval();  // Keep reference for legacy checks
-
-  } else if (config.type === 'glits') {
-    // GLITS (EBU Tech 3304): 1kHz tone with channel identification pattern
-    // Uses createGlitsOscillator from generators/oscillators.js
-    const glits = createGlitsOscillator(ac, leftGain, rightGain);
-    glits.osc.connect(genGain);
-    genOsc = glits.osc;
-    genSourceNodes.push(glits.osc);
-    activeGlitsGenerator = glits;  // Store reference for cleanup
-
-    genGain.connect(leftGain);
-    genGain.connect(rightGain);
-
-    // Start the GLITS pattern (handles scheduling internally)
-    glits.startGlits();
-    glitsInterval = glits.getInterval();  // Keep reference for legacy checks
-
-  } else if (config.type === 'lissajous') {
-    // Lissajous patterns: precise phase relationships for goniometer testing
-    // Uses createLissajousWithPhase/createLissajousDualFreq from generators/lissajous.js
-    const { freqL, freqR } = parseFrequencyRatio(config.freq, config.ratio);
-
-    // For same-frequency Lissajous (phase offset patterns), use single oscillator + delay
-    // This ensures zero drift between channels
-    if (freqL === freqR && config.phase !== 0) {
-      const lissajous = createLissajousWithPhase(ac, freqL, config.phase, amplitude);
-
-      // Connect to routing gains
-      lissajous.gainL.connect(leftGain);
-      lissajous.gainR.connect(rightGain);
-
-      lissajous.osc.start();
-      genSourceNodes.push(lissajous.osc);
-      genFilterNodes.push(...lissajous.nodes);
-
-    } else {
-      // Different frequencies (complex Lissajous) or no phase offset - use two oscillators
-      // Start synchronized for consistent pattern
-      const lissajous = createLissajousDualFreq(ac, freqL, freqR, amplitude);
-
-      // Connect to routing gains
-      lissajous.gainL.connect(leftGain);
-      lissajous.gainR.connect(rightGain);
-
-      // Start both at exact same time for synchronized pattern
-      lissajous.oscL.start(lissajous.startTime);
-      lissajous.oscR.start(lissajous.startTime);
-
-      genSourceNodes.push(lissajous.oscL, lissajous.oscR);
-      genFilterNodes.push(...lissajous.nodes);
-    }
-
-  } else if (config.type === 'vector-text') {
-    // THÅST Vector Text Generator - uses AudioWorklet for efficient processing
-    // Outputs X/Y coordinates as L/R channels for goniometer display
-    try {
-      // Load worklet module if not already loaded
-      if (!vectorWorkletLoaded) {
-        await ac.audioWorklet.addModule('./src/generators/thast-vector-worklet.js');
-        vectorWorkletLoaded = true;
-      }
-
-      // Create worklet node with configuration
-      vectorWorkletNode = new AudioWorkletNode(ac, 'thast-vector-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-        processorOptions: {
-          pointsPerSecond: 4000,  // Fast trace for stable, crisp display
-          outputScale: amplitude,
-          resampleStep: 0.025,
-          blankingLength: 8,
-          normalisationMargin: 0.85
-        }
-      });
-
-      // Create splitter to route stereo to L/R gains
-      const workletSplit = ac.createChannelSplitter(2);
-      vectorWorkletNode.connect(workletSplit);
-      workletSplit.connect(leftGain, 0);
-      workletSplit.connect(rightGain, 1);
-
-      genFilterNodes.push(workletSplit);
-      // Note: vectorWorkletNode is tracked separately for cleanup
-
-    } catch (err) {
-      console.error('[TSG] Vector text generator failed to load:', err);
-      // Fallback: just output silence
-    }
-  }
-
-  // Connect to merger
-  leftGain.connect(merger, 0, 0);
-  rightGain.connect(merger, 0, 1);
-
-  // Monitor output
-  genMonGain = ac.createGain();
-  // Use existing monitor gain or read from slider (NOT muted by default)
-  if (existingMonitorGain !== null) {
-    genMonGain.gain.value = existingMonitorGain;
-  } else if (monGainEl && !monitorMuted) {
-    genMonGain.gain.value = parseFloat(monGainEl.value) / 100;
-  } else {
-    genMonGain.gain.value = 0;
-  }
-  merger.connect(genMonGain).connect(ac.destination);
-
-  // Analysis output
-  genSplit = ac.createChannelSplitter(2);
-  merger.connect(genSplit);
-  genSplit.connect(mixL, 0);
-  genSplit.connect(mixR, 1);
-
-  ebuModeActive = false;
+  await sourceController.switchGeneratorPreset(config);
+  updateGenModeDisplay();
 }
 
 async function stopActiveCapture() {
@@ -1237,32 +893,18 @@ async function stopActiveCapture() {
   }
 }
 
-// EXACT from audio-meters-grid.html lines 4025-4040
+// Stop browser tab capture
 function stopBrowserCapture() {
-  [sysSrc, sysTrimNode, sysSplit, sysMonGain].forEach(n => {
-    try { n && n.disconnect && n.disconnect(); } catch {}
-  });
-  sysSrc = null; sysTrimNode = null; sysSplit = null; sysMonGain = null;
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
-    currentStream = null;
-  }
+  sourceController.stopBrowserCapture();
   sysMonitorMuted = true;
   if (activeCapture === 'browser') activeCapture = null;
   updateCaptureButtons();
   updateInputSourceSummary();
 }
 
-// EXACT from audio-meters-grid.html lines 4170-4185
+// Stop external device capture
 function stopExternalCapture() {
-  [extSrc, extTrimNode, extSplit, extMonGainNode].forEach(n => {
-    try { n && n.disconnect && n.disconnect(); } catch {}
-  });
-  extSrc = null; extTrimNode = null; extSplit = null; extMonGainNode = null;
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
-    currentStream = null;
-  }
+  sourceController.stopExternalCapture();
   if (extStatus) extStatus.textContent = 'Stopped';
   extMonitorMuted = true;
   if (activeCapture === 'external') activeCapture = null;
@@ -1271,8 +913,8 @@ function stopExternalCapture() {
 }
 
 function stopGeneratorCapture() {
-  cleanupGeneratorNodes();
-  merger = null; genMonGain = null; genSplit = null;
+  sourceController.stopGenerator();
+  // Reset EBU pulse state and visual transition guard
   ebuModeActive = false;
   TransitionGuard.reset();
   if (activeCapture === 'generator') activeCapture = null;
@@ -1285,189 +927,42 @@ function stopCapture() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MEASUREMENT LOOP (20 Hz) - EXACT from audio-meters-grid.html lines 4840-4920
+// MEASUREMENT LOOP (20 Hz) - Extracted to measure-loop.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MEASURE_INTERVAL_MS = 50;
-let startTs = performance.now();
-let lastMeasureTime = performance.now();
-let tpMaxL = -Infinity;
-let tpMaxR = -Infinity;
-let crestPeak = -Infinity;
+// EBU pulse state (shared with measure-loop via object reference)
+const ebuStateRef = {
+  get ebuModeActive() { return ebuModeActive; },
+  set ebuModeActive(v) { ebuModeActive = v; },
+  get ebuPrevState() { return ebuPrevState; },
+  set ebuPrevState(v) { ebuPrevState = v; },
+  get leftMuteTimer() { return leftMuteTimer; },
+  set leftMuteTimer(v) { leftMuteTimer = v; }
+};
 
-function measureLoop() {
-  const now = performance.now();
-  const dt = now - lastMeasureTime;
-  lastMeasureTime = now;
+// Initialise measure loop with dependencies
+initMeasureLoop({
+  dom: { lufsM, lufsS, lufsI, lraEl, r128TpMax, r128Crest, r128Time, peakLed },
+  meters: { lufsMeter, truePeakMeter, bufL, bufR },
+  captureState: { getActiveCapture: () => activeCapture },
+  ebuState: ebuStateRef,
+  config: {
+    getTargetLufs: () => LOUDNESS_TARGET,
+    getTpLimit: () => TP_LIMIT,
+    getRadarMaxSeconds: () => radarMaxSeconds
+  },
+  sourceController,
+  TransitionGuard,
+  getPresetConfig,
+  loudnessColour
+});
 
-  // EBU Stereo-ID pulse timing - only for pulsed presets (data-pulsed="true")
-  const config = activeCapture === 'generator' ? getPresetConfig() : null;
-  const isPulsedPreset = config && config.pulsed && config.type === 'sine' && !glitsInterval && !sweepInterval;
-
-  if (isPulsedPreset && leftGain) {
-    ebuModeActive = true;
-    leftMuteTimer += dt;
-    const EBU_PERIOD_MS = 3000;
-    const EBU_MUTE_MS = 250;
-    const shouldBeOn = (leftMuteTimer % EBU_PERIOD_MS) >= EBU_MUTE_MS;
-
-    // Detect state transition and trigger blanking
-    if (shouldBeOn !== ebuPrevState) {
-      TransitionGuard.trigger();
-      // Use linearRamp for smooth transition (avoids clicks/glitches)
-      const target = shouldBeOn ? 1 : 0;
-      const rampTime = 0.002; // 2ms ramp
-      const now = ac.currentTime;
-      leftGain.gain.setValueAtTime(leftGain.gain.value, now);
-      leftGain.gain.linearRampToValueAtTime(target, now + rampTime);
-      ebuPrevState = shouldBeOn;
-    }
-  } else if (ebuModeActive && !isPulsedPreset) {
-    // Pulsed mode was just disabled (switched to non-pulsed preset) - ensure L is full volume
-    ebuModeActive = false;
-    if (leftGain) {
-      const now = ac.currentTime;
-      leftGain.gain.setValueAtTime(leftGain.gain.value, now);
-      leftGain.gain.linearRampToValueAtTime(1, now + 0.002);
-    }
-  }
-
-  if (!activeCapture) return;
-
-  // Update LUFS meter
-  const energy = lufsMeter.calculateBlockEnergy(bufL, bufR);
-  lufsMeter.pushBlock(energy);
-  const readings = lufsMeter.getReadings();
-
-  // Time since reset - for gated display of accumulated values
-  const elapsedSec = (performance.now() - startTs) / 1000;
-
-  // Display delays for accumulated values (need time for meaningful data):
-  // M (Momentary): 400ms window → show after 1s
-  // S (Short-term): 3s window → show after 10s
-  // I (Integrated): gated → show after 30s
-  const DELAY_M = 1;
-  const DELAY_S = 10;
-  const DELAY_I = 30;
-
-  // Update displays with color and time-gating
-  if (lufsM) {
-    const mDisp = readings.momentary;
-    if (elapsedSec >= DELAY_M && isFinite(mDisp)) {
-      lufsM.textContent = formatLUFS(mDisp);
-      lufsM.style.color = loudnessColour(mDisp);
-    } else {
-      lufsM.textContent = '--.- LUFS';
-      lufsM.style.color = '';
-    }
-    lufsM.dataset.v = mDisp;
-  }
-  if (lufsS) {
-    const sDisp = readings.shortTerm;
-    if (elapsedSec >= DELAY_S && isFinite(sDisp)) {
-      lufsS.textContent = formatLUFS(sDisp);
-      lufsS.style.color = loudnessColour(sDisp);
-    } else {
-      lufsS.textContent = '--.- LUFS';
-      lufsS.style.color = '';
-    }
-  }
-  if (lufsI) {
-    const iDisp = readings.integrated;
-    if (elapsedSec >= DELAY_I && isFinite(iDisp)) {
-      lufsI.textContent = formatLUFS(iDisp);
-      lufsI.style.color = loudnessColour(iDisp);
-    } else {
-      lufsI.textContent = '--.- LUFS';
-      lufsI.style.color = '';
-    }
-  }
-  // LRA also needs accumulation time (same as I)
-  if (lraEl) {
-    if (elapsedSec >= DELAY_I && readings.lra !== null && isFinite(readings.lra)) {
-      lraEl.textContent = readings.lra.toFixed(1) + ' LU';
-    } else {
-      lraEl.textContent = '--.- LU';
-    }
-  }
-
-  // True Peak - ONLY read cached state here, DO NOT update()
-  // EXACT from audio-meters-grid.html: updateR128() reads tpPeakHoldL/R
-  // that were SET by drawTruePeak() in renderLoop. No recalculation here.
-  const tpState = truePeakMeter.getState();
-
-  // Use peakHoldL/R (not smoothed left/right) for TPmax tracking
-  // EXACT from original lines 3744-3746: const currentTpMax = Math.max(tpPeakHoldL, tpPeakHoldR);
-  if (tpState.peakHoldL > tpMaxL) tpMaxL = tpState.peakHoldL;
-  if (tpState.peakHoldR > tpMaxR) tpMaxR = tpState.peakHoldR;
-  const tpMax = Math.max(tpMaxL, tpMaxR);
-
-  // TPmax: cumulative max, show after 1s (like M)
-  if (r128TpMax) {
-    if (elapsedSec >= DELAY_M && isFinite(tpMax) && tpMax > -60) {
-      r128TpMax.textContent = tpMax.toFixed(1) + ' dBTP';
-    } else {
-      r128TpMax.textContent = '--.- dBTP';
-    }
-  }
-
-  // Crest factor: TP(dBTP) - RMS(dBFS) using 300ms smoothed values
-  // Needs RMS to stabilize, show after 10s (like S)
-  const currentTp = Math.max(tpState.left, tpState.right);
-  const rmsDbL = 20 * Math.log10(rmsHoldL + 1e-12);
-  const rmsDbR = 20 * Math.log10(rmsHoldR + 1e-12);
-  const currentRms = Math.max(rmsDbL, rmsDbR);
-  const crest = currentTp - currentRms;
-  if (r128Crest) {
-    if (elapsedSec >= DELAY_S && isFinite(crest) && currentTp > -60 && currentRms > -60) {
-      r128Crest.textContent = crest.toFixed(1) + ' dB';
-    } else {
-      r128Crest.textContent = '--.- dB';
-    }
-  }
-
-  // Peak LED
-  if (peakLed) {
-    peakLed.classList.toggle('on', tpMax > TP_LIMIT);
-  }
-
-  // Push to radar history (external as in original)
-  if (readings.shortTerm !== null && isFinite(readings.shortTerm)) {
-    const now = Date.now();
-    const maxAge = radarMaxSeconds * 1000;
-    // Remove old entries
-    while (radarHistory.length > 0 && now - radarHistory[0].t > maxAge) {
-      radarHistory.shift();
-    }
-    // Add new entry
-    radarHistory.push({ t: now, v: readings.shortTerm });
-  }
-
-  // NOTE: peakIndicatorOn is updated in renderLoop (line ~1130) using CURRENT TP values
-  // NOT here with cumulative max - EXACT from audio-meters-grid.html lines 3605-3612
-
-  // Elapsed time
-  const elapsed = performance.now() - startTs;
-  if (r128Time) r128Time.textContent = formatTime(elapsed);
-}
-
-setInterval(measureLoop, MEASURE_INTERVAL_MS);
+// Start the 20 Hz measurement loop
+startMeasureLoop();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RENDER LOOP (60 Hz)
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Peak-hold state for True Peak bar meter
-let tpPeakHoldL = -60, tpPeakHoldR = -60, tpPeakTimeL = 0, tpPeakTimeR = 0;
-const TP_PEAK_HOLD_SEC = 3;
-
-// Peak-hold state for PPM bar meter
-let ppmPeakHoldL = -60, ppmPeakHoldR = -60, ppmPeakTimeL = 0, ppmPeakTimeR = 0;
-const PPM_PEAK_HOLD_SEC = 3;
-
-// RMS smoothing
-let rmsHoldL = 0, rmsHoldR = 0;
-let lastRmsTs = performance.now();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DEBUG: Glitch detector - monitors for anomalies
@@ -1591,214 +1086,40 @@ const GlitchDebug = {
 window.GlitchDebug = GlitchDebug;
 console.log('%c[GLITCH DEBUG] Active - use GlitchDebug.reset() after starting generator', 'color: #4ecdc4; font-weight: bold');
 
-// Frame timing for glitch protection
-// Instead of skipping frames, we HOLD the last known-good buffer data
-// This is more accurate than skipping - we show real data, just frozen briefly
-let lastRenderTime = performance.now();
-const FRAME_HOLD_THRESHOLD = 80; // Hold previous frame if delta > 80ms
-let holdBufL = null;
-let holdBufR = null;
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDER LOOP (60 Hz) - Extracted to render-loop.js
+// ─────────────────────────────────────────────────────────────────────────────
 
-function renderLoop() {
-  const now = performance.now();
-  const frameDelta = now - lastRenderTime;
-  lastRenderTime = now;
+// Initialise render loop with dependencies
+initRenderLoop({
+  dom: {
+    lufsM, xyCard, ppmCanvas, ppmLVal, ppmRVal,
+    dbfs, dbL, dbR, tp, tpL, tpR,
+    uptimeEl, statusSummary
+  },
+  meters: {
+    bufL, bufR, ppmMeter, truePeakMeter
+  },
+  uiComponents: {
+    goniometer, correlationMeter, balanceMeterUI,
+    spectrumAnalyzerUI, msMeterUI, widthMeterUI,
+    rotationMeterUI, radar, stereoAnalysis
+  },
+  config: {
+    getSampleRate: () => ac.sampleRate,
+    getRadarMaxSeconds: () => radarMaxSeconds,
+    getTpLimit: () => TP_LIMIT
+  },
+  helpers: {
+    layoutXY, layoutLoudness, sampleAnalysers,
+    drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM
+  },
+  TransitionGuard,
+  GlitchDebug
+});
 
-  // Layout
-  layoutXY();
-  layoutLoudness();
-
-  // Sample analysers ONCE (always get fresh data for debugging)
-  sampleAnalysers();
-
-  // On long frames, AnalyserNode buffers may have timing skew between L/R reads.
-  // Use held (last known-good) buffers for display to prevent visual artifacts.
-  // This is NOT lying - it's showing the last accurate measurement rather than
-  // potentially corrupted data from a timing glitch.
-  const isLongFrame = frameDelta > FRAME_HOLD_THRESHOLD;
-  const useBufL = (isLongFrame && holdBufL) ? holdBufL : bufL;
-  const useBufR = (isLongFrame && holdBufR) ? holdBufR : bufR;
-
-  // Store good buffers for potential hold (only when frame timing is normal)
-  if (!isLongFrame) {
-    if (!holdBufL) holdBufL = new Float32Array(bufL.length);
-    if (!holdBufR) holdBufR = new Float32Array(bufR.length);
-    holdBufL.set(bufL);
-    holdBufR.set(bufR);
-  }
-
-  // DEBUG: Analyze actual (possibly glitched) buffers for accurate debugging
-  GlitchDebug.analyze(bufL, bufR, now);
-
-  // Stereo analysis engine - use held buffers for stable display
-  if (stereoAnalysis) {
-    stereoAnalysis.analyze(useBufL, useBufR);
-  }
-
-  // Goniometer - use held buffers on long frames
-  if (goniometer) {
-    goniometer.draw(useBufL, useBufR, TransitionGuard.shouldRender());
-  }
-
-  // Correlation meter - use held buffers on long frames
-  if (correlationMeter) {
-    correlationMeter.draw(useBufL, useBufR, TransitionGuard.shouldRender());
-  }
-
-  // Balance meter
-  if (balanceMeterUI) {
-    balanceMeterUI.draw(bufL, bufR);
-  }
-
-  // Spectrum analyzer
-  if (spectrumAnalyzerUI) {
-    spectrumAnalyzerUI.draw(xyCard, ac.sampleRate);
-  }
-
-  // M/S meter
-  if (msMeterUI && stereoAnalysis) {
-    msMeterUI.update(stereoAnalysis.getMidLevel(), stereoAnalysis.getSideLevel());
-  }
-
-  // Width meter
-  if (widthMeterUI && stereoAnalysis) {
-    widthMeterUI.draw(stereoAnalysis.getWidth(), stereoAnalysis.getWidthPeak());
-  }
-
-  // Rotation meter
-  if (rotationMeterUI && stereoAnalysis) {
-    rotationMeterUI.draw(stereoAnalysis.getRotation(), stereoAnalysis.getRotationHistory(), xyCard);
-  }
-
-  // Radar - render with history, momentary, maxSeconds, peakFlag (EXACT signature from original)
-  if (radar) {
-    const mVal = lufsM ? parseFloat(lufsM.dataset.v) : undefined;
-    radar.render(radarHistory, isFinite(mVal) ? mVal : undefined, radarMaxSeconds, peakIndicatorOn);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PPM - MUST run BEFORE fresh buffer reads (uses sampleAnalysers() buffer)
-  // EXACT order from audio-meters-grid.html: sampleAnalysers → updatePPM → ... → drawDBFS → drawTruePeak
-  // ═══════════════════════════════════════════════════════════════════════════
-  const nowSec = now / 1000;
-
-  // PPM - EXACT from audio-meters-grid.html lines 2316-2360
-  // Uses bufL/bufR from sampleAnalysers() - do NOT read fresh buffers here!
-  ppmMeter.update(bufL, bufR);
-  const ppmState = ppmMeter.getState();
-
-  // Text display uses PPM values (dBu scale) - EXACT from audio-meters-grid.html lines 2357-2358
-  if (ppmLVal) ppmLVal.textContent = ppmState.isSilentL ? '--.-' : formatDbu(ppmState.ppmL);
-  if (ppmRVal) ppmRVal.textContent = ppmState.isSilentR ? '--.-' : formatDbu(ppmState.ppmR);
-
-  // PPM peak-hold uses dBFS values (for bar drawing)
-  if (ppmState.displayL > ppmPeakHoldL) {
-    ppmPeakHoldL = ppmState.displayL;
-    ppmPeakTimeL = nowSec;
-  } else if (nowSec - ppmPeakTimeL > PPM_PEAK_HOLD_SEC) {
-    ppmPeakHoldL = ppmState.displayL;
-    ppmPeakTimeL = nowSec;
-  }
-  if (ppmState.displayR > ppmPeakHoldR) {
-    ppmPeakHoldR = ppmState.displayR;
-    ppmPeakTimeR = nowSec;
-  } else if (nowSec - ppmPeakTimeR > PPM_PEAK_HOLD_SEC) {
-    ppmPeakHoldR = ppmState.displayR;
-    ppmPeakTimeR = nowSec;
-  }
-
-  // Draw PPM bar with dBFS values (-54 to -9 range)
-  if (ppmCanvas) {
-    drawHBar_PPM(ppmCanvas, ppmState.displayL, ppmState.displayR, ppmPeakHoldL, ppmPeakHoldR);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RMS/dBFS - uses SAME buffers sampled at start of frame
-  // (previously re-sampled here causing potential timing issues)
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Buffers already filled by sampleAnalysers() at frame start
-  let rmsL = 0, rmsR = 0;
-  for (let i = 0; i < bufL.length; i++) {
-    rmsL += bufL[i] * bufL[i];
-    rmsR += bufR[i] * bufR[i];
-  }
-  rmsL = Math.sqrt(rmsL / bufL.length);
-  rmsR = Math.sqrt(rmsR / bufR.length);
-
-  // Smoothing
-  const dt = Math.max(0.001, (now - lastRmsTs) / 1000);
-  lastRmsTs = now;
-  const tau = 0.3;
-  const a = 1 - Math.exp(-dt / tau);
-  rmsHoldL += a * (rmsL - rmsHoldL);
-  rmsHoldR += a * (rmsR - rmsHoldR);
-
-  // EXACT from audio-meters-grid.html line 3554 - use + not ||
-  const dbfsL = 20 * Math.log10(rmsHoldL + 1e-12);
-  const dbfsR = 20 * Math.log10(rmsHoldR + 1e-12);
-
-  // Show "--.-" if signal is below bottom of scale (-60 dBFS)
-  const dbfsLStr = (dbfsL <= -59) ? '--.-' : formatDb(dbfsL, 1);
-  const dbfsRStr = (dbfsR <= -59) ? '--.-' : formatDb(dbfsR, 1);
-  if (dbL) dbL.textContent = dbfsLStr;
-  if (dbR) dbR.textContent = dbfsRStr;
-
-  // Draw dBFS bar
-  if (dbfs) {
-    drawHBar_DBFS(dbfs, dbfsL, dbfsR);
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // True Peak - uses SAME buffers sampled at start of frame
-  // (previously re-sampled here causing potential timing issues)
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Buffers already filled by sampleAnalysers() at frame start
-  truePeakMeter.update(bufL, bufR);
-  const tpState = truePeakMeter.getState();
-  if (tpL) tpL.textContent = formatDb(tpState.left, 1);
-  if (tpR) tpR.textContent = formatDb(tpState.right, 1);
-
-  // True Peak peak-hold
-  if (tpState.left > tpPeakHoldL) {
-    tpPeakHoldL = tpState.left;
-    tpPeakTimeL = nowSec;
-  } else if (nowSec - tpPeakTimeL > TP_PEAK_HOLD_SEC) {
-    tpPeakHoldL = tpState.left;
-    tpPeakTimeL = nowSec;
-  }
-  if (tpState.right > tpPeakHoldR) {
-    tpPeakHoldR = tpState.right;
-    tpPeakTimeR = nowSec;
-  } else if (nowSec - tpPeakTimeR > TP_PEAK_HOLD_SEC) {
-    tpPeakHoldR = tpState.right;
-    tpPeakTimeR = nowSec;
-  }
-
-  // Peak indicator for radar - EXACT from audio-meters-grid.html lines 3605-3612
-  const currentTruePeak = Math.max(tpState.left, tpState.right);
-  if (currentTruePeak >= TP_LIMIT) {
-    peakIndicatorOn = true;
-    peakIndicatorLastTrigger = now;
-  } else if (now - peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
-    peakIndicatorOn = false;
-  }
-
-  // Draw True Peak bar
-  if (tp) {
-    drawDiodeBar_TP(tp, tpState.left, tpState.right, tpPeakHoldL, tpPeakHoldR);
-  }
-
-  // Uptime
-  const uptimeSec = (performance.now() - startTs) / 1000;
-  const h = Math.floor(uptimeSec / 3600);
-  const m = Math.floor((uptimeSec % 3600) / 60);
-  const s = Math.floor(uptimeSec % 60);
-  const ms = Math.floor((uptimeSec * 10) % 10);
-  if (uptimeEl) uptimeEl.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${ms}`;
-  if (statusSummary) statusSummary.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-
-  requestAnimationFrame(renderLoop);
-}
+// Start the 60 Hz render loop
+startRenderLoop();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVENT BINDINGS
@@ -1819,18 +1140,7 @@ function bindEvents() {
     r128Reset.onclick = () => {
       lufsMeter.reset();
       truePeakMeter.reset();
-      tpMaxL = -Infinity;
-      tpMaxR = -Infinity;
-      tpPeakHoldL = -60;
-      tpPeakHoldR = -60;
-      ppmPeakHoldL = -60;
-      ppmPeakHoldR = -60;
-      rmsHoldL = 0;
-      rmsHoldR = 0;
-      startTs = performance.now();
-      radarHistory = [];  // Clear radar history
-      peakIndicatorOn = false;
-      peakIndicatorLastTrigger = 0;
+      resetMeterState();
       // Update display with fixed-width placeholders (EXACT from original)
       if (lufsM) lufsM.textContent = '--.- LUFS';
       if (lufsS) lufsS.textContent = '--.- LUFS';
@@ -1842,14 +1152,15 @@ function bindEvents() {
     };
   }
 
-  // --- Browser Source Controls - EXACT from audio-meters-grid.html lines 3793-3831 ---
+  // --- Browser Source Controls ---
+  // Uses SourceController for unified monitor management
   if (btnSysMonMute) btnSysMonMute.onclick = toggleSysMonitorMute;
 
   if (sysMonGainEl) {
     sysMonGainEl.addEventListener('input', () => {
       if (sysMonVal) sysMonVal.value = Math.round(sysMonGainEl.value);
-      if (sysMonGain && !sysMonitorMuted) {
-        sysMonGain.gain.value = parseFloat(sysMonGainEl.value) / 100;
+      if (!sysMonitorMuted) {
+        sourceController.setBrowserMonitor(parseFloat(sysMonGainEl.value), false);
       }
     });
   }
@@ -1857,16 +1168,16 @@ function bindEvents() {
     sysMonVal.addEventListener('change', e => {
       if (sysMonGainEl) sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
       sysMonVal.value = Math.round(sysMonGainEl?.value || 0);
-      if (sysMonGain && !sysMonitorMuted) {
-        sysMonGain.gain.value = parseFloat(sysMonGainEl?.value || 0) / 100;
+      if (!sysMonitorMuted) {
+        sourceController.setBrowserMonitor(parseFloat(sysMonGainEl?.value || 0), false);
       }
     });
     sysMonVal.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         if (sysMonGainEl) sysMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
         sysMonVal.value = Math.round(sysMonGainEl?.value || 0);
-        if (sysMonGain && !sysMonitorMuted) {
-          sysMonGain.gain.value = parseFloat(sysMonGainEl?.value || 0) / 100;
+        if (!sysMonitorMuted) {
+          sourceController.setBrowserMonitor(parseFloat(sysMonGainEl?.value || 0), false);
         }
         e.target.blur();
       }
@@ -1879,14 +1190,15 @@ function bindEvents() {
   }
   if (sysTrimReset) sysTrimReset.addEventListener('click', () => setSysTrim(SYS_TRIM_DEFAULT));
 
-  // --- External Source Controls - EXACT from audio-meters-grid.html lines 4080-4200 ---
+  // --- External Source Controls ---
+  // Uses SourceController for unified monitor management
   if (btnExtMonMute) btnExtMonMute.onclick = toggleExtMonitorMute;
 
   if (extMonGainEl) {
     extMonGainEl.addEventListener('input', () => {
       if (extMonVal) extMonVal.value = Math.round(extMonGainEl.value);
-      if (extMonGainNode && !extMonitorMuted) {
-        extMonGainNode.gain.value = parseFloat(extMonGainEl.value) / 100;
+      if (!extMonitorMuted) {
+        sourceController.setExternalMonitor(parseFloat(extMonGainEl.value), false);
       }
     });
   }
@@ -1894,16 +1206,16 @@ function bindEvents() {
     extMonVal.addEventListener('change', e => {
       if (extMonGainEl) extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
       extMonVal.value = Math.round(extMonGainEl?.value || 0);
-      if (extMonGainNode && !extMonitorMuted) {
-        extMonGainNode.gain.value = parseFloat(extMonGainEl?.value || 0) / 100;
+      if (!extMonitorMuted) {
+        sourceController.setExternalMonitor(parseFloat(extMonGainEl?.value || 0), false);
       }
     });
     extMonVal.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         if (extMonGainEl) extMonGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
         extMonVal.value = Math.round(extMonGainEl?.value || 0);
-        if (extMonGainNode && !extMonitorMuted) {
-          extMonGainNode.gain.value = parseFloat(extMonGainEl?.value || 0) / 100;
+        if (!extMonitorMuted) {
+          sourceController.setExternalMonitor(parseFloat(extMonGainEl?.value || 0), false);
         }
         e.target.blur();
       }
@@ -1946,22 +1258,12 @@ function bindEvents() {
   if (targetPreset) {
     targetPreset.onchange = () => {
       LOUDNESS_TARGET = parseInt(targetPreset.value, 10);
+      appState.set({ targetLufs: LOUDNESS_TARGET });
       if (radar) radar.setTarget(LOUDNESS_TARGET);
       // Reset R128 when target changes (like original resetR128)
       lufsMeter.reset();
       truePeakMeter.reset();
-      tpMaxL = -Infinity;
-      tpMaxR = -Infinity;
-      tpPeakHoldL = -60;
-      tpPeakHoldR = -60;
-      ppmPeakHoldL = -60;
-      ppmPeakHoldR = -60;
-      rmsHoldL = 0;
-      rmsHoldR = 0;
-      startTs = performance.now();
-      radarHistory = [];
-      peakIndicatorOn = false;
-      peakIndicatorLastTrigger = 0;
+      resetMeterState();
       // Update display with fixed-width placeholders
       if (lufsM) lufsM.textContent = '--.- LUFS';
       if (lufsS) lufsS.textContent = '--.- LUFS';
@@ -1976,11 +1278,12 @@ function bindEvents() {
   if (tpLimitSelect) {
     tpLimitSelect.onchange = () => {
       TP_LIMIT = parseInt(tpLimitSelect.value, 10);
+      appState.set({ truePeakLimit: TP_LIMIT });
       setTpLimit(TP_LIMIT);
       updateTpLimitDisplay();
       // Reset TP over flag when limit changes
-      peakIndicatorOn = false;
-      peakIndicatorLastTrigger = 0;
+      meterState.peakIndicatorOn = false;
+      meterState.peakIndicatorLastTrigger = 0;
     };
   }
 
@@ -1988,16 +1291,15 @@ function bindEvents() {
     radarSweep.onchange = () => {
       radarMaxSeconds = parseInt(radarSweep.value, 10);
       // Clear radar history when sweep time changes
-      radarHistory = [];
+      meterState.radarHistory = [];
     };
   }
 
-  // Generator monitor controls - EXACT from audio-meters-grid.html lines 4374-4386
+  // Generator monitor controls
+  // Uses SourceController for unified monitor management
   function toggleGenMonitorMute() {
-    if (!genMonGain) return;
-    monitorMuted = !monitorMuted;
-    genMonGain.gain.value = monitorMuted ? 0 : parseFloat(monGainEl.value) / 100;
-    if (monVal) monVal.value = Math.round(monGainEl.value);
+    monitorMuted = sourceController.toggleGeneratorMonitorMute();
+    if (monVal) monVal.value = Math.round(monGainEl?.value || 0);
     // RED when muted, neutral when not muted
     if (monitorMuted) {
       if (btnMonMute) { btnMonMute.classList.add('btn-muted'); btnMonMute.classList.remove('btn-ghost'); }
@@ -2012,8 +1314,8 @@ function bindEvents() {
   if (monGainEl) {
     monGainEl.addEventListener('input', () => {
       if (monVal) monVal.value = Math.round(monGainEl.value);
-      if (genMonGain && !monitorMuted) {
-        genMonGain.gain.value = parseFloat(monGainEl.value) / 100;
+      if (!monitorMuted) {
+        sourceController.setGeneratorMonitor(parseFloat(monGainEl.value), false);
       }
     });
   }
@@ -2022,16 +1324,16 @@ function bindEvents() {
     monVal.addEventListener('change', e => {
       if (monGainEl) monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
       monVal.value = Math.round(monGainEl?.value || 0);
-      if (genMonGain && !monitorMuted) {
-        genMonGain.gain.value = parseFloat(monGainEl?.value || 0) / 100;
+      if (!monitorMuted) {
+        sourceController.setGeneratorMonitor(parseFloat(monGainEl?.value || 0), false);
       }
     });
     monVal.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         if (monGainEl) monGainEl.value = clamp(parseFloat(e.target.value) || 0, 0, 100);
         monVal.value = Math.round(monGainEl?.value || 0);
-        if (genMonGain && !monitorMuted) {
-          genMonGain.gain.value = parseFloat(monGainEl?.value || 0) / 100;
+        if (!monitorMuted) {
+          sourceController.setGeneratorMonitor(parseFloat(monGainEl?.value || 0), false);
         }
         e.target.blur();
       }
@@ -2307,253 +1609,6 @@ function setupObservers() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DRAG AND DROP SYSTEM - EXACT from audio-meters-grid.html lines 4506-4840
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Drag state
-let draggedElement = null;
-let isDragging = false;
-const dragOffset = { x: 0, y: 0 };
-
-// ResizeObserver debouncer
-const resizeDebouncer = new Map();
-
-function scheduleLayoutUpdate(element, callback) {
-  if (resizeDebouncer.has(element)) {
-    cancelAnimationFrame(resizeDebouncer.get(element));
-  }
-  const rafId = requestAnimationFrame(() => {
-    try {
-      resizeDebouncer.delete(element);
-      callback();
-    } catch (error) {
-      console.error('Layout update failed:', error);
-      resizeDebouncer.delete(element);
-    }
-  });
-  resizeDebouncer.set(element, rafId);
-}
-
-// Canvas state preservation for vectorscope
-function preserveCanvasState() {
-  if (!xy || !xy.width || !xy.height) {
-    return () => {};
-  }
-  try {
-    const ctx = xy.getContext('2d');
-    const canvasState = {
-      width: xy.width,
-      height: xy.height,
-      imageData: ctx.getImageData(0, 0, xy.width, xy.height)
-    };
-    return () => {
-      try {
-        if (xy.width === canvasState.width && xy.height === canvasState.height) {
-          ctx.putImageData(canvasState.imageData, 0, 0);
-        }
-      } catch (error) {
-        console.warn('Canvas restoration failed:', error);
-      }
-    };
-  } catch (error) {
-    return () => {};
-  }
-}
-
-function initDragAndDrop() {
-  const meterPanels = document.querySelectorAll('.meter');
-
-  meterPanels.forEach(panel => {
-    panel.addEventListener('mousedown', handleDragStart);
-    panel.addEventListener('dragover', handleDragOver);
-    panel.addEventListener('drop', handleDrop);
-    panel.addEventListener('touchstart', handleTouchStart);
-    panel.draggable = true;
-    panel.addEventListener('dragstart', handleDragStartNative);
-  });
-
-  document.addEventListener('mousemove', handleDragMove);
-  document.addEventListener('mouseup', handleDragEnd);
-  document.addEventListener('touchmove', handleTouchMove);
-  document.addEventListener('touchend', handleTouchEnd);
-}
-
-function handleDragStart(e) {
-  const rect = e.currentTarget.getBoundingClientRect();
-  dragOffset.x = e.clientX - rect.left;
-  dragOffset.y = e.clientY - rect.top;
-  draggedElement = e.currentTarget;
-}
-
-function handleDragStartNative(e) {
-  document.querySelectorAll('.meter.dragging').forEach(el => {
-    el.classList.remove('dragging');
-  });
-
-  draggedElement = e.currentTarget;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/html', e.currentTarget.outerHTML);
-
-  const restoreCanvas = preserveCanvasState();
-  isDragLayoutFrozen = true;
-  isDragging = true;
-
-  setTimeout(() => {
-    if (draggedElement) {
-      draggedElement.classList.add('dragging');
-      restoreCanvas();
-    }
-  }, 0);
-}
-
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-
-  document.querySelectorAll('.meter').forEach(el => {
-    el.classList.remove('drag-over');
-  });
-
-  if (e.currentTarget !== draggedElement && e.currentTarget.classList.contains('meter')) {
-    e.currentTarget.classList.add('drag-over');
-  }
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-
-  const dropTarget = e.currentTarget;
-  dropTarget.classList.remove('drag-over');
-
-  if (draggedElement && dropTarget !== draggedElement && dropTarget.classList.contains('meter')) {
-    swapElements(draggedElement, dropTarget);
-  }
-
-  isDragLayoutFrozen = false;
-
-  if (draggedElement) {
-    draggedElement.classList.remove('dragging');
-    draggedElement = null;
-  }
-
-  isDragging = false;
-
-  document.querySelectorAll('.meter').forEach(el => {
-    el.classList.remove('drag-over');
-  });
-
-  scheduleLayoutUpdate(xyCard, layoutXY);
-}
-
-function handleTouchStart(e) {
-  const touch = e.touches[0];
-  const rect = e.currentTarget.getBoundingClientRect();
-  dragOffset.x = touch.clientX - rect.left;
-  dragOffset.y = touch.clientY - rect.top;
-
-  draggedElement = e.currentTarget;
-  draggedElement.classList.add('dragging');
-  isDragging = true;
-  isDragLayoutFrozen = true;
-
-  e.preventDefault();
-}
-
-function handleDragMove(e) {
-  if (!draggedElement) return;
-
-  const rect = draggedElement.getBoundingClientRect();
-  const currentX = e.clientX;
-  const currentY = e.clientY;
-  const initialX = rect.left + dragOffset.x;
-  const initialY = rect.top + dragOffset.y;
-
-  const distance = Math.sqrt(
-    Math.pow(currentX - initialX, 2) + Math.pow(currentY - initialY, 2)
-  );
-
-  if (distance > 5 && !isDragging) {
-    isDragging = true;
-    isDragLayoutFrozen = true;
-
-    document.querySelectorAll('.meter.dragging').forEach(el => {
-      if (el !== draggedElement) {
-        el.classList.remove('dragging');
-      }
-    });
-
-    draggedElement.classList.add('dragging');
-  }
-}
-
-function handleTouchMove(e) {
-  if (!isDragging || !draggedElement) return;
-
-  const touch = e.touches[0];
-  const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
-
-  document.querySelectorAll('.meter').forEach(el => {
-    el.classList.remove('drag-over');
-  });
-
-  if (elementUnderTouch && elementUnderTouch.classList.contains('meter') && elementUnderTouch !== draggedElement) {
-    elementUnderTouch.classList.add('drag-over');
-  }
-
-  e.preventDefault();
-}
-
-function handleDragEnd(e) {
-  if (draggedElement) {
-    draggedElement.classList.remove('dragging');
-  }
-
-  draggedElement = null;
-  isDragging = false;
-  isDragLayoutFrozen = false;
-  scheduleLayoutUpdate(xyCard, layoutXY);
-}
-
-function handleTouchEnd(e) {
-  if (!isDragging || !draggedElement) return;
-
-  const touch = e.changedTouches[0];
-  const elementUnderTouch = document.elementFromPoint(touch.clientX, touch.clientY);
-
-  if (elementUnderTouch && elementUnderTouch.classList.contains('meter') && elementUnderTouch !== draggedElement) {
-    swapElements(draggedElement, elementUnderTouch);
-  }
-
-  draggedElement.classList.remove('dragging');
-  document.querySelectorAll('.meter').forEach(el => {
-    el.classList.remove('drag-over');
-  });
-
-  draggedElement = null;
-  isDragging = false;
-  isDragLayoutFrozen = false;
-  scheduleLayoutUpdate(xyCard, layoutXY);
-}
-
-function swapElements(el1, el2) {
-  el1.classList.add('transitioning');
-  el2.classList.add('transitioning');
-
-  const temp = document.createElement('div');
-  temp.style.display = 'none';
-
-  el1.parentNode.insertBefore(temp, el1);
-  el2.parentNode.insertBefore(el1, el2);
-  temp.parentNode.insertBefore(el2, temp);
-  temp.remove();
-
-  setTimeout(() => {
-    el1.classList.remove('transitioning');
-    el2.classList.remove('transitioning');
-  }, 400);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // INITIALIZATION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2591,10 +1646,15 @@ function init() {
   updateGenModeDisplay();
 
   // Initialize drag and drop
-  initDragAndDrop();
+  initDragDrop({
+    dom: { xy, xyCard },
+    layoutCallback: layoutXY,
+    setLayoutFrozen: (v) => { isDragLayoutFrozen = v; }
+  });
+  setupDragAndDrop();
 
   // Start render loop
-  requestAnimationFrame(renderLoop);
+  startRenderLoop();
 
   console.log('[Bootstrap] Initialization complete');
 }
