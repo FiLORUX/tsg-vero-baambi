@@ -420,7 +420,7 @@ function setSysTrim(dB, save = true) {
   if (sysTrimRange) sysTrimRange.value = sysTrimDb;
   if (sysTrimVal) sysTrimVal.value = Math.round(sysTrimDb);
   sourceController.setBrowserTrim(sysTrimDb);
-  if (save) { try { localStorage.setItem(SYS_TRIM_STORAGE_KEY, sysTrimDb.toFixed(1)); } catch(e) {} }
+  if (save) { try { localStorage.setItem(SYS_TRIM_STORAGE_KEY, sysTrimDb.toFixed(1)); } catch(e) { console.warn('Could not save browser trim setting'); } }
 }
 
 // Restore saved browser trim
@@ -434,7 +434,7 @@ function setExtTrim(dB, save = true) {
   if (extTrimRange) extTrimRange.value = extTrimDb;
   if (extTrimVal) extTrimVal.value = Math.round(extTrimDb);
   sourceController.setExternalTrim(extTrimDb);
-  if (save) try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch (e) {}
+  if (save) try { localStorage.setItem(EXT_TRIM_STORAGE_KEY, extTrimDb.toFixed(1)); } catch (e) { console.warn('Could not save external trim setting'); }
 }
 
 // Restore saved external trim
@@ -703,7 +703,7 @@ async function startExternalCapture() {
     const deviceId = extDeviceSelect?.value;
 
     // Persist device selection for session restore
-    if (deviceId) try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch {}
+    if (deviceId) try { localStorage.setItem(EXT_DEVICE_STORAGE_KEY, deviceId); } catch { console.warn('Could not save device selection'); }
 
     // Initialise trim from persisted state before capture
     sourceController.setExternalTrim(extTrimDb);
