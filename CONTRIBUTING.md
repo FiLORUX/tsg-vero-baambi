@@ -2,10 +2,6 @@
 
 ## Code Standards
 
-### Language
-- **British English exclusively**: colour, behaviour, initialise, centre, metre (unit)
-- Variable names, comments, documentation — all British spelling
-
 ### Style
 - ES2023+ modules
 - No transpilation, no build step
