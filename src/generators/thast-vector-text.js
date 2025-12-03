@@ -310,7 +310,16 @@ export class ThastVectorTextGenerator {
     }
 
     const scale = this.config.outputScale;
-    return [x * scale, y * scale];
+
+    // Convert X/Y coordinates to L/R audio that produces correct M/S display
+    // Goniometer uses: M = 0.5*(L+R) (vertical), S = 0.5*(R-L) (horizontal)
+    // We want: M = y, S = x
+    // So: 0.5*(L+R) = y → L+R = 2y
+    //     0.5*(R-L) = x → R-L = 2x
+    // Solving: L = y - x, R = y + x
+    const left = (y - x) * scale;
+    const right = (y + x) * scale;
+    return [left, right];
   }
 
   /**

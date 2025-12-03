@@ -166,6 +166,125 @@ export class Goniometer {
   }
 
   /**
+   * Draw goniometer from pre-computed M/S point data (for remote metering).
+   *
+   * This method accepts an array of normalized M/S coordinates, allowing the
+   * probe to compute the expensive L→M/S transform and downsample once,
+   * then transmit only the essential visualization data.
+   *
+   * @param {Float32Array|number[]} points - Interleaved [M0,S0, M1,S1, ...] normalized to ±1
+   * @param {boolean} shouldRender - TransitionGuard.shouldRender() result
+   */
+  drawFromPoints(points, shouldRender = true) {
+    if (!this.ctx || !this.canvas) return;
+
+    const w = this.canvas.width, h = this.canvas.height;
+    if (!w || !h) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = this.ctx;
+
+    // Clear canvas
+    ctx.fillStyle = '#0d0f11';
+    ctx.fillRect(0, 0, w, h);
+
+    // Draw points if we have data and should render
+    if (shouldRender && points && points.length >= 2) {
+      const numPoints = Math.floor(points.length / 2);
+
+      ctx.globalAlpha = 0.85;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(105,191,255,.85)';
+      const px = Math.max(1, Math.floor(dpr));
+
+      // Line settings
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      let prevX = null, prevY = null;
+      for (let i = 0; i < numPoints; i++) {
+        const M = points[i * 2];      // Mid (normalized ±1)
+        const S = points[i * 2 + 1];  // Side (normalized ±1)
+
+        // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
+        // Points are already M/S transformed, just apply gain and position
+        const x = (S * VECTORSCOPE_GAIN * w / 2) + w / 2;
+        const y = h / 2 - (M * VECTORSCOPE_GAIN * h / 2);
+
+        if (prevX !== null) {
+          // Glow layer
+          ctx.globalAlpha = .15;
+          ctx.strokeStyle = 'rgba(105,191,255,.5)';
+          ctx.lineWidth = 3 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+
+          // Main line
+          ctx.globalAlpha = .35;
+          ctx.strokeStyle = 'rgba(105,191,255,.35)';
+          ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(x, y);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = .85;
+        ctx.fillRect(x, y, px, px);
+        prevX = x; prevY = y;
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Draw grid and labels (same as draw())
+    this._drawGrid(w, h, dpr, ctx);
+  }
+
+  /**
+   * Draw the static grid overlay (shared between draw() and drawFromPoints())
+   * @private
+   */
+  _drawGrid(w, h, dpr, ctx) {
+    // Grid lines: M/S cross + L/R diagonals
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#3a4855';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
+    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+    ctx.moveTo(0, 0); ctx.lineTo(w, h);
+    ctx.moveTo(w, 0); ctx.lineTo(0, h);
+    ctx.stroke();
+
+    // Axis labels
+    const fontSize = Math.round(9 * dpr);
+    ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillStyle = '#6b7a8a';
+    ctx.textBaseline = 'middle';
+
+    const margin = 12 * dpr;
+    ctx.textAlign = 'left';
+    ctx.fillText('+L', margin, margin);
+    ctx.textAlign = 'center';
+    ctx.fillText('+M', w / 2, margin);
+    ctx.textAlign = 'right';
+    ctx.fillText('+R', w - margin, margin);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('–S', margin, h / 2);
+    ctx.textAlign = 'right';
+    ctx.fillText('+S', w - margin, h / 2);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('–L', margin, h - margin);
+    ctx.textAlign = 'center';
+    ctx.fillText('–M', w / 2, h - margin);
+    ctx.textAlign = 'right';
+    ctx.fillText('–R', w - margin, h - margin);
+  }
+
+  /**
    * Resize canvas to match element size
    */
   resize() {
@@ -179,4 +298,38 @@ export class Goniometer {
       this.canvas.height = h;
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REMOTE GONIOMETER UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Pre-compute M/S points from L/R audio buffers for remote transmission.
+ * This extracts the essential visualization data at a fraction of the bandwidth.
+ *
+ * @param {Float32Array} bufL - Left channel samples
+ * @param {Float32Array} bufR - Right channel samples
+ * @param {number} [numPoints=128] - Number of output points (downsampling)
+ * @returns {Float32Array} Interleaved [M0,S0, M1,S1, ...] normalized points
+ */
+export function computeGoniometerPoints(bufL, bufR, numPoints = 128) {
+  const n = Math.min(bufL.length, bufR.length);
+  if (n === 0) return new Float32Array(0);
+
+  const output = new Float32Array(numPoints * 2);
+  const step = Math.max(1, Math.floor(n / numPoints));
+
+  for (let i = 0; i < numPoints; i++) {
+    const idx = Math.min(i * step, n - 1);
+    const L = bufL[idx];
+    const R = bufR[idx];
+
+    // M/S transform (DK/RTW standard)
+    // Must match draw() which uses M = 0.5*(L+R), S = 0.5*(R-L)
+    output[i * 2] = 0.5 * (L + R);      // Mid
+    output[i * 2 + 1] = 0.5 * (R - L);  // Side
+  }
+
+  return output;
 }

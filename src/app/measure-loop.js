@@ -168,7 +168,18 @@ function measureLoop() {
   if (!activeCapture) return;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // LUFS measurement
+  // REMOTE MODE: Skip local metering - handleRemoteMetrics updates displays
+  // ─────────────────────────────────────────────────────────────────────────
+  if (activeCapture === 'remote') {
+    // In remote mode, all LUFS/TP/radar updates come from handleRemoteMetrics
+    // Only update elapsed time display here
+    const elapsed = performance.now() - meterState.startTs;
+    if (dom.r128Time) dom.r128Time.textContent = formatTime(elapsed);
+    return;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LUFS measurement (local modes only)
   // ─────────────────────────────────────────────────────────────────────────
   const energy = meters.lufsMeter.calculateBlockEnergy(meters.bufL, meters.bufR);
   meters.lufsMeter.pushBlock(energy);
