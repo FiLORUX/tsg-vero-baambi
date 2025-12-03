@@ -83,9 +83,9 @@ export class BalanceMeter {
     ctx.strokeRect(barX, barY, barW, barH);
 
     // Centre line (0 dB)
-    const centerX = barX + barW / 2;
+    const centreX = barX + barW / 2;
     ctx.fillStyle = '#5a6a7a';
-    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+    ctx.fillRect(centreX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
     // Tick marks at ±3, ±6, ±12 dB
     const ticks = [-12, -6, -3, 3, 6, 12];
@@ -94,13 +94,13 @@ export class BalanceMeter {
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
     for (const t of ticks) {
-      const xPos = centerX + (t / 12) * (barW / 2);
+      const xPos = centreX + (t / 12) * (barW / 2);
       ctx.fillRect(xPos - 0.5, barY - 2 * dpr, 1, barH + 4 * dpr);
     }
 
     // Draw balance bar
-    const devX = centerX + (this.monoDevHold / 12) * (barW / 2);
-    const devW = Math.abs(devX - centerX);
+    const devX = centreX + (this.monoDevHold / 12) * (barW / 2);
+    const devW = Math.abs(devX - centreX);
 
     // Colour based on deviation
     let col;
@@ -115,9 +115,9 @@ export class BalanceMeter {
     // Positive balance (L > R) → bar to LEFT (towards L label)
     // Negative balance (R > L) → bar to RIGHT (towards R label)
     if (this.monoDevHold >= 0) {
-      ctx.fillRect(centerX - devW, barY + 2, devW, barH - 4);
+      ctx.fillRect(centreX - devW, barY + 2, devW, barH - 4);
     } else {
-      ctx.fillRect(centerX, barY + 2, devW, barH - 4);
+      ctx.fillRect(centreX, barY + 2, devW, barH - 4);
     }
     ctx.globalAlpha = 1;
 
@@ -178,9 +178,9 @@ export class BalanceMeter {
     ctx.strokeRect(barX, barY, barW, barH);
 
     // Centre line (0 dB)
-    const centerX = barX + barW / 2;
+    const centreX = barX + barW / 2;
     ctx.fillStyle = '#5a6a7a';
-    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+    ctx.fillRect(centreX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
     // Tick marks at ±3, ±6, ±12 dB
     const ticks = [-12, -6, -3, 3, 6, 12];
@@ -189,13 +189,13 @@ export class BalanceMeter {
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
     for (const t of ticks) {
-      const xPos = centerX + (t / 12) * (barW / 2);
+      const xPos = centreX + (t / 12) * (barW / 2);
       ctx.fillRect(xPos - 0.5, barY - 2 * dpr, 1, barH + 4 * dpr);
     }
 
     // Draw balance bar
-    const devX = centerX + (this.monoDevHold / 12) * (barW / 2);
-    const devW = Math.abs(devX - centerX);
+    const devX = centreX + (this.monoDevHold / 12) * (barW / 2);
+    const devW = Math.abs(devX - centreX);
 
     // Colour based on deviation
     let col;
@@ -208,9 +208,9 @@ export class BalanceMeter {
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
     if (this.monoDevHold >= 0) {
-      ctx.fillRect(centerX - devW, barY + 2, devW, barH - 4);
+      ctx.fillRect(centreX - devW, barY + 2, devW, barH - 4);
     } else {
-      ctx.fillRect(centerX, barY + 2, devW, barH - 4);
+      ctx.fillRect(centreX, barY + 2, devW, barH - 4);
     }
     ctx.globalAlpha = 1;
 

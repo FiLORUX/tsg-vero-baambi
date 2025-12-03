@@ -110,7 +110,7 @@ export function calculateCorrelation(leftBuffer, rightBuffer) {
  *
  * @param {Float32Array} leftBuffer - Left channel samples
  * @param {Float32Array} rightBuffer - Right channel samples
- * @returns {number} Balance (−1 = full left, 0 = center, +1 = full right)
+ * @returns {number} Balance (−1 = full left, 0 = centre, +1 = full right)
  */
 export function calculateBalance(leftBuffer, rightBuffer) {
   let sumL = 0;
@@ -287,7 +287,7 @@ export class StereoMeter {
  */
 export function lrToMs(left, right) {
   return {
-    mid: (left + right) * 0.5,   // Mono content (center)
+    mid: (left + right) * 0.5,   // Mono content (centre)
     side: (left - right) * 0.5  // Stereo difference
   };
 }
@@ -327,16 +327,16 @@ export function getCorrelationZone(correlation) {
  * Get CSS colour for correlation value.
  *
  * @param {number} correlation - Correlation value (−1 to +1)
- * @param {Object} [colors] - Colour map
+ * @param {Object} [colours] - Colour map
  * @returns {string} CSS colour
  */
-export function getCorrelationColor(correlation, colors = {
+export function getCorrelationColour(correlation, colours = {
   good: '#00d4aa',
   caution: '#ffaa00',
   problem: '#ff4444'
 }) {
   const zone = getCorrelationZone(correlation);
-  return colors[zone];
+  return colours[zone];
 }
 
 /**
@@ -362,7 +362,7 @@ export function formatCorrelation(correlation, decimals = 2) {
  */
 export function formatBalance(balance) {
   if (!isFinite(balance) || Math.abs(balance) < 0.05) {
-    return 'C'; // Center
+    return 'C'; // Centre
   }
 
   // Convert to approximate dB difference

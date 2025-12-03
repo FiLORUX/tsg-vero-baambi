@@ -101,9 +101,9 @@ import {
 
 // UI components
 import {
-  DEFAULT_COLORS,
-  getLoudnessColor,
-  getCorrelationColor,
+  DEFAULT_COLOURS,
+  getLoudnessColour,
+  getCorrelationColour,
   // Meter bars
   MeterBar,
   StereoMeterBar,
@@ -270,9 +270,9 @@ export {
   formatTime,
   clamp,
   dbToGain,
-  // Colors
-  DEFAULT_COLORS,
-  getLoudnessColor,
+  // Colours
+  DEFAULT_COLOURS,
+  getLoudnessColour,
   // UI Components
   MeterBar,
   StereoMeterBar,

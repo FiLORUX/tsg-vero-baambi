@@ -126,9 +126,9 @@ export class Goniometer {
     ctx.strokeStyle = '#3a4855';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    // Vertical center line (MONO axis)
+    // Vertical centre line (MONO axis)
     ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
-    // Horizontal center line (SIDE axis)
+    // Horizontal centre line (SIDE axis)
     ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
     // Diagonal lines (L and R directions)
     ctx.moveTo(0, 0); ctx.lineTo(w, h);      // L direction (top-left to bottom-right)

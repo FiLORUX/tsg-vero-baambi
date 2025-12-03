@@ -88,9 +88,6 @@ export function normalise(value, min, max) {
   return (value - min) / (max - min);
 }
 
-// Legacy alias for backwards compatibility
-export const normalize = normalise;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // dB / LINEAR CONVERSIONS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -280,9 +277,6 @@ export function radToDeg(radians) {
 export function normaliseAngle(angle) {
   return ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 }
-
-// Legacy alias for backwards compatibility
-export const normalizeAngle = normaliseAngle;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PERCENTILES / STATISTICS

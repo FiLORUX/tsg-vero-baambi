@@ -19,7 +19,7 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// Colours and themes (British English canonical exports)
+// Colours and themes
 export {
   DEFAULT_COLOURS,
   getLoudnessColour,
@@ -32,13 +32,6 @@ export {
   createMeterGradient,
   createTPGradient,
   getColoursFromCSS
-} from './colours.js';
-
-// Legacy aliases for backwards compatibility (American spelling → British)
-export {
-  DEFAULT_COLOURS as DEFAULT_COLORS,
-  getLoudnessColour as getLoudnessColor,
-  getCorrelationColour as getCorrelationColor
 } from './colours.js';
 
 // Meter bar components
