@@ -85,7 +85,55 @@ export const meterState = {
 
   // Frame hold buffers for glitch protection
   holdBufL: null,
-  holdBufR: null
+  holdBufR: null,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // REMOTE METERING STATE
+  // When activeCapture === 'remote', these values are used instead of local
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // True Peak (instantaneous, from remote)
+  remoteTpL: -60,
+  remoteTpR: -60,
+
+  // PPM (instantaneous dBFS, from remote)
+  remotePpmL: -60,
+  remotePpmR: -60,
+
+  // RMS (dBFS, from remote)
+  remoteRmsL: -60,
+  remoteRmsR: -60,
+
+  // Stereo correlation (from remote)
+  remoteCorrelation: 0,
+
+  // Balance (from remote)
+  remoteBalance: 0,
+
+  // Stereo width (from remote, 0-1 range)
+  remoteWidth: 0,
+  remoteWidthPeak: 0,
+
+  // M/S levels (from remote, dB)
+  remoteMidLevel: -60,
+  remoteSideLevel: -60,
+
+  // Rotation (from remote, -1 to +1)
+  remoteRotation: 0,
+  remoteRotationHistory: [],
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VISUALIZATION DATA (from remote probe)
+  // Pre-computed on probe for efficient transmission without raw audio
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Goniometer M/S points: [M0,S0, M1,S1, ...] normalized ±1
+  // 128 points = 256 floats, ~1 KB per frame
+  remoteGoniometerPoints: null,
+
+  // 1/3-octave spectrum bands: 31 dB values
+  // ISO 266 frequencies from 20 Hz to 20 kHz
+  remoteSpectrumBands: null
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,4 +184,43 @@ export function resetMeterState() {
  */
 export function getElapsedSeconds() {
   return (performance.now() - meterState.startTs) / 1000;
+}
+
+/**
+ * Reset remote meter state to idle values.
+ * Called when the subscribed probe goes offline.
+ */
+export function resetRemoteMeterState() {
+  // True Peak
+  meterState.remoteTpL = -60;
+  meterState.remoteTpR = -60;
+
+  // PPM
+  meterState.remotePpmL = -60;
+  meterState.remotePpmR = -60;
+
+  // RMS
+  meterState.remoteRmsL = -60;
+  meterState.remoteRmsR = -60;
+
+  // Stereo analysis
+  meterState.remoteCorrelation = 0;
+  meterState.remoteBalance = 0;
+  meterState.remoteWidth = 0;
+  meterState.remoteWidthPeak = 0;
+  meterState.remoteMidLevel = -60;
+  meterState.remoteSideLevel = -60;
+  meterState.remoteRotation = 0;
+  meterState.remoteRotationHistory = [];
+
+  // Visualization data
+  meterState.remoteGoniometerPoints = null;
+  meterState.remoteSpectrumBands = null;
+
+  // R128 cumulative values
+  meterState.tpMaxL = -Infinity;
+  meterState.tpMaxR = -Infinity;
+
+  // Radar history (clear so radar shows empty)
+  meterState.radarHistory = [];
 }

@@ -182,6 +182,7 @@ function handleMessage(socket, data) {
       break;
 
     case 'list':
+      console.log('[Broker] Client requested probe list');
       handleListProbes(socket);
       break;
 
