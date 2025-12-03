@@ -612,11 +612,16 @@ async function enumerateAudioDevices() {
 // --- Unified Start Capture ---
 // EXACT from audio-meters-grid.html lines 3960-4000
 async function startCapture() {
-  await ac.resume();
-
-  // Stop any existing capture from OTHER sources first
+  // Stop any existing capture from OTHER sources first - SYNCHRONOUSLY
+  // This is critical because getDisplayMedia() requires immediate user gesture context
   if (activeCapture && activeCapture !== selectedInputMode) {
-    await stopActiveCapture();
+    stopActiveCaptureSync();
+  }
+
+  // Resume AudioContext - this is safe to await for non-browser modes
+  // For browser capture, we do it inside startBrowserCapture to preserve user gesture
+  if (selectedInputMode !== 'browser') {
+    await ac.resume();
   }
 
   try {
@@ -634,16 +639,41 @@ async function startCapture() {
   }
 }
 
+/**
+ * Synchronous version of stopActiveCapture to preserve user gesture context.
+ * getDisplayMedia() requires being called directly from user gesture without
+ * intervening async operations that break the gesture chain.
+ */
+function stopActiveCaptureSync() {
+  try {
+    if (activeCapture === 'browser') {
+      stopBrowserCapture();
+    } else if (activeCapture === 'external') {
+      stopExternalCapture();
+    } else if (activeCapture === 'generator') {
+      stopGeneratorCapture();
+    } else if (activeCapture === 'remote') {
+      stopRemoteCapture();
+    }
+  } catch (err) {
+    console.error('[Bootstrap] stopActiveCaptureSync error:', err);
+    activeCapture = null;
+  }
+}
+
 // Browser tab capture via SourceController
 // Captures audio from browser tabs using getDisplayMedia API
 async function startBrowserCapture() {
   try {
+    // CRITICAL: getDisplayMedia must be called immediately in user gesture context
+    // Do NOT await anything before this call or browser will reject it
+    const track = await sourceController.startBrowserCapture();
+
+    // Resume AudioContext after we have the stream (safe to await now)
     await ac.resume();
 
-    // Initialise trim from persisted state before capture
+    // Initialise trim from persisted state
     sourceController.setBrowserTrim(sysTrimDb);
-
-    const track = await sourceController.startBrowserCapture();
 
     // Update UI with track metadata
     const settings = track.getSettings ? track.getSettings() : {};
@@ -775,18 +805,6 @@ async function switchGeneratorPreset() {
 
   await sourceController.switchGeneratorPreset(config);
   updateGenModeDisplay();
-}
-
-async function stopActiveCapture() {
-  if (activeCapture === 'browser') {
-    stopBrowserCapture();
-  } else if (activeCapture === 'external') {
-    stopExternalCapture();
-  } else if (activeCapture === 'generator') {
-    stopGeneratorCapture();
-  } else if (activeCapture === 'remote') {
-    stopRemoteCapture();
-  }
 }
 
 // Stop browser tab capture
@@ -996,22 +1014,25 @@ function clearRemoteDisplays() {
 }
 
 function stopRemoteCapture() {
-  // Unsubscribe from current probe but keep connection for probe list
-  if (remoteReceiver && selectedRemoteProbeId) {
-    remoteReceiver.unsubscribe(selectedRemoteProbeId);
+  try {
+    // Unsubscribe from current probe but keep connection for probe list
+    if (remoteReceiver && selectedRemoteProbeId) {
+      remoteReceiver.unsubscribe(selectedRemoteProbeId);
+    }
+
+    selectedRemoteProbeId = null;
+
+    // Reset meter state AND clear displays
+    resetRemoteMeterState();
+    clearRemoteDisplays();
+
+    if (activeCapture === 'remote') activeCapture = null;
+    updateCaptureButtons();
+    updateInputSourceSummary();
+  } catch (err) {
+    console.error('[Bootstrap] stopRemoteCapture error:', err);
+    if (activeCapture === 'remote') activeCapture = null;
   }
-
-  selectedRemoteProbeId = null;
-
-  // Reset meter state AND clear displays
-  resetRemoteMeterState();
-  clearRemoteDisplays();
-
-  if (activeCapture === 'remote') activeCapture = null;
-  updateCaptureButtons();
-  updateInputSourceSummary();
-
-  console.log('[Bootstrap] Remote capture stopped');
 }
 
 /**
@@ -1289,7 +1310,7 @@ function escapeHtml(str) {
 }
 
 function stopCapture() {
-  stopActiveCapture();
+  stopActiveCaptureSync();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
