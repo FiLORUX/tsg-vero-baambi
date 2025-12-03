@@ -32,7 +32,7 @@ export {
   lrToMs,
   msToLr,
   getCorrelationZone,
-  getCorrelationColor,
+  getCorrelationColour,
   formatCorrelation,
   formatBalance,
   hasPhaseIssue

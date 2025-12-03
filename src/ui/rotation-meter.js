@@ -68,7 +68,7 @@ export class RotationMeter {
     const padding = w * 0.04;
     const trackY = h / 2;
     const trackW = w - padding * 2;
-    const centerX = w / 2;
+    const centreX = w / 2;
     const trackH = Math.max(4, h * 0.12);
 
     // 1. Draw track background
@@ -77,13 +77,13 @@ export class RotationMeter {
 
     // 2. Centre tick
     ctx.fillStyle = '#4b5563';
-    ctx.fillRect(centerX - 1, trackY - trackH, 2, trackH * 2);
+    ctx.fillRect(centreX - 1, trackY - trackH, 2, trackH * 2);
 
     // 3. Trail (fading opacity) with dynamic colour
     const usableW = trackW / 2 - padding;
     rotationHistory.forEach((val, i) => {
       const alpha = (i + 1) / rotationHistory.length * 0.4;
-      const x = centerX + val * usableW;
+      const x = centreX + val * usableW;
       const radius = Math.max(2, h * 0.06);
       const colour = this.rotationColour(val);
 
@@ -94,7 +94,7 @@ export class RotationMeter {
     });
 
     // 4. Main dot with glow - dynamic colour based on position
-    const dotX = centerX + rotation * usableW;
+    const dotX = centreX + rotation * usableW;
     const dotRadius = Math.max(3, h * 0.1);
     const dotColour = this.rotationColour(rotation);
 
@@ -116,7 +116,7 @@ export class RotationMeter {
     ctx.fillText('−45°', padding, degreeY);
 
     ctx.textAlign = 'center';
-    ctx.fillText('0°', centerX, degreeY);
+    ctx.fillText('0°', centreX, degreeY);
 
     ctx.textAlign = 'right';
     ctx.fillText('+45°', w - padding, degreeY);

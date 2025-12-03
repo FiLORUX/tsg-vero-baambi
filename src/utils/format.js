@@ -175,7 +175,7 @@ export function formatCorr(value) {
  * @example
  * formatBalance(3)   // "L +3"
  * formatBalance(-2)  // "R +2"
- * formatBalance(0.2) // "C" (center)
+ * formatBalance(0.2) // "C" (centre)
  */
 export function formatBalance(balanceDb) {
   if (!isFinite(balanceDb)) {
@@ -184,7 +184,7 @@ export function formatBalance(balanceDb) {
 
   const abs = Math.abs(balanceDb);
   if (abs < 0.5) {
-    return 'C';  // Center
+    return 'C';  // Centre
   }
 
   const side = balanceDb > 0 ? 'L' : 'R';
