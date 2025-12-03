@@ -313,7 +313,7 @@ tsg-vero-baambi/
 
 | Browser | Minimum Version | Notes |
 |---------|-----------------|-------|
-| Chrome | 66+ | Full AudioWorklet support |
+| Chrome | 72+ | AudioWorklet + getDisplayMedia |
 | Edge | 79+ | Chromium-based |
 | Firefox | 76+ | AudioWorklet since 76 |
 | Safari | 14.1+ | AudioWorklet since 14.1 |
