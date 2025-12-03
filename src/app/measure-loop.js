@@ -238,8 +238,8 @@ function measureLoop() {
   // ─────────────────────────────────────────────────────────────────────────
   const tpState = meters.truePeakMeter.getState();
 
-  if (tpState.peakLeft > meterState.tpMaxL) meterState.tpMaxL = tpState.peakLeft;
-  if (tpState.peakRight > meterState.tpMaxR) meterState.tpMaxR = tpState.peakRight;
+  if (tpState.dbtpHoldLeft > meterState.tpMaxL) meterState.tpMaxL = tpState.dbtpHoldLeft;
+  if (tpState.dbtpHoldRight > meterState.tpMaxR) meterState.tpMaxR = tpState.dbtpHoldRight;
   const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
 
   // TPmax display
@@ -254,7 +254,7 @@ function measureLoop() {
   // ─────────────────────────────────────────────────────────────────────────
   // Crest factor: TP - RMS
   // ─────────────────────────────────────────────────────────────────────────
-  const currentTp = Math.max(tpState.left, tpState.right);
+  const currentTp = Math.max(tpState.dbtpLeft, tpState.dbtpRight);
   const rmsDbL = 20 * Math.log10(meterState.rmsHoldL + 1e-12);
   const rmsDbR = 20 * Math.log10(meterState.rmsHoldR + 1e-12);
   const currentRms = Math.max(rmsDbL, rmsDbR);

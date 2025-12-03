@@ -82,12 +82,14 @@ Process audio samples and detect intersample peaks.
 
 ```javascript
 {
-  left: number,       // Current left True Peak (dBTP)
-  right: number,      // Current right True Peak (dBTP)
-  peakLeft: number,   // Peak hold left (dBTP)
-  peakRight: number,  // Peak hold right (dBTP)
-  max: number,        // Maximum since reset (dBTP)
-  isOver: boolean     // True if exceeded limit
+  dbtpLeft: number,      // Current left True Peak (dBTP)
+  dbtpRight: number,     // Current right True Peak (dBTP)
+  dbtpHoldLeft: number,  // Peak hold left (dBTP, 3s)
+  dbtpHoldRight: number, // Peak hold right (dBTP, 3s)
+  dbtpMax: number,       // Maximum since reset (dBTP)
+  isOverLeft: boolean,   // Left exceeded limit
+  isOverRight: boolean,  // Right exceeded limit
+  isOverAny: boolean     // Either channel exceeded limit
 }
 ```
 
@@ -129,16 +131,16 @@ Process audio samples through quasi-peak detector.
 
 ```javascript
 {
-  left: number,          // Left level (dBFS)
-  right: number,         // Right level (dBFS)
-  peakLeft: number,      // Peak hold left (dBFS)
-  peakRight: number,     // Peak hold right (dBFS)
-  ppmLeft: number,       // Left in PPM scale
-  ppmRight: number,      // Right in PPM scale
-  ppmPeakLeft: number,   // Peak hold left (PPM)
-  ppmPeakRight: number,  // Peak hold right (PPM)
-  isSilentLeft: boolean, // Left below scale
-  isSilentRight: boolean // Right below scale
+  dbfsLeft: number,         // Current left level (dBFS)
+  dbfsRight: number,        // Current right level (dBFS)
+  dbfsHoldLeft: number,     // Peak hold left (dBFS, 3s)
+  dbfsHoldRight: number,    // Peak hold right (dBFS, 3s)
+  ppmScaleLeft: number,     // Current left (Nordic PPM, -36 to +9)
+  ppmScaleRight: number,    // Current right (Nordic PPM)
+  ppmScaleHoldLeft: number, // Peak hold left (Nordic PPM)
+  ppmScaleHoldRight: number,// Peak hold right (Nordic PPM)
+  isSilentLeft: boolean,    // Left below scale minimum
+  isSilentRight: boolean    // Right below scale minimum
 }
 ```
 
@@ -174,11 +176,11 @@ Calculate correlation, balance, and width.
 
 ```javascript
 {
-  correlation: number,     // -1 to +1 (smoothed)
-  correlationRaw: number,  // -1 to +1 (instantaneous)
-  balance: number,         // -1 (left) to +1 (right)
-  width: number,           // 0 (mono) to 1+ (wide)
-  zone: string             // 'mono' | 'stereo' | 'wide' | 'oops'
+  correlation: number,        // -1 to +1 (smoothed)
+  correlationInstant: number, // -1 to +1 (instantaneous)
+  balance: number,            // -1 (left) to +1 (right)
+  width: number,              // 0 (mono) to 1+ (wide)
+  zone: string                // 'good' | 'caution' | 'problem'
 }
 ```
 
@@ -264,4 +266,4 @@ See individual module files for complete `@typedef` declarations.
 
 ---
 
-*Generated for VERO-BAAMBI v2.1.0*
+*Generated for VERO-BAAMBI v2.2.0*

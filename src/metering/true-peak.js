@@ -292,13 +292,18 @@ export class TruePeakMeter {
    * @returns {TruePeakMeterState} Current readings and status
    */
   getState() {
+    const isOverLeft = this.peakHoldL >= this.limit;
+    const isOverRight = this.peakHoldR >= this.limit;
+
     return {
-      left: this.smoothL,
-      right: this.smoothR,
-      peakLeft: this.peakHoldL,
-      peakRight: this.peakHoldR,
-      max: this.maxPeak,
-      isOver: this.isOver
+      dbtpLeft: this.smoothL,
+      dbtpRight: this.smoothR,
+      dbtpHoldLeft: this.peakHoldL,
+      dbtpHoldRight: this.peakHoldR,
+      dbtpMax: this.maxPeak,
+      isOverLeft,
+      isOverRight,
+      isOverAny: isOverLeft || isOverRight
     };
   }
 
@@ -315,12 +320,14 @@ export class TruePeakMeter {
 
 /**
  * @typedef {Object} TruePeakMeterState
- * @property {number} left - Smoothed left True Peak in dBTP
- * @property {number} right - Smoothed right True Peak in dBTP
- * @property {number} peakLeft - Peak hold left in dBTP
- * @property {number} peakRight - Peak hold right in dBTP
- * @property {number} max - Maximum peak since reset in dBTP
- * @property {boolean} isOver - True if peak exceeded limit
+ * @property {number} dbtpLeft - Current left True Peak (dBTP)
+ * @property {number} dbtpRight - Current right True Peak (dBTP)
+ * @property {number} dbtpHoldLeft - Peak hold left (dBTP, 3s)
+ * @property {number} dbtpHoldRight - Peak hold right (dBTP, 3s)
+ * @property {number} dbtpMax - Maximum True Peak since reset (dBTP)
+ * @property {boolean} isOverLeft - Left channel exceeded limit
+ * @property {boolean} isOverRight - Right channel exceeded limit
+ * @property {boolean} isOverAny - Either channel exceeded limit
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
