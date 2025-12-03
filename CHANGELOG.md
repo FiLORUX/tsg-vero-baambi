@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2024-12-10
+
+### Changed
+- **BREAKING: Redesigned meter state API** with unit-prefixed property names for clarity:
+  - TruePeak: `dbtpLeft`, `dbtpRight`, `dbtpHoldLeft`, `dbtpHoldRight`, `dbtpMax`
+  - TruePeak: `isOver` → `isOverLeft`, `isOverRight`, `isOverAny` (per-channel detection)
+  - PPM: `dbfsLeft`, `dbfsRight`, `dbfsHoldLeft`, `dbfsHoldRight`
+  - PPM: `ppmScaleLeft`, `ppmScaleRight`, `ppmScaleHoldLeft`, `ppmScaleHoldRight`
+  - Stereo: `correlationRaw` → `correlationInstant`
+- Design principle: unit as prefix (`dbtp*`, `dbfs*`, `ppmScale*`) eliminates ambiguity
+
 ## [2.1.1] - 2024-12-10
 
 ### Added

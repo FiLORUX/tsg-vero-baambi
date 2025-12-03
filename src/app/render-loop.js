@@ -323,10 +323,10 @@ function renderLoop() {
     // Local metering
     meters.ppmMeter.update(meters.bufL, meters.bufR);
     const ppmState = meters.ppmMeter.getState();
-    ppmDisplayL = ppmState.left;
-    ppmDisplayR = ppmState.right;
-    ppmL = ppmState.ppmLeft;
-    ppmR = ppmState.ppmRight;
+    ppmDisplayL = ppmState.dbfsLeft;
+    ppmDisplayR = ppmState.dbfsRight;
+    ppmL = ppmState.ppmScaleLeft;
+    ppmR = ppmState.ppmScaleRight;
     isSilentL = ppmState.isSilentLeft;
     isSilentR = ppmState.isSilentRight;
 
@@ -420,8 +420,8 @@ function renderLoop() {
     // Local metering
     meters.truePeakMeter.update(meters.bufL, meters.bufR);
     const tpState = meters.truePeakMeter.getState();
-    tpLeft = tpState.left;
-    tpRight = tpState.right;
+    tpLeft = tpState.dbtpLeft;
+    tpRight = tpState.dbtpRight;
 
     // True Peak peak-hold
     if (tpLeft > meterState.tpPeakHoldL) {
