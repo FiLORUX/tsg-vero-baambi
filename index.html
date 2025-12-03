@@ -1293,11 +1293,12 @@
       <section class="card collapsible" id="panelInputSources" data-panel="inputSources">
         <h2>Input Sources <span class="collapse-summary" id="inputSourceSummary">–</span></h2>
         <div class="card-body-wrapper"><div class="card-body">
-          <!-- Source Mode Selector (3 buttons) -->
+          <!-- Source Mode Selector (4 buttons) -->
           <div class="row" style="margin-bottom:8px;gap:4px">
             <button id="btnModeBrowser" class="btn-active" style="flex:1;line-height:1.2">Browser<br>Tab</button>
             <button id="btnModeExternal" class="btn-ghost" style="flex:1;line-height:1.2">External<br>Device</button>
             <button id="btnModeGenerator" class="btn-ghost" style="flex:1;line-height:1.2">Internal<br>Generator</button>
+            <button id="btnModeRemote" class="btn-ghost" style="flex:1;line-height:1.2">Remote<br>Probe</button>
           </div>
 
           <!-- Unified Start/Stop Capture -->
@@ -1432,6 +1433,27 @@
             </div>
             </div>
           </div>
+
+          <!-- Remote Source Panel (hidden by default) -->
+          <div id="remoteSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <p class="tiny">Receive metering data from remote probes via WebSocket broker.</p>
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Broker:</label>
+              <input type="url" id="remoteBrokerUrl" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px" placeholder="ws://localhost:8765" value="ws://localhost:8765" />
+              <button id="btnRemoteCheck" class="btn-ghost btn-ctrl" title="Check broker connection">Check</button>
+            </div>
+            <div class="kv" id="remoteInfo">
+              <div><small>Broker</small><span id="remoteBrokerStatus">–</span></div>
+              <div><small>Latency</small><span id="remoteLatency">–</span></div>
+            </div>
+            <p class="tiny" style="margin-top:8px;margin-bottom:4px">Available Probes:</p>
+            <div id="remoteProbeList" class="remote-probe-list" style="max-height:100px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:4px;padding:4px">
+              <p class="tiny" style="color:var(--muted);text-align:center;margin:8px 0">No probes available</p>
+            </div>
+            <p class="tiny" id="remoteWarning" style="color:var(--caution);display:none;margin-top:6px">Broker unavailable. Check URL and ensure broker is running.</p>
+            </div>
+          </div>
           </div><!-- /source-panels-container-inner -->
           </div><!-- /sourcePanelsContainer -->
         </div></div>
@@ -1482,10 +1504,12 @@
             <div><small>Tab Capture</small><span id="dbgTab">–</span></div>
             <div><small>External</small><span id="dbgExt">–</span></div>
             <div><small>Generator</small><span id="dbgGen">–</span></div>
+            <div><small>Remote</small><span id="dbgRemote">–</span></div>
             <div class="wide"><small>Monitor</small><span id="monitorStatus" class="tiny">Tab: <b>–</b> · Ext: <b>–</b> · Gen: <b>–</b></span></div>
           </div>
         </div></div>
       </section>
+
     </div>
   </div>
 

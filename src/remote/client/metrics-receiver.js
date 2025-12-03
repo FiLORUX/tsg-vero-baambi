@@ -86,6 +86,8 @@ const PROBE_STALE_TIMEOUT_MS = 5000;
  * @property {import('../types.js').TruePeakMetrics} truePeak
  * @property {import('../types.js').PPMMetrics} ppm
  * @property {import('../types.js').StereoMetrics} stereo
+ * @property {Object} [rms] - RMS levels in dBFS
+ * @property {Object} [visualization] - Pre-computed visualization data
  * @property {boolean} isActive
  * @property {number} latency - Network latency in ms
  */
@@ -469,19 +471,25 @@ export class MetricsReceiver {
 
     if (!probeId || !payload) return;
 
-    // Calculate latency
+    // Calculate latency (handle both timestamp formats)
     const now = Date.now();
-    const latency = payload.timestamp?.wallClock
-      ? now - payload.timestamp.wallClock
-      : 0;
+    const tsValue = typeof payload.timestamp === 'number'
+      ? payload.timestamp
+      : payload.timestamp?.wallClock;
+    const latency = tsValue ? now - tsValue : 0;
+
+    // Support both flat format (payload.lufs) and nested format (payload.metrics.lufs)
+    const metricsData = payload.metrics || payload;
 
     /** @type {RemoteMetrics} */
     const metrics = {
-      lufs: payload.lufs || createEmptyLUFS(),
-      truePeak: payload.truePeak || createEmptyTruePeak(),
-      ppm: payload.ppm || createEmptyPPM(),
-      stereo: payload.stereo || createEmptyStereo(),
-      isActive: payload.isActive || false,
+      lufs: metricsData.lufs || createEmptyLUFS(),
+      truePeak: metricsData.truePeak || createEmptyTruePeak(),
+      ppm: metricsData.ppm || createEmptyPPM(),
+      stereo: metricsData.stereo || createEmptyStereo(),
+      rms: metricsData.rms || null,
+      visualization: payload.visualization || null,
+      isActive: payload.isActive !== undefined ? payload.isActive : true,
       latency
     };
 

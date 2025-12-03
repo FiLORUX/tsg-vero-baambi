@@ -316,4 +316,241 @@ export class SpectrumAnalyzer {
       }
     }
   }
+
+  /**
+   * Draw spectrum from pre-computed band values (for remote metering).
+   *
+   * This method accepts an array of 31 band dB values, allowing the probe
+   * to compute the FFT→1/3-octave transformation once and transmit only
+   * the essential visualization data (~124 bytes per frame).
+   *
+   * @param {Float32Array|number[]} bandValues - 31 band values in dB
+   * @param {HTMLElement} containerEl - Container element for sizing
+   */
+  drawFromBands(bandValues, containerEl) {
+    if (!this.ctx || !bandValues || bandValues.length < SPECTRUM_NUM_BANDS) return;
+
+    const canvas = this.canvas;
+    if (!canvas) return;
+
+    // Use wrapper for dimensions
+    const spectrumWrap = containerEl?.querySelector('.spectrumWrap');
+    if (!spectrumWrap) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = spectrumWrap.getBoundingClientRect();
+    const cssW = rect.width;
+    const cssH = rect.height;
+
+    if (cssW < 1 || cssH < 1) return;
+
+    const w = Math.floor(cssW * dpr);
+    const h = Math.floor(cssH * dpr);
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h);
+
+    // Timing for peak falloff
+    const now = performance.now();
+    const deltaTime = this.lastTime > 0 ? (now - this.lastTime) / 1000 : 0.016;
+    this.lastTime = now;
+
+    // Use remote band values directly
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      this.spectrumSmooth[b] = bandValues[b];
+    }
+
+    // =========================================================
+    // RTW/TC-GRADE VISUAL RENDERING (same as draw())
+    // =========================================================
+
+    const paddingL = Math.round(28 * dpr);
+    const paddingR = Math.round(6 * dpr);
+    const paddingT = Math.round(6 * dpr);
+    const paddingB = Math.round(18 * dpr);
+    const barAreaW = w - paddingL - paddingR;
+    const barAreaH = h - paddingT - paddingB;
+    const gap = Math.round(1 * dpr);
+    const barWidth = Math.max(2 * dpr, (barAreaW - gap * (SPECTRUM_NUM_BANDS - 1)) / SPECTRUM_NUM_BANDS);
+
+    function dbToY(db) {
+      const clamped = Math.max(RTW_VISIBLE_BOTTOM_DB, Math.min(RTW_VISIBLE_TOP_DB, db));
+      return paddingT + ((RTW_VISIBLE_TOP_DB - clamped) / RTW_RANGE_DB) * barAreaH;
+    }
+    const zeroLineY = dbToY(0);
+    const bottomY = paddingT + barAreaH;
+
+    // Gridlines
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    const majorMarks = [6, 0, -6, -12, -18, -24, -30, -36, -42, -48];
+    for (const mark of majorMarks) {
+      const y = dbToY(mark);
+      ctx.beginPath();
+      ctx.moveTo(paddingL, y);
+      ctx.lineTo(w - paddingR, y);
+      ctx.stroke();
+    }
+
+    // 0 dB reference line
+    ctx.strokeStyle = '#c5312f';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(paddingL, zeroLineY);
+    ctx.lineTo(w - paddingR, zeroLineY);
+    ctx.stroke();
+
+    // Process and draw bands
+    for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+      const actualValue = this.spectrumSmooth[b];
+
+      // RTW Ballistics
+      if (actualValue > this.spectrumDisplayVal[b]) {
+        this.spectrumDisplayVal[b] = actualValue;
+      } else {
+        this.spectrumDisplayVal[b] = Math.max(this.spectrumDisplayVal[b] - RTW_FALL_RATE * deltaTime, actualValue);
+      }
+      this.spectrumDisplayVal[b] = this.spectrumDisplayVal[b] * (1 - RTW_DISPLAY_SMOOTH) + actualValue * RTW_DISPLAY_SMOOTH;
+
+      // Peak marker
+      if (actualValue > this.spectrumPeakMarker[b]) {
+        this.spectrumPeakMarker[b] = actualValue;
+        this.spectrumPeakTimer[b] = RTW_PEAK_HOLD_MS;
+      } else if (this.spectrumPeakTimer[b] > 0) {
+        this.spectrumPeakTimer[b] -= deltaTime * 1000;
+      } else {
+        this.spectrumPeakMarker[b] -= RTW_PEAK_FALL_RATE * deltaTime;
+      }
+
+      const displayDb = this.spectrumDisplayVal[b] + RTW_VISUAL_BOOST;
+      const barX = paddingL + b * (barWidth + gap);
+
+      // LED cells
+      const LED_CELLS = 57;
+      const LED_GAP = Math.max(1, Math.round(1 * dpr));
+      const cellH = (barAreaH - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
+
+      for (let cell = 0; cell < LED_CELLS; cell++) {
+        const cellDb = RTW_VISIBLE_BOTTOM_DB + cell;
+        const cellY = bottomY - (cell + 1) * (cellH + LED_GAP) + LED_GAP;
+
+        if (cellDb < displayDb) {
+          if (cellDb >= 0) {
+            ctx.fillStyle = '#ff3b2f';
+          } else if (cellDb >= -6) {
+            ctx.fillStyle = '#ff9500';
+          } else {
+            ctx.fillStyle = '#f2c74e';
+          }
+          ctx.fillRect(barX, cellY, barWidth, cellH);
+        }
+      }
+
+      // Peak marker
+      const peakDb = this.spectrumPeakMarker[b] + RTW_VISUAL_BOOST;
+      if (peakDb > RTW_VISIBLE_BOTTOM_DB) {
+        const peakCell = Math.floor(peakDb - RTW_VISIBLE_BOTTOM_DB);
+        if (peakCell >= 0 && peakCell < LED_CELLS) {
+          const peakCellY = bottomY - (peakCell + 1) * (cellH + LED_GAP) + LED_GAP;
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.fillRect(barX, peakCellY, barWidth, cellH);
+        }
+      }
+    }
+
+    // dB scale labels
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = `${Math.round(8 * dpr)}px ui-monospace, monospace`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const dbLabels = [6, 0, -12, -24, -36, -48];
+    for (const mark of dbLabels) {
+      const y = dbToY(mark);
+      const label = mark > 0 ? `+${mark}` : `${mark}`;
+      ctx.fillText(label, paddingL - 4 * dpr, y);
+    }
+
+    // Frequency labels
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.font = `${Math.round(7 * dpr)}px ui-monospace, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const freqLabels = [
+      { freq: 31.5, label: '31' },
+      { freq: 63, label: '63' },
+      { freq: 125, label: '125' },
+      { freq: 250, label: '250' },
+      { freq: 500, label: '500' },
+      { freq: 1000, label: '1k' },
+      { freq: 2000, label: '2k' },
+      { freq: 4000, label: '4k' },
+      { freq: 8000, label: '8k' },
+      { freq: 16000, label: '16k' }
+    ];
+    for (const fl of freqLabels) {
+      let bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
+      if (bandIdx >= 0) {
+        const x = paddingL + bandIdx * (barWidth + gap) + barWidth / 2;
+        ctx.fillText(fl.label, x, bottomY + 3 * dpr);
+      }
+    }
+  }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REMOTE SPECTRUM UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Compute 1/3-octave spectrum bands from L/R FFT data for remote transmission.
+ * This performs the same calculation as SpectrumAnalyzer.draw() but returns
+ * just the 31 band values (~124 bytes per frame).
+ *
+ * @param {AnalyserNode} analyserL - Left channel analyser
+ * @param {AnalyserNode} analyserR - Right channel analyser
+ * @param {number} sampleRate - Audio sample rate
+ * @returns {Float32Array} 31 band values in dB
+ */
+export function computeSpectrumBands(analyserL, analyserR, sampleRate) {
+  const fftSize = analyserL.fftSize;
+  const numBins = fftSize / 2;
+  const binHz = sampleRate / fftSize;
+
+  const freqBufL = new Float32Array(numBins);
+  const freqBufR = new Float32Array(numBins);
+
+  analyserL.getFloatFrequencyData(freqBufL);
+  analyserR.getFloatFrequencyData(freqBufR);
+
+  const output = new Float32Array(SPECTRUM_NUM_BANDS);
+
+  for (let b = 0; b < SPECTRUM_NUM_BANDS; b++) {
+    const centerFreq = SPECTRUM_CENTER_FREQS[b];
+    const lowFreq = centerFreq / THIRD_OCT_FACTOR;
+    const highFreq = centerFreq * THIRD_OCT_FACTOR;
+
+    const lowBin = Math.max(1, Math.floor(lowFreq / binHz));
+    const highBin = Math.min(numBins - 1, Math.ceil(highFreq / binHz));
+
+    let powerSum = 0, count = 0;
+    for (let i = lowBin; i <= highBin; i++) {
+      const powerL = Math.pow(10, freqBufL[i] / 10);
+      const powerR = Math.pow(10, freqBufR[i] / 10);
+      powerSum += 0.5 * (powerL + powerR);
+      count++;
+    }
+
+    const avgPower = count > 0 ? powerSum / count : 0;
+    output[b] = avgPower > 0 ? 10 * Math.log10(avgPower) : -100;
+  }
+
+  return output;
+}
+
+// Export constants for probe-side computation
+export { SPECTRUM_CENTER_FREQS, SPECTRUM_NUM_BANDS };

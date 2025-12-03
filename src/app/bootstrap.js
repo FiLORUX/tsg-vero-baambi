@@ -52,7 +52,7 @@ import { initMeasureLoop, startMeasureLoop, stopMeasureLoop } from './measure-lo
 // Render loop (60 Hz) - extracted from bootstrap
 import { initRenderLoop, startRenderLoop, stopRenderLoop } from './render-loop.js';
 // Shared meter state between measureLoop and renderLoop
-import { meterState, resetMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, PPM_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
+import { meterState, resetMeterState, resetRemoteMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, PPM_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
 // Drag and drop system - extracted from bootstrap
 import { initDragDrop, setupDragAndDrop } from './drag-drop.js';
 // Glitch debug utility - extracted from bootstrap
@@ -65,6 +65,8 @@ import { dbToGain, clamp, formatDb, formatDbu, formatTime, getCss, formatCorr, l
 import { initLayout, sizeWrap, layoutXY, layoutLoudness } from './layout.js';
 // Meter switcher (physics-based 3D carousel) - extracted from bootstrap
 import { setupMeterSwitcher } from './meter-switcher.js';
+// Remote metering client
+import { MetricsReceiver } from '../remote/client/index.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURABLE PARAMETERS
@@ -149,13 +151,24 @@ const statusSummary = $('statusSummary');
 const btnModeBrowser = $('btnModeBrowser');
 const btnModeExternal = $('btnModeExternal');
 const btnModeGenerator = $('btnModeGenerator');
+const btnModeRemote = $('btnModeRemote');
 const btnStartCapture = $('btnStartCapture');
 const btnStopCapture = $('btnStopCapture');
 const browserSourcePanel = $('browserSourcePanel');
 const externalSourcePanel = $('externalSourcePanel');
 const generatorSourcePanel = $('generatorSourcePanel');
+const remoteSourcePanel = $('remoteSourcePanel');
 const sourcePanelsContainer = $('sourcePanelsContainer');
 const inputSourceSummary = $('inputSourceSummary');
+
+// Remote source controls
+const remoteBrokerUrl = $('remoteBrokerUrl');
+const btnRemoteCheck = $('btnRemoteCheck');
+const remoteBrokerStatus = $('remoteBrokerStatus');
+const remoteLatency = $('remoteLatency');
+const remoteProbeList = $('remoteProbeList');
+const remoteWarning = $('remoteWarning');
+const dbgRemote = $('dbgRemote');
 
 // Browser source controls
 const sysMonGainEl = $('sysMonGain');
@@ -299,6 +312,9 @@ let rotationMeterUI = null;
 let spectrumAnalyzerUI = null;
 let msMeterUI = null;
 let balanceMeterUI = null;
+// Remote metering receiver instance
+let remoteReceiver = null;
+let isRemoteAvailable = false;
 
 function initUIComponents() {
   if (xy) {
@@ -352,6 +368,7 @@ function initUIComponents() {
     tpLimitSelect.value = String(TP_LIMIT);
     setTpLimit(TP_LIMIT);
   }
+
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -466,7 +483,7 @@ function setInputMode(mode) {
   selectedInputMode = mode;
 
   // Update button states immediately
-  [btnModeBrowser, btnModeExternal, btnModeGenerator].forEach(btn => {
+  [btnModeBrowser, btnModeExternal, btnModeGenerator, btnModeRemote].forEach(btn => {
     if (btn) {
       btn.classList.remove('btn-active');
       btn.classList.add('btn-ghost');
@@ -481,6 +498,9 @@ function setInputMode(mode) {
   } else if (mode === 'generator' && btnModeGenerator) {
     btnModeGenerator.classList.add('btn-active');
     btnModeGenerator.classList.remove('btn-ghost');
+  } else if (mode === 'remote' && btnModeRemote) {
+    btnModeRemote.classList.add('btn-active');
+    btnModeRemote.classList.remove('btn-ghost');
   }
 
   // Collapse-swap-expand animation
@@ -495,17 +515,21 @@ function setInputMode(mode) {
     if (browserSourcePanel) browserSourcePanel.classList.remove('source-panel-active');
     if (externalSourcePanel) externalSourcePanel.classList.remove('source-panel-active');
     if (generatorSourcePanel) generatorSourcePanel.classList.remove('source-panel-active');
+    if (remoteSourcePanel) remoteSourcePanel.classList.remove('source-panel-active');
 
     // Show the new panel
     if (mode === 'browser' && browserSourcePanel) browserSourcePanel.classList.add('source-panel-active');
     else if (mode === 'external' && externalSourcePanel) externalSourcePanel.classList.add('source-panel-active');
     else if (mode === 'generator' && generatorSourcePanel) generatorSourcePanel.classList.add('source-panel-active');
+    else if (mode === 'remote' && remoteSourcePanel) remoteSourcePanel.classList.add('source-panel-active');
 
     // Step 3: Expand to new height
     if (sourcePanelsContainer) sourcePanelsContainer.classList.remove('collapsed');
 
     // Enumerate devices when switching to external mode
     if (mode === 'external') enumerateAudioDevices();
+    // Connect to broker when switching to remote mode - shows probes immediately
+    if (mode === 'remote') connectRemoteBroker();
 
     // Animation complete after expand
     setTimeout(() => {
@@ -549,6 +573,8 @@ function updateInputSourceSummary() {
     inputSourceSummary.textContent = 'External Active';
   } else if (activeCapture === 'generator') {
     inputSourceSummary.textContent = 'Tone Active';
+  } else if (activeCapture === 'remote') {
+    inputSourceSummary.textContent = 'Remote Active';
   }
   updateStatusPanel();
 }
@@ -559,6 +585,7 @@ function updateStatusPanel() {
   if (dbgTab) dbgTab.textContent = activeCapture === 'browser' ? 'Running' : 'Stopped';
   if (dbgExt) dbgExt.textContent = activeCapture === 'external' ? 'Running' : 'Stopped';
   if (dbgGen) dbgGen.textContent = activeCapture === 'generator' ? 'Running' : 'Stopped';
+  if (dbgRemote) dbgRemote.textContent = activeCapture === 'remote' ? 'Running' : 'Stopped';
 
   // Monitor status
   if (monitorStatusEl) {
@@ -599,6 +626,8 @@ async function startCapture() {
       await startExternalCapture();
     } else if (selectedInputMode === 'generator') {
       await startGeneratorCapture();
+    } else if (selectedInputMode === 'remote') {
+      await startRemoteCapture();
     }
   } catch (error) {
     console.error('[Bootstrap] Capture failed:', error);
@@ -755,6 +784,8 @@ async function stopActiveCapture() {
     stopExternalCapture();
   } else if (activeCapture === 'generator') {
     stopGeneratorCapture();
+  } else if (activeCapture === 'remote') {
+    stopRemoteCapture();
   }
 }
 
@@ -785,6 +816,476 @@ function stopGeneratorCapture() {
   if (activeCapture === 'generator') activeCapture = null;
   updateCaptureButtons();
   updateInputSourceSummary();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REMOTE METERING
+// Receives metrics from remote probes via WebSocket broker
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Connect to remote broker and fetch probe list.
+ * Called when user selects Remote Probe mode - shows available probes immediately.
+ */
+async function connectRemoteBroker() {
+  const url = remoteBrokerUrl?.value?.trim() || 'ws://localhost:8765';
+
+  if (remoteBrokerStatus) remoteBrokerStatus.textContent = 'Connecting…';
+  if (remoteWarning) remoteWarning.style.display = 'none';
+  if (btnRemoteCheck) btnRemoteCheck.disabled = true;
+
+  try {
+    // Create receiver if needed
+    if (!remoteReceiver) {
+      remoteReceiver = new MetricsReceiver({ brokerUrl: url });
+
+      // Subscribe to probe list changes - updates UI automatically
+      remoteReceiver.onProbeListChange((probes) => {
+        renderRemoteProbeList(probes);
+
+        // Handle probe online/offline state changes for selected probe
+        if (selectedRemoteProbeId && activeCapture === 'remote') {
+          const selectedProbe = probes.find(p => p.id === selectedRemoteProbeId);
+
+          if (!selectedProbe || !selectedProbe.isOnline) {
+            // Probe went offline - reset all meter state and displays
+            resetRemoteMeterState();
+            clearRemoteDisplays();
+          } else if (selectedProbe.isOnline) {
+            // Probe is online - ensure we're subscribed (handles reconnection)
+            // The subscribe() method is idempotent, so calling it again is safe
+            remoteReceiver.subscribe(selectedRemoteProbeId);
+          }
+        }
+      });
+
+      // Subscribe to metrics (used when capture is active)
+      remoteReceiver.onMetrics((probeId, metrics) => {
+        handleRemoteMetrics(probeId, metrics);
+      });
+
+      // Subscribe to connection state
+      remoteReceiver.onStatusChange((state) => {
+        if (remoteBrokerStatus) {
+          const stateText = {
+            'connected': 'RX Connected',
+            'connecting': 'Connecting…',
+            'reconnecting': 'Reconnecting…',
+            'disconnected': 'Disconnected',
+            'error': 'Error'
+          }[state] || state;
+          remoteBrokerStatus.textContent = stateText;
+          remoteBrokerStatus.style.color = state === 'connected' ? 'var(--ok)' :
+                                           state === 'error' ? 'var(--hot)' : 'var(--warn)';
+        }
+        isRemoteAvailable = state === 'connected';
+        if (remoteWarning) remoteWarning.style.display = isRemoteAvailable ? 'none' : '';
+      });
+    } else {
+      // Update URL if receiver already exists
+      remoteReceiver.brokerUrl = url;
+    }
+
+    // Connect and fetch probe list
+    await remoteReceiver.connect();
+    isRemoteAvailable = true;
+
+    // Always refresh probe list when switching to remote mode (even if already connected)
+    remoteReceiver.refreshProbeList();
+
+    console.log(`[Bootstrap] Connected to remote broker ${url}`);
+  } catch (error) {
+    console.warn('[Bootstrap] Remote broker connection failed:', error);
+    isRemoteAvailable = false;
+    if (remoteBrokerStatus) {
+      remoteBrokerStatus.textContent = 'Unavailable';
+      remoteBrokerStatus.style.color = 'var(--hot)';
+    }
+    if (remoteWarning) remoteWarning.style.display = '';
+  } finally {
+    if (btnRemoteCheck) btnRemoteCheck.disabled = false;
+  }
+
+  return isRemoteAvailable;
+}
+
+/**
+ * Start remote capture - subscribe to selected probes and begin receiving metrics.
+ * Assumes connectRemoteBroker() was already called when switching to remote mode.
+ */
+async function startRemoteCapture() {
+  // Ensure connected first
+  if (!remoteReceiver || !isRemoteAvailable) {
+    const connected = await connectRemoteBroker();
+    if (!connected) {
+      alert('Remote broker unavailable. Check URL and ensure broker is running.');
+      return;
+    }
+  }
+
+  // Get selected probe from radio button
+  let selectedProbeId = null;
+  if (remoteProbeList) {
+    const selectedRadio = remoteProbeList.querySelector('input[type="radio"]:checked');
+    if (selectedRadio) {
+      const label = selectedRadio.closest('[data-probe-id]');
+      selectedProbeId = label?.dataset.probeId;
+    }
+  }
+
+  if (!selectedProbeId) {
+    alert('Please select a probe to monitor.');
+    return;
+  }
+
+  // Unsubscribe from previous probe if different
+  if (selectedRemoteProbeId && selectedRemoteProbeId !== selectedProbeId) {
+    remoteReceiver.unsubscribe(selectedRemoteProbeId);
+  }
+
+  // Subscribe to selected probe
+  selectedRemoteProbeId = selectedProbeId;
+  remoteReceiver.subscribe(selectedProbeId);
+
+  activeCapture = 'remote';
+  updateCaptureButtons();
+  updateInputSourceSummary();
+
+  console.log(`[Bootstrap] Remote capture started, monitoring probe: ${selectedProbeId}`);
+}
+
+/**
+ * Stop remote capture - unsubscribe from probe (but keep connection for UI).
+ */
+/**
+ * Clear all remote meter displays to idle state.
+ * Called when probe goes offline while capture is active.
+ */
+function clearRemoteDisplays() {
+  // LUFS displays
+  if (lufsM) { lufsM.textContent = '--.- LUFS'; lufsM.style.color = ''; }
+  if (lufsS) { lufsS.textContent = '--.- LUFS'; lufsS.style.color = ''; }
+  if (lufsI) { lufsI.textContent = '--.- LUFS'; lufsI.style.color = ''; }
+  if (lraEl) { lraEl.textContent = '--.- LU'; }
+  if (r128TpMax) { r128TpMax.textContent = '--.- dBTP'; r128TpMax.style.color = ''; }
+  if (r128Crest) { r128Crest.textContent = '--.- dB'; }
+
+  // PPM values
+  if (ppmLVal) { ppmLVal.textContent = ''; }
+  if (ppmRVal) { ppmRVal.textContent = ''; }
+
+  // Correlation
+  if (corrVal) { corrVal.textContent = '--'; corrVal.style.color = ''; }
+
+  // M/S levels
+  if (msValueM) { msValueM.textContent = '--'; }
+  if (msValueS) { msValueS.textContent = '--'; }
+  if (msFillM) { msFillM.style.width = '0%'; }
+  if (msFillS) { msFillS.style.width = '0%'; }
+
+  // Width meter
+  if (widthMeterUI) { widthMeterUI.update(0, 0); }
+
+  // Balance meter
+  if (balanceMeterUI) { balanceMeterUI.update(0); }
+
+  // Latency
+  if (remoteLatency) { remoteLatency.textContent = '–'; }
+
+  console.log('[Bootstrap] Remote displays cleared - probe offline');
+}
+
+function stopRemoteCapture() {
+  // Unsubscribe from current probe but keep connection for probe list
+  if (remoteReceiver && selectedRemoteProbeId) {
+    remoteReceiver.unsubscribe(selectedRemoteProbeId);
+  }
+
+  selectedRemoteProbeId = null;
+
+  // Reset meter state AND clear displays
+  resetRemoteMeterState();
+  clearRemoteDisplays();
+
+  if (activeCapture === 'remote') activeCapture = null;
+  updateCaptureButtons();
+  updateInputSourceSummary();
+
+  console.log('[Bootstrap] Remote capture stopped');
+}
+
+/**
+ * Render available probes list in remote panel.
+ * @param {Array} probes - Available probes from broker
+ */
+/** @type {string|null} Currently selected remote probe ID */
+let selectedRemoteProbeId = null;
+
+function renderRemoteProbeList(probes) {
+  if (!remoteProbeList) return;
+
+  if (!probes || probes.length === 0) {
+    remoteProbeList.innerHTML = '<p class="tiny" style="color:var(--muted);text-align:center;margin:8px 0">No probes available</p>';
+    return;
+  }
+
+  // Use radio buttons - only one probe at a time
+  remoteProbeList.innerHTML = probes.map(probe => {
+    const displayName = escapeHtml(probe.name) || probe.id.slice(0, 8);
+    const isSelected = selectedRemoteProbeId === probe.id;
+    const statusDot = probe.isOnline
+      ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0"></span>'
+      : '<span style="width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0"></span>';
+
+    return `
+      <label style="display:flex;align-items:center;gap:6px;padding:4px;cursor:pointer" data-probe-id="${probe.id}">
+        <input type="radio" name="remoteProbe" ${isSelected ? 'checked' : ''} style="accent-color:var(--ok)" />
+        ${statusDot}
+        <span class="tiny">${displayName}</span>
+        <span class="tiny" style="margin-left:auto;color:var(--muted)" id="latency-${probe.id}"></span>
+      </label>
+    `;
+  }).join('');
+
+  // Bind radio selection
+  remoteProbeList.querySelectorAll('input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const label = e.target.closest('[data-probe-id]');
+      const probeId = label?.dataset.probeId;
+      if (!probeId || !remoteReceiver) return;
+
+      // Unsubscribe from previous probe
+      if (selectedRemoteProbeId && selectedRemoteProbeId !== probeId) {
+        remoteReceiver.unsubscribe(selectedRemoteProbeId);
+      }
+
+      // Subscribe to new probe
+      selectedRemoteProbeId = probeId;
+      remoteReceiver.subscribe(probeId);
+    });
+  });
+}
+
+/**
+ * Handle received remote metrics.
+ * Updates all meter displays with data from remote probe.
+ *
+ * @param {string} probeId - Source probe ID
+ * @param {Object} metrics - Metrics data { lufs, truePeak, ppm, stereo, latency }
+ */
+function handleRemoteMetrics(probeId, metrics) {
+  // Only process metrics from the selected probe
+  if (probeId !== selectedRemoteProbeId) return;
+
+  // Only update if we're in remote capture mode
+  if (activeCapture !== 'remote') return;
+
+  // Update latency displays
+  const latencyEl = document.getElementById(`latency-${probeId}`);
+  if (latencyEl && metrics.latency !== undefined) {
+    latencyEl.textContent = `${metrics.latency}ms`;
+  }
+  if (remoteLatency && metrics.latency !== undefined) {
+    remoteLatency.textContent = `${metrics.latency}ms`;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LUFS DISPLAY
+  // ─────────────────────────────────────────────────────────────────────────
+  const { lufs, truePeak, ppm, rms, stereo, visualization } = metrics;
+
+  if (lufs) {
+    // Momentary LUFS
+    if (lufsM) {
+      const m = lufs.momentary;
+      if (isFinite(m) && m > -100) {
+        lufsM.textContent = formatLUFS(m);
+        lufsM.style.color = loudnessColourBase(m);
+        lufsM.dataset.v = m;
+      } else {
+        lufsM.textContent = '--.- LUFS';
+        lufsM.style.color = '';
+      }
+    }
+
+    // Short-term LUFS
+    if (lufsS) {
+      const s = lufs.shortTerm;
+      if (isFinite(s) && s > -100) {
+        lufsS.textContent = formatLUFS(s);
+        lufsS.style.color = loudnessColourBase(s);
+      } else {
+        lufsS.textContent = '--.- LUFS';
+        lufsS.style.color = '';
+      }
+    }
+
+    // Integrated LUFS
+    if (lufsI) {
+      const i = lufs.integrated;
+      if (isFinite(i) && i > -100) {
+        lufsI.textContent = formatLUFS(i);
+        lufsI.style.color = loudnessColourBase(i);
+      } else {
+        lufsI.textContent = '--.- LUFS';
+        lufsI.style.color = '';
+      }
+    }
+
+    // LRA
+    if (lraEl) {
+      const lra = lufs.lra;
+      if (isFinite(lra) && lra >= 0) {
+        lraEl.textContent = lra.toFixed(1) + ' LU';
+      } else {
+        lraEl.textContent = '--.- LU';
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RADAR HISTORY (short-term LUFS over time)
+    // ─────────────────────────────────────────────────────────────────────────
+    const st = lufs.shortTerm;
+    if (isFinite(st) && st > -100) {
+      const now = Date.now();
+      const maxAge = radarMaxSeconds * 1000;
+      // Remove stale entries
+      while (meterState.radarHistory.length > 0 && now - meterState.radarHistory[0].t > maxAge) {
+        meterState.radarHistory.shift();
+      }
+      // Add new entry
+      meterState.radarHistory.push({ t: now, v: st });
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TRUE PEAK DISPLAY
+  // ─────────────────────────────────────────────────────────────────────────
+  if (truePeak && r128TpMax) {
+    const tpMax = Math.max(truePeak.left ?? -Infinity, truePeak.right ?? -Infinity);
+    if (isFinite(tpMax) && tpMax > -100) {
+      r128TpMax.textContent = formatTruePeak(tpMax);
+      // Colour coding: red if over limit
+      const TP_LIMIT = appState.get('truePeakLimit') ?? -1;
+      r128TpMax.style.color = tpMax > TP_LIMIT ? 'var(--hot)' : '';
+    } else {
+      r128TpMax.textContent = '--.- dBTP';
+      r128TpMax.style.color = '';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // METER STATE for bar meters and visualizers
+  // ─────────────────────────────────────────────────────────────────────────
+  // Update meterState so render-loop can draw the bars (uses remote* fields)
+  if (truePeak) {
+    const tpL = truePeak.left ?? -60;
+    const tpR = truePeak.right ?? -60;
+    meterState.remoteTpL = tpL;
+    meterState.remoteTpR = tpR;
+
+    // Update peak hold for remote TP (3s hold logic)
+    const now = performance.now() / 1000;
+    if (tpL > meterState.tpPeakHoldL) {
+      meterState.tpPeakHoldL = tpL;
+      meterState.tpPeakTimeL = now;
+    } else if (now - meterState.tpPeakTimeL > TP_PEAK_HOLD_SEC) {
+      meterState.tpPeakHoldL = tpL;
+      meterState.tpPeakTimeL = now;
+    }
+    if (tpR > meterState.tpPeakHoldR) {
+      meterState.tpPeakHoldR = tpR;
+      meterState.tpPeakTimeR = now;
+    } else if (now - meterState.tpPeakTimeR > TP_PEAK_HOLD_SEC) {
+      meterState.tpPeakHoldR = tpR;
+      meterState.tpPeakTimeR = now;
+    }
+
+    // Peak indicator for radar
+    const currentTruePeak = Math.max(tpL, tpR);
+    if (currentTruePeak >= TP_LIMIT) {
+      meterState.peakIndicatorOn = true;
+      meterState.peakIndicatorLastTrigger = performance.now();
+    }
+  }
+
+  if (ppm) {
+    const ppmL = ppm.left ?? -60;
+    const ppmR = ppm.right ?? -60;
+    meterState.remotePpmL = ppmL;
+    meterState.remotePpmR = ppmR;
+
+    // Update PPM peak hold (3s hold logic)
+    const now = performance.now() / 1000;
+    if (ppmL > meterState.ppmPeakHoldL) {
+      meterState.ppmPeakHoldL = ppmL;
+      meterState.ppmPeakTimeL = now;
+    } else if (now - meterState.ppmPeakTimeL > PPM_PEAK_HOLD_SEC) {
+      meterState.ppmPeakHoldL = ppmL;
+      meterState.ppmPeakTimeL = now;
+    }
+    if (ppmR > meterState.ppmPeakHoldR) {
+      meterState.ppmPeakHoldR = ppmR;
+      meterState.ppmPeakTimeR = now;
+    } else if (now - meterState.ppmPeakTimeR > PPM_PEAK_HOLD_SEC) {
+      meterState.ppmPeakHoldR = ppmR;
+      meterState.ppmPeakTimeR = now;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RMS STATE (for dBFS meter)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (rms) {
+    meterState.remoteRmsL = rms.left ?? -60;
+    meterState.remoteRmsR = rms.right ?? -60;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // STEREO STATE (for correlation, balance, width, rotation, M/S meters)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (stereo) {
+    meterState.remoteCorrelation = stereo.correlation ?? 0;
+    meterState.remoteBalance = stereo.balance ?? 0;
+    meterState.remoteWidth = stereo.width ?? 0;
+    meterState.remoteWidthPeak = stereo.widthPeak ?? 0;
+    meterState.remoteMidLevel = stereo.midLevel ?? -60;
+    meterState.remoteSideLevel = stereo.sideLevel ?? -60;
+    meterState.remoteRotation = stereo.rotation ?? 0;
+
+    // Maintain rotation history (keep last 25 entries like StereoAnalysisEngine)
+    meterState.remoteRotationHistory.push(meterState.remoteRotation);
+    if (meterState.remoteRotationHistory.length > 25) {
+      meterState.remoteRotationHistory.shift();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VISUALIZATION DATA (for goniometer + spectrum analyzer)
+  // Pre-computed on probe, transmitted as compact arrays
+  // ─────────────────────────────────────────────────────────────────────────
+  if (visualization) {
+    // Goniometer: M/S points for vectorscope display
+    // Array of [M0,S0, M1,S1, ...] normalized ±1
+    if (visualization.goniometer && Array.isArray(visualization.goniometer)) {
+      meterState.remoteGoniometerPoints = new Float32Array(visualization.goniometer);
+    }
+
+    // Spectrum: 1/3-octave band dB values (31 bands, 20 Hz–20 kHz)
+    if (visualization.spectrum && Array.isArray(visualization.spectrum)) {
+      meterState.remoteSpectrumBands = new Float32Array(visualization.spectrum);
+    }
+  }
+}
+
+/**
+ * Escape HTML entities for safe insertion.
+ * @param {string} str - String to escape
+ * @returns {string}
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function stopCapture() {
@@ -841,6 +1342,27 @@ function bindEvents() {
   if (btnModeBrowser) btnModeBrowser.onclick = () => setInputMode('browser');
   if (btnModeExternal) btnModeExternal.onclick = () => setInputMode('external');
   if (btnModeGenerator) btnModeGenerator.onclick = () => setInputMode('generator');
+  if (btnModeRemote) btnModeRemote.onclick = () => setInputMode('remote');
+
+  // Remote broker check/reconnect button
+  if (btnRemoteCheck) btnRemoteCheck.onclick = connectRemoteBroker;
+
+  // Remote broker URL change (debounced, reconnects to new broker)
+  let remoteUrlTimer = null;
+  if (remoteBrokerUrl) {
+    remoteBrokerUrl.addEventListener('input', () => {
+      clearTimeout(remoteUrlTimer);
+      remoteUrlTimer = setTimeout(() => {
+        isRemoteAvailable = false; // Reset availability
+        // Disconnect old connection and connect to new URL
+        if (remoteReceiver) {
+          remoteReceiver.disconnect();
+          remoteReceiver = null;
+        }
+        connectRemoteBroker();
+      }, 800);
+    });
+  }
 
   // Start/Stop capture
   if (btnStartCapture) btnStartCapture.onclick = startCapture;
@@ -1178,6 +1700,7 @@ function init() {
       layoutXY, layoutLoudness, sampleAnalysers,
       drawHBar_DBFS, drawDiodeBar_TP, drawHBar_PPM
     },
+    captureState: { getActiveCapture: () => activeCapture },
     TransitionGuard,
     GlitchDebug
   });
