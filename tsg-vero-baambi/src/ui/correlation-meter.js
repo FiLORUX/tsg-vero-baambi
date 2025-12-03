@@ -122,25 +122,25 @@ export class CorrelationMeter {
     ctx.strokeStyle = '#3a4855';
     ctx.strokeRect(barX, barY, barW, barH);
 
-    // Center line (0 position)
-    const centerX = barX + barW / 2;
+    // Centre line (0 position)
+    const centreX = barX + barW / 2;
     ctx.fillStyle = '#4b5563';
-    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+    ctx.fillRect(centreX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
     // RTW-style colour zones for correlation
     const col = (this.corrHold < -0.3)
       ? this.getCss('--hot')
       : (this.corrHold >= 0.3 ? this.getCss('--ok') : this.getCss('--warn'));
 
-    // Fill from center based on correlation value
-    // -1 = full left, 0 = center, +1 = full right
-    const fillX = centerX + (this.corrHold * barW / 2);
+    // Fill from centre based on correlation value
+    // -1 = full left, 0 = centre, +1 = full right
+    const fillX = centreX + (this.corrHold * barW / 2);
     ctx.fillStyle = col;
     ctx.globalAlpha = 0.85;
     if (this.corrHold >= 0) {
-      ctx.fillRect(centerX, barY + 2, fillX - centerX, barH - 4);
+      ctx.fillRect(centreX, barY + 2, fillX - centreX, barH - 4);
     } else {
-      ctx.fillRect(fillX, barY + 2, centerX - fillX, barH - 4);
+      ctx.fillRect(fillX, barY + 2, centreX - fillX, barH - 4);
     }
     ctx.globalAlpha = 1;
 
@@ -153,7 +153,7 @@ export class CorrelationMeter {
     // -1, 0, +1 labels
     const labelY = barY + barH + 10 * dpr;
     ctx.fillText('-1', barX + 10 * dpr, labelY);
-    ctx.fillText('0', centerX, labelY);
+    ctx.fillText('0', centreX, labelY);
     ctx.fillText('+1', barX + barW - 10 * dpr, labelY);
 
     // Update value display element
@@ -211,24 +211,24 @@ export class CorrelationMeter {
     ctx.strokeStyle = '#3a4855';
     ctx.strokeRect(barX, barY, barW, barH);
 
-    // Center line (0 position)
-    const centerX = barX + barW / 2;
+    // Centre line (0 position)
+    const centreX = barX + barW / 2;
     ctx.fillStyle = '#4b5563';
-    ctx.fillRect(centerX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
+    ctx.fillRect(centreX - 1, barY - 4 * dpr, 2, barH + 8 * dpr);
 
     // RTW-style colour zones for correlation
     const col = (this.corrHold < -0.3)
       ? this.getCss('--hot')
       : (this.corrHold >= 0.3 ? this.getCss('--ok') : this.getCss('--warn'));
 
-    // Fill from center based on correlation value
-    const fillX = centerX + (this.corrHold * barW / 2);
+    // Fill from centre based on correlation value
+    const fillX = centreX + (this.corrHold * barW / 2);
     ctx.fillStyle = col;
     ctx.globalAlpha = 0.85;
     if (this.corrHold >= 0) {
-      ctx.fillRect(centerX, barY + 2, fillX - centerX, barH - 4);
+      ctx.fillRect(centreX, barY + 2, fillX - centreX, barH - 4);
     } else {
-      ctx.fillRect(fillX, barY + 2, centerX - fillX, barH - 4);
+      ctx.fillRect(fillX, barY + 2, centreX - fillX, barH - 4);
     }
     ctx.globalAlpha = 1;
 
@@ -240,7 +240,7 @@ export class CorrelationMeter {
 
     const labelY = barY + barH + 10 * dpr;
     ctx.fillText('-1', barX + 10 * dpr, labelY);
-    ctx.fillText('0', centerX, labelY);
+    ctx.fillText('0', centreX, labelY);
     ctx.fillText('+1', barX + barW - 10 * dpr, labelY);
 
     // Update value display element

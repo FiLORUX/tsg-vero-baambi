@@ -61,7 +61,7 @@ export class WidthMeter {
     ctx.clearRect(0, 0, w, h);
 
     const padding = w * 0.02;
-    const centerY = h / 2;
+    const centreY = h / 2;
     const trackW = w - padding * 2;
     const trackH = Math.max(6, h * 0.35);
     const radius = 4 * dpr;
@@ -69,7 +69,7 @@ export class WidthMeter {
     // Draw track background with rounded corners
     ctx.fillStyle = '#0a0c0e';
     ctx.beginPath();
-    ctx.roundRect(padding, centerY - trackH / 2, trackW, trackH, radius);
+    ctx.roundRect(padding, centreY - trackH / 2, trackW, trackH, radius);
     ctx.fill();
 
     // Draw fill bar with rounded corners
@@ -77,12 +77,12 @@ export class WidthMeter {
     const fillColour = this.widthColour(widthVal);
     ctx.fillStyle = fillColour;
     ctx.beginPath();
-    ctx.roundRect(padding, centerY - trackH / 2, fillW, trackH, radius);
+    ctx.roundRect(padding, centreY - trackH / 2, fillW, trackH, radius);
     ctx.fill();
 
     // Draw peak hold tick (taller)
     const peakX = padding + Math.min(1.0, widthPeak) * trackW;
     ctx.fillStyle = this.widthColour(widthPeak);
-    ctx.fillRect(peakX - 1.5 * dpr, centerY - trackH * 0.8, 3 * dpr, trackH * 1.6);
+    ctx.fillRect(peakX - 1.5 * dpr, centreY - trackH * 0.8, 3 * dpr, trackH * 1.6);
   }
 }

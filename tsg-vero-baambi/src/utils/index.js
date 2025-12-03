@@ -34,13 +34,12 @@ export {
   formatFrequency
 } from './format.js';
 
-// Math utilities (British English canonical, American aliases for compatibility)
+// Math utilities
 export {
   clamp,
   lerp,
   mapRange,
   normalise,
-  normalize,        // Legacy alias
   dbToGain,
   gainToDb,
   dbToPower,
@@ -54,7 +53,6 @@ export {
   degToRad,
   radToDeg,
   normaliseAngle,
-  normalizeAngle,   // Legacy alias
   calculatePercentile,
   mean,
   standardDeviation

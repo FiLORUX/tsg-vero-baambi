@@ -1490,7 +1490,7 @@
     }
 
     // TC/RTW colour logic for momentary ring
-    function colorForLu(lu) {
+    function colourForLu(lu) {
       if (lu >= 3) return '#ff4444';       // Red: +3 to +9 (too loud)
       if (lu >= 0) return '#ffd700';       // Yellow: 0 to +3 (over target)
       if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Green: normal level
@@ -1507,7 +1507,7 @@
 
     // Radar colour zones: LUFS → LU relative to LOUDNESS_TARGET (EBU R128 compliant)
     // EBU R128 defines < -12 LU as "low level"
-    function radarColorForLufs(lufs) {
+    function radarColourForLufs(lufs) {
       const lu = lufs - LOUDNESS_TARGET;
       if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
       if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
@@ -1605,7 +1605,7 @@
         const endAngle = startAngle + anglePerSegment;
         const lufs = point.v;
         const r = lufsToRadius(lufs, rOuter, rInner);
-        const color = radarColorForLufs(lufs);
+        const colour = radarColourForLufs(lufs);
 
         // Fade ut sista 15% av livstiden
         let fadeMultiplier = 1.0;
@@ -1619,12 +1619,12 @@
         ctx.arc(cx, cy, rInner, startAngle, endAngle);
         ctx.arc(cx, cy, r, endAngle, startAngle, true);
         ctx.closePath();
-        ctx.fillStyle = color;
+        ctx.fillStyle = colour;
         ctx.globalAlpha = opacity;
 
         // Fresh segments (first 10%) get subtle glow
         if (normalizedAge < 0.10) {
-          ctx.shadowColor = color;
+          ctx.shadowColor = colour;
           ctx.shadowBlur = 4 * (1 - normalizedAge / 0.10);
         } else {
           ctx.shadowBlur = 0;
@@ -1747,7 +1747,7 @@
         const isLit = angleDeg <= litAngleDeg;
 
         // Colour: lit = zone-based, unlit = visible grey
-        const color = isLit ? colorForLu(luAtTick) : '#3a4048';
+        const colour = isLit ? colourForLu(luAtTick) : '#3a4048';
         const alpha = isLit ? 0.95 : 0.55;
         // Tjocklek: lit minor 2.5, major 4; unlit minor 2, major 3.5
         const lineWidth = isLit
@@ -1757,13 +1757,13 @@
         ctx.beginPath();
         ctx.moveTo(cx + tickInnerR * Math.cos(angleRad), cy + tickInnerR * Math.sin(angleRad));
         ctx.lineTo(cx + tickOuterR * Math.cos(angleRad), cy + tickOuterR * Math.sin(angleRad));
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = colour;
         ctx.globalAlpha = alpha;
         ctx.lineWidth = lineWidth;
         ctx.stroke();
       }
 
-      // Siffror runt ringen (var 3 LU)
+      // Numbers around the ring (every 3 LU)
       ctx.globalAlpha = 1;
       ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
       ctx.textAlign = 'center';
@@ -1804,10 +1804,10 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (typeof momentaryLufs === 'number' && isFinite(momentaryLufs)) {
-        const color = radarColorForLufs(momentaryLufs);
-        ctx.shadowColor = color;
+        const colour = radarColourForLufs(momentaryLufs);
+        ctx.shadowColor = colour;
         ctx.shadowBlur = 10;
-        ctx.fillStyle = color;
+        ctx.fillStyle = colour;
         ctx.fillText(momentaryLufs.toFixed(1), cx, cy);
       } else {
         ctx.fillStyle = '#6b7280';
@@ -3089,35 +3089,35 @@
     ctx.roundRect(padding, centerY - trackH / 2, trackW, trackH, radius);
     ctx.fill();
 
-    // Color zones: 0-30% M-color (blue), 30-60% green, 60-80% yellow, 80-100% orange, >100% red
-    function widthColor(w) {
+    // Colour zones: 0-30% M-colour (blue), 30-60% green, 60-80% yellow, 80-100% orange, >100% red
+    function widthColour(w) {
       if (w >= 1.0) return '#ff4444';   // Red: >100%
       if (w >= 0.8) return '#ff9a2d';   // Orange: 80-100%
       if (w >= 0.6) return '#ffd94a';   // Yellow: 60-80%
       if (w >= 0.3) return '#44bb66';   // Green: 30-60%
-      return '#3b82f6';                  // M-color (blue): 0-30%
+      return '#3b82f6';                  // M-colour (blue): 0-30%
     }
 
     // Draw fill bar with rounded corners
     const fillW = Math.min(1.0, widthVal) * trackW;
-    const fillColor = widthColor(widthVal);
-    ctx.fillStyle = fillColor;
+    const fillColour = widthColour(widthVal);
+    ctx.fillStyle = fillColour;
     ctx.beginPath();
     ctx.roundRect(padding, centerY - trackH / 2, fillW, trackH, radius);
     ctx.fill();
 
     // Draw peak hold tick (taller)
     const peakX = padding + Math.min(1.0, widthPeak) * trackW;
-    ctx.fillStyle = widthColor(widthPeak);
+    ctx.fillStyle = widthColour(widthPeak);
     ctx.fillRect(peakX - 1.5 * dpr, centerY - trackH * 0.8, 3 * dpr, trackH * 1.6);
   }
 
   // 4) Rotation Meter - stereo centroid angle with trail
-  // Colors: M (center) = #3b82f6 (blue), S (edges) = #22d3ee (cyan)
-  function rotationColor(rotationValue) {
-    // |rotation| 0 = M color (blue), |rotation| 1 = S color (cyan)
+  // Colours: M (centre) = #3b82f6 (blue), S (edges) = #22d3ee (cyan)
+  function rotationColour(rotationValue) {
+    // |rotation| 0 = M colour (blue), |rotation| 1 = S colour (cyan)
     const t = Math.abs(rotationValue);  // 0..1
-    // M color: rgb(59, 130, 246), S color: rgb(34, 211, 238)
+    // M colour: rgb(59, 130, 246), S colour: rgb(34, 211, 238)
     const r = Math.round(59 + t * (34 - 59));
     const g = Math.round(130 + t * (211 - 130));
     const b = Math.round(246 + t * (238 - 246));
@@ -3170,25 +3170,25 @@
       const alpha = (i + 1) / history.length * 0.4;
       const x = centerX + val * usableW;
       const radius = Math.max(2, h * 0.06);
-      const color = rotationColor(val);
+      const colour = rotationColour(val);
 
       ctx.beginPath();
       ctx.arc(x, trackY, radius, 0, Math.PI * 2);
-      ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
+      ctx.fillStyle = colour.replace('rgb', 'rgba').replace(')', `, ${alpha})`);
       ctx.fill();
     });
 
-    // 4. Main dot with glow - dynamic color based on position
+    // 4. Main dot with glow - dynamic colour based on position
     const rotation = StereoAnalysisEngine.getRotation();
     const dotX = centerX + rotation * usableW;
     const dotRadius = Math.max(3, h * 0.1);
-    const dotColor = rotationColor(rotation);
+    const dotColour = rotationColour(rotation);
 
-    ctx.shadowColor = dotColor;
+    ctx.shadowColor = dotColour;
     ctx.shadowBlur = 8 * dpr;
     ctx.beginPath();
     ctx.arc(dotX, trackY, dotRadius, 0, Math.PI * 2);
-    ctx.fillStyle = dotColor;
+    ctx.fillStyle = dotColour;
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -3514,7 +3514,7 @@
     const cellW = (w - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
     const barH = Math.round(h * 0.12);
 
-    function segColor(db){
+    function segColour(db){
       if(db >= 0) return '#ff2020';   // Above 0 dBTP: aggressive bright red
       if(db>=-1) return getCss('--hot');
       if(db>=-3) return getCss('--caution');
@@ -3522,7 +3522,7 @@
       return getCss('--ok');
     }
     // Brighter version for peak-hold
-    function peakColor(db){
+    function peakColour(db){
       if(db >= 0) return '#ff4040';   // Above 0 dBTP: extra bright red with glow
       if(db>=-1) return '#ff6b5b';
       if(db>=-3) return '#ffb74d';
@@ -3542,7 +3542,7 @@
       for (let cell = 0; cell < LED_CELLS; cell++) {
         const cellDb = -60 + cell * 0.5;  // 0.5 dB per cell, 126 cells → −60…+3 covered
         const cellX = cell * (cellW + LED_GAP);
-        const col = segColor(cellDb + 0.25);  // Color based on cell center
+        const col = segColour(cellDb + 0.25);  // Colour based on cell centre
 
         // Background (dimmed) - all cells
         ctx.globalAlpha = 0.14;
@@ -3566,11 +3566,11 @@
         }
       }
 
-      // Peak-hold cell - brighter same-zone color with subtle glow
+      // Peak-hold cell - brighter same-zone colour with subtle glow
       if (peakCell >= 0 && peakCell < LED_CELLS && peakHold > -60) {
         const peakCellDb = -60 + peakCell * 0.5;
         const cellX = peakCell * (cellW + LED_GAP);
-        const pCol = peakColor(peakCellDb);
+        const pCol = peakColour(peakCellDb);
         ctx.globalAlpha = 1;
         ctx.shadowColor = pCol;
         ctx.shadowBlur = (peakCellDb >= 0) ? 8 * dpr : 4 * dpr;  // Extra glow above 0
@@ -3606,10 +3606,10 @@
     ctx.fillStyle='#0e151a'; ctx.fillRect(0,0,w,h);
     const step=0.5;  // 0.5 dB resolution → 90 "dioder"
     // Nordic PPM colour zones (PPM = dBu = dBFS + 18)
-    function segColor(db){
+    function segColour(db){
       const ppm = db + 18; // dBFS -> PPM/dBu
       if (ppm >= 6)  return getCss('--hot');      // +6..+9: red (over PML)
-      if (ppm >= 0)  return getCss('--caution');  // 0..+6: amber (nominal / varning)
+      if (ppm >= 0)  return getCss('--caution');  // 0..+6: amber (nominal / warning)
       return getCss('--ok');                      // <0: green (everything below line-up)
     }
     function drawChannel(yTop, val, peakHold){
@@ -3618,7 +3618,7 @@
         const x0=xFromDb(d), x1=xFromDb(d+step);
         if(x1<=x0) continue;  // aliasing protection
         ctx.globalAlpha=.14;
-        ctx.fillStyle=segColor(d+step/2);
+        ctx.fillStyle=segColour(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
       // Active bar
@@ -3627,15 +3627,15 @@
         const x0=xFromDb(d), x1=xFromDb(Math.min(d+step,tEnd));
         if(x1<=x0) continue;  // aliasing protection
         ctx.globalAlpha=.9;
-        ctx.fillStyle=segColor(d+step/2);
+        ctx.fillStyle=segColour(d+step/2);
         ctx.fillRect(x0,yTop,(x1-x0)-1,h*0.12);
       }
       // Peak-hold marker (RTW-style: thin line)
       if (peakHold !== undefined && peakHold > dbMin) {
         const xPeak = xFromDb(peakHold);
-        const peakColor = segColor(peakHold);
+        const peakColour = segColour(peakHold);
         ctx.globalAlpha = 1;
-        ctx.fillStyle = peakColor;
+        ctx.fillStyle = peakColour;
         ctx.fillRect(xPeak - 1, yTop - 2, 2, h*0.12 + 4);
         ctx.fillRect(xPeak - 3, yTop - 2, 6, 2);
       }
@@ -3788,7 +3788,7 @@
   r128ResetBtn.addEventListener('click', resetR128);
 
   // Colour based on distance from target
-  function loudnessColor(lufs) {
+  function loudnessColour(lufs) {
     if (!isFinite(lufs)) return 'var(--muted)';
     const offset = lufs - LOUDNESS_TARGET;
     if (offset >= -1 && offset <= 1) return getCss('--ok');      // −24 to −22: green (on target)
@@ -3825,16 +3825,16 @@
       lufsM.dataset.v=mDisp; lufsS.dataset.v=sDisp; lufsI.dataset.v=iDisp;
       // Momentary
       lufsM.textContent = formatLufs(mDisp);
-      lufsM.style.color = loudnessColor(mDisp);
+      lufsM.style.color = loudnessColour(mDisp);
       // Short-term
       lufsS.textContent = formatLufs(sDisp);
-      lufsS.style.color = loudnessColor(sDisp);
+      lufsS.style.color = loudnessColour(sDisp);
       // Integrated with offset from target
       if (isFinite(iDisp)) {
         const offsetLU = iDisp - LOUDNESS_TARGET;
         const offsetStr = formatDbSigned(offsetLU, 1, 5);
         lufsI.innerHTML = `${formatLufs(iDisp)} <span style="opacity:0.7;font-size:0.85em">(${offsetStr})</span>`;
-        lufsI.style.color = loudnessColor(iDisp);
+        lufsI.style.color = loudnessColour(iDisp);
       } else {
         lufsI.textContent = '--.- LUFS';
         lufsI.style.color = '';
