@@ -32,7 +32,7 @@ const MOMENTARY_LU_RANGE = MOMENTARY_LU_MAX - MOMENTARY_LU_MIN;
 const LOW_LEVEL_BELOW = -12;  // Below −12 LU = "low level" zone (cyan)
 
 // Maps LU value to normalised 0–1 range for radial positioning
-function luToNormalized(lu, minLu, maxLu) {
+function luToNormalised(lu, minLu, maxLu) {
   return Math.max(0, Math.min(1, (lu - minLu) / (maxLu - minLu)));
 }
 
@@ -51,7 +51,7 @@ function radarColourForLufs(lufs, target) {
   if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
   if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
   if (lu >= -6) return '#ffd94a';   // yellow – near target (-6 to 0)
-  if (lu >= -12) return '#88d65c';  // light green – normal (-12 till -6)
+  if (lu >= -12) return '#88d65c';  // light green – normal (−12 to −6)
   return '#4488cc';                 // blue – low level (below -12 LU per EBU R128)
 }
 
@@ -70,7 +70,7 @@ export class LoudnessRadar {
   }
 
   /**
-   * Radar radius: LUFS → LU relativt LOUDNESS_TARGET, EBU R128 scale (-36 till +9 LU)
+   * Radar radius: LUFS → LU relative to LOUDNESS_TARGET, EBU R128 scale (−36 to +9 LU)
    */
   lufsToRadius(lufs, rOuter, rInner) {
     const lu = lufs - this.target;
@@ -107,7 +107,7 @@ export class LoudnessRadar {
     ctx.lineCap = 'round';
     ctx.globalAlpha = 0.55;
 
-    // Ringar var 6 LU (utom target som ritas separat)
+    // Rings every 6 LU (target ring drawn separately)
     const GRID_STEP_LU = 6;
     for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
       if (lu === 0) continue;
@@ -170,7 +170,7 @@ export class LoudnessRadar {
       const r = this.lufsToRadius(lufs, rOuter, rInner);
       const colour = radarColourForLufs(lufs, this.target);
 
-      // Fade ut sista 15% av livstiden
+      // Fade out final 15% of segment lifetime
       let fadeMultiplier = 1.0;
       if (normalizedAge > FADE_START) {
         fadeMultiplier = 1.0 - (normalizedAge - FADE_START) / (1.0 - FADE_START);
@@ -194,9 +194,9 @@ export class LoudnessRadar {
       }
 
       ctx.fill();
-      ctx.shadowBlur = 0;  // Reset efter fill
+      ctx.shadowBlur = 0;  // Reset after fill
 
-      // Mjukare kant som tonar med segmentet
+      // Soft edge that fades with segment opacity
       ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.3})`;
       ctx.lineWidth = 0.75;
       ctx.stroke();
@@ -229,7 +229,7 @@ export class LoudnessRadar {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    const labelAngle = 0;  // kl 3-spaken
+    const labelAngle = 0;  // 3 o'clock spoke
 
     RADAR_SCALE_LU.forEach(lu => {
       const lufs = lu + this.target;
@@ -253,9 +253,9 @@ export class LoudnessRadar {
     ctx.restore();
   }
 
-  // TC/RTW-style outer ring med momentary bargraph
-  // Geometry: 270° arc, -18 to +9 LU = 27 LU, 10° per LU
-  // Ticks var 2°, major tick var 10° (1 per LU)
+  // TC/RTW-style outer ring with momentary bargraph
+  // Geometry: 270° arc, −18 to +9 LU = 27 LU, 10° per LU
+  // Ticks every 2°, major tick every 10° (1 per LU)
   drawOuterMomentaryRing(ctx, cx, cy, rOuter, canvasWidth, momentaryLufs) {
     ctx.save();
 
@@ -267,14 +267,14 @@ export class LoudnessRadar {
 
     // 270° arc: -180° to +90° (6 o'clock to 3 o'clock)
     // -18 LU at -180° (6 o'clock, bottom), +9 LU at +90° (3 o'clock, right)
-    const START_ANGLE_DEG = -180;  // -18 LU (kl 6, botten)
+    const START_ANGLE_DEG = -180;  // −18 LU (6 o'clock, bottom)
     const END_ANGLE_DEG = 90;      // +9 LU (3 o'clock, right)
     const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG;  // 270°
 
     // 27 LU = 270° → 10° per LU
     const DEG_PER_LU = TOTAL_ARC_DEG / MOMENTARY_LU_RANGE;  // 10°
 
-    // Tick var 2° → 135 ticks totalt
+    // Tick every 2° → 135 ticks total
     const TICK_STEP_DEG = 2;
     const NUM_TICKS = Math.floor(TOTAL_ARC_DEG / TICK_STEP_DEG) + 1;
 
@@ -283,9 +283,9 @@ export class LoudnessRadar {
       ? momentaryLufs - this.target
       : MOMENTARY_LU_MIN - 1;
 
-    // Normalisera momentary → vinkel
-    const normalized = luToNormalized(momentaryLu, MOMENTARY_LU_MIN, MOMENTARY_LU_MAX);
-    const litAngleDeg = START_ANGLE_DEG + normalized * TOTAL_ARC_DEG;
+    // Normalise momentary → angle
+    const normalised = luToNormalised(momentaryLu, MOMENTARY_LU_MIN, MOMENTARY_LU_MAX);
+    const litAngleDeg = START_ANGLE_DEG + normalised * TOTAL_ARC_DEG;
 
     // Draw all ticks (lit and unlit)
     ctx.lineCap = 'round';
@@ -297,12 +297,12 @@ export class LoudnessRadar {
       const angleDeg = START_ANGLE_DEG + i * TICK_STEP_DEG;
       const angleRad = (angleDeg - 90) * Math.PI / 180;  // -90° offset for 12 o'clock
 
-      // Major tick var 10° (1 per LU)
+      // Major tick every 10° (1 per LU)
       const isMajor = (Math.round(angleDeg - START_ANGLE_DEG) % 10 === 0);
       const tickLen = isMajor ? majorTickLen : minorTickLen;
       const tickInnerR = tickOuterR - tickLen;
 
-      // LU vid denna vinkel
+      // LU at this angle
       const t = (angleDeg - START_ANGLE_DEG) / TOTAL_ARC_DEG;
       const luAtTick = MOMENTARY_LU_MIN + t * MOMENTARY_LU_RANGE;
 
@@ -312,7 +312,7 @@ export class LoudnessRadar {
       // Colour: lit = zone-based, unlit = visible grey
       const colour = isLit ? colourForLu(luAtTick) : '#3a4048';
       const alpha = isLit ? 0.95 : 0.55;
-      // Tjocklek: lit minor 2.5, major 4; unlit minor 2, major 3.5
+      // Line width: lit minor 2.5, major 4; unlit minor 2, major 3.5
       const lineWidth = isLit
         ? (isMajor ? 4 : 2.5)
         : (isMajor ? 3.5 : 2);
@@ -326,7 +326,7 @@ export class LoudnessRadar {
       ctx.stroke();
     }
 
-    // Siffror runt ringen (var 3 LU)
+    // Numerals around the ring (every 3 LU)
     ctx.globalAlpha = 1;
     ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
     ctx.textAlign = 'center';

@@ -19,7 +19,7 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// Colours and themes
+// Colours and themes (British English canonical exports)
 export {
   DEFAULT_COLOURS,
   getLoudnessColour,
@@ -32,6 +32,13 @@ export {
   createMeterGradient,
   createTPGradient,
   getColoursFromCSS
+} from './colours.js';
+
+// Legacy aliases for backwards compatibility (American spelling → British)
+export {
+  DEFAULT_COLOURS as DEFAULT_COLORS,
+  getLoudnessColour as getLoudnessColor,
+  getCorrelationColour as getCorrelationColor
 } from './colours.js';
 
 // Meter bar components
@@ -51,3 +58,6 @@ export { Goniometer } from './goniometer.js';
 
 // Correlation meter
 export { corrNow, CorrelationMeter } from './correlation-meter.js';
+
+// Balance meter
+export { BalanceMeter } from './balance-meter.js';
