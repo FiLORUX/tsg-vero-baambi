@@ -205,7 +205,7 @@ export function calculateTruePeakStereo(leftBuffer, rightBuffer) {
  * analyserR.getFloatTimeDomainData(bufferR);
  * tpMeter.update(bufferL, bufferR);
  *
- * const { left, right, peakHoldL, peakHoldR, isOver } = tpMeter.getState();
+ * const { left, right, peakLeft, peakRight, isOver } = tpMeter.getState();
  */
 export class TruePeakMeter {
   /**
@@ -295,9 +295,9 @@ export class TruePeakMeter {
     return {
       left: this.smoothL,
       right: this.smoothR,
-      peakHoldL: this.peakHoldL,
-      peakHoldR: this.peakHoldR,
-      maxPeak: this.maxPeak,
+      peakLeft: this.peakHoldL,
+      peakRight: this.peakHoldR,
+      max: this.maxPeak,
       isOver: this.isOver
     };
   }
@@ -317,9 +317,9 @@ export class TruePeakMeter {
  * @typedef {Object} TruePeakMeterState
  * @property {number} left - Smoothed left True Peak in dBTP
  * @property {number} right - Smoothed right True Peak in dBTP
- * @property {number} peakHoldL - Peak hold left in dBTP
- * @property {number} peakHoldR - Peak hold right in dBTP
- * @property {number} maxPeak - Maximum peak since reset in dBTP
+ * @property {number} peakLeft - Peak hold left in dBTP
+ * @property {number} peakRight - Peak hold right in dBTP
+ * @property {number} max - Maximum peak since reset in dBTP
  * @property {boolean} isOver - True if peak exceeded limit
  */
 

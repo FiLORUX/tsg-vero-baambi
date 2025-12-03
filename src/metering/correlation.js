@@ -39,7 +39,7 @@
  *   positive = louder on right
  *   negative = louder on left
  *
- * @module stereo/correlation
+ * @module metering/correlation
  * @see DIN 45406 (Level and phase metering)
  * @see EBU R68 (Reference levels)
  * ═══════════════════════════════════════════════════════════════════════════════

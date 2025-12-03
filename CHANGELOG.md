@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2024-12-10
+
+### Added
+- API reference documentation (`docs/api.md`)
+
+### Changed
+- **Standardised meter state property names** for consistency across all meters:
+  - PPM: `displayL/R` → `left/right`, `peakHoldL/R` → `peakLeft/Right`, `ppmL/R` → `ppmLeft/Right`
+  - TruePeak: `peakHoldL/R` → `peakLeft/Right`, `maxPeak` → `max`
+- Removed duplicate `src/stereo/` module (functionality in `src/metering/correlation.js`)
+
 ## [2.1.0] - 2024-12-10
 
 ### Added
