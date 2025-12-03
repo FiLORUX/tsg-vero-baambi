@@ -718,7 +718,7 @@ david@thast.se  ·  +46 700 30 30 60
       const processor = ac.createScriptProcessor(bufferSize, 0, 2);
       const generator = new ThastVectorTextGenerator({
         pointsPerSecond: 2400,  // Higher for smoother display
-        outputScale: 0.15       // Calibrated to match -18 dBFS reference level
+        outputScale: 0.501      // Match internal generator -6 dBFS level (10^(-6/20) = 0.501)
       });
 
       processor.onaudioprocess = (e) => {
