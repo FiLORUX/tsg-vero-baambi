@@ -77,16 +77,19 @@ export function mapRange(value, inMin, inMax, outMin, outMax) {
 }
 
 /**
- * Normalize value to 0-1 range.
+ * Normalise value to 0–1 range.
  *
- * @param {number} value - Value to normalize
+ * @param {number} value - Value to normalise
  * @param {number} min - Minimum of range
  * @param {number} max - Maximum of range
- * @returns {number} Normalized value (0 to 1)
+ * @returns {number} Normalised value (0 to 1)
  */
-export function normalize(value, min, max) {
+export function normalise(value, min, max) {
   return (value - min) / (max - min);
 }
+
+// Legacy alias for backwards compatibility
+export const normalize = normalise;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // dB / LINEAR CONVERSIONS
@@ -269,14 +272,17 @@ export function radToDeg(radians) {
 }
 
 /**
- * Normalize angle to 0-2π range.
+ * Normalise angle to 0–2π range.
  *
  * @param {number} angle - Angle in radians
- * @returns {number} Normalized angle
+ * @returns {number} Normalised angle
  */
-export function normalizeAngle(angle) {
+export function normaliseAngle(angle) {
   return ((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 }
+
+// Legacy alias for backwards compatibility
+export const normalizeAngle = normaliseAngle;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PERCENTILES / STATISTICS
