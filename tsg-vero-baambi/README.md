@@ -285,9 +285,6 @@ tsg-vero-baambi/
     │   ├── render-loop.js      # 60 Hz visual rendering (RAF-based)
     │   └── measure-loop.js     # 20 Hz measurement updates
     │
-    ├── stereo/                 # Stereo analysis (legacy location)
-    │   └── correlation.js      # Duplicate of metering/correlation.js
-    │
     └── remote/                 # Remote metering module
         ├── index.js            # Remote module exports
         ├── types.js            # Metrics schema (RemoteMetrics type)

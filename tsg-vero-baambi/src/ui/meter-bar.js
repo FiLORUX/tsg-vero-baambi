@@ -296,7 +296,7 @@ export class MeterBar {
  * const tpMeter = new StereoMeterBar(canvas, 'truePeak');
  *
  * function render() {
- *   tpMeter.draw(tpState.left, tpState.right, tpState.peakHoldL, tpState.peakHoldR);
+ *   tpMeter.draw(tpState.left, tpState.right, tpState.peakLeft, tpState.peakRight);
  *   requestAnimationFrame(render);
  * }
  */

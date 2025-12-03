@@ -328,7 +328,7 @@ export function calculateQuasiPeakRCStereo(leftBuffer, rightBuffer, sampleRate, 
  * analyserR.getFloatTimeDomainData(bufferR);
  * ppm.update(bufferL, bufferR);
  *
- * const { displayL, displayR, ppmL, ppmR } = ppm.getState();
+ * const { left, right, ppmLeft, ppmRight } = ppm.getState();
  */
 export class PPMMeter {
   /** @type {number} */
@@ -466,20 +466,20 @@ export class PPMMeter {
 
     return {
       // dBFS values (for meter drawing)
-      displayL,
-      displayR,
-      peakHoldL: this.peakHoldL,
-      peakHoldR: this.peakHoldR,
+      left: displayL,
+      right: displayR,
+      peakLeft: this.peakHoldL,
+      peakRight: this.peakHoldR,
 
       // PPM scale values (for display)
-      ppmL: dbfsToPPM(displayL),
-      ppmR: dbfsToPPM(displayR),
-      ppmPeakL: dbfsToPPM(this.peakHoldL),
-      ppmPeakR: dbfsToPPM(this.peakHoldR),
+      ppmLeft: dbfsToPPM(displayL),
+      ppmRight: dbfsToPPM(displayR),
+      ppmPeakLeft: dbfsToPPM(this.peakHoldL),
+      ppmPeakRight: dbfsToPPM(this.peakHoldR),
 
       // Silence detection
-      isSilentL: displayL <= PPM_MIN_DBFS + 1,
-      isSilentR: displayR <= PPM_MIN_DBFS + 1
+      isSilentLeft: displayL <= PPM_MIN_DBFS + 1,
+      isSilentRight: displayR <= PPM_MIN_DBFS + 1
     };
   }
 
@@ -494,16 +494,16 @@ export class PPMMeter {
 
 /**
  * @typedef {Object} PPMMeterState
- * @property {number} displayL - Left level in dBFS (clamped to scale)
- * @property {number} displayR - Right level in dBFS (clamped to scale)
- * @property {number} peakHoldL - Left peak hold in dBFS
- * @property {number} peakHoldR - Right peak hold in dBFS
- * @property {number} ppmL - Left level in PPM scale
- * @property {number} ppmR - Right level in PPM scale
- * @property {number} ppmPeakL - Left peak hold in PPM scale
- * @property {number} ppmPeakR - Right peak hold in PPM scale
- * @property {boolean} isSilentL - True if left channel is below scale
- * @property {boolean} isSilentR - True if right channel is below scale
+ * @property {number} left - Left level in dBFS (clamped to scale)
+ * @property {number} right - Right level in dBFS (clamped to scale)
+ * @property {number} peakLeft - Left peak hold in dBFS
+ * @property {number} peakRight - Right peak hold in dBFS
+ * @property {number} ppmLeft - Left level in PPM scale
+ * @property {number} ppmRight - Right level in PPM scale
+ * @property {number} ppmPeakLeft - Left peak hold in PPM scale
+ * @property {number} ppmPeakRight - Right peak hold in PPM scale
+ * @property {boolean} isSilentLeft - True if left channel is below scale
+ * @property {boolean} isSilentRight - True if right channel is below scale
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
