@@ -45,15 +45,17 @@ This application is built on the principle that **local operation is not a fallb
    - Implements EBU R128, ITU-R BS.1770-4, IEC 60268-10 algorithms
    - Calibration against known test signals documented
 
-### Remote Features (Future)
+### Remote Features
 
-When remote features are implemented (probe/client architecture), they will:
+Remote metering is now fully implemented with a probe/broker/client architecture:
 
-- Require explicit user opt-in
-- Work over local network only by default
-- Never transmit audio content, only metrics
-- Degrade gracefully when broker unavailable
-- Never compromise local-mode functionality
+- **Explicit user opt-in** — disabled by default, enabled via UI toggle
+- **Local network first** — broker runs on localhost, configurable for LAN
+- **Metrics only** — no audio content transmitted, only numerical values (LUFS, True Peak, PPM, stereo)
+- **Graceful degradation** — queues messages during disconnection, auto-reconnects with exponential backoff
+- **Zero impact on local mode** — remote features are additive, local operation unaffected
+
+See `src/remote/` for implementation and `broker/` for the relay server.
 
 ---
 
@@ -248,9 +250,14 @@ See `docs/verification.md` for detailed test procedures using reference signals.
 tsg-vero-baambi/
 ├── index.html                  # ESM entry point (modular version)
 ├── audio-meters-grid.html      # Legacy monolithic version (fallback)
+├── probe.html                  # Remote probe application
 ├── external-meter-processor.js # AudioWorklet for external sources
 ├── README.md                   # This file
 ├── smoke-checklist.md          # Manual testing checklist
+│
+├── broker/                     # Remote metering relay server
+│   ├── server.js               # Minimal WebSocket broker (Node.js)
+│   └── package.json            # Broker dependencies (ws only)
 │
 └── src/
     ├── main.js                 # Application entry, initialisation
@@ -278,8 +285,26 @@ tsg-vero-baambi/
     │   ├── render-loop.js      # 60 Hz visual rendering (RAF-based)
     │   └── measure-loop.js     # 20 Hz measurement updates
     │
-    └── remote/                 # Remote metering (future)
-        └── types.js            # Metrics schema for probe/client
+    ├── stereo/                 # Stereo analysis (legacy location)
+    │   └── correlation.js      # Duplicate of metering/correlation.js
+    │
+    └── remote/                 # Remote metering module
+        ├── index.js            # Remote module exports
+        ├── types.js            # Metrics schema (RemoteMetrics type)
+        ├── transport/          # WebSocket communication
+        │   ├── index.js        # Transport exports
+        │   └── websocket-client.js # Auto-reconnect WebSocket wrapper
+        ├── probe/              # Metrics sender (source side)
+        │   ├── index.js        # Probe exports
+        │   ├── probe-sender.js # Streams metrics to broker
+        │   └── metrics-collector.js # Gathers meter values
+        ├── client/             # Metrics receiver (display side)
+        │   ├── index.js        # Client exports
+        │   └── metrics-receiver.js # Receives and distributes metrics
+        └── ui/                 # Remote UI components
+            ├── index.js        # UI exports
+            ├── remote-panel.js # Toggle and status panel
+            └── remote-panel.css # Panel styling
 ```
 
 ---

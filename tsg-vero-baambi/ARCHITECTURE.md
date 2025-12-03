@@ -268,21 +268,53 @@ At 60 fps, each frame has ~16.6 ms. Budget allocation:
 
 ---
 
-## Future: Remote Architecture
+## Remote Architecture
 
-The codebase is structured to support optional remote metering (probe/client):
+The remote metering module enables distributed audio monitoring across network:
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌─────────────┐
 │   Probe     │────────▶│   Broker    │◀────────│   Client    │
-│ (captures   │  WebSocket (aggregates │  WebSocket (displays  │
-│  & meters)  │         │  streams)   │         │  metrics)   │
+│ (probe.html │ WebSocket│ (broker/   │ WebSocket│ (index.html │
+│  captures   │  10 Hz   │  server.js)│  10 Hz   │  displays   │
+│  & meters)  │  metrics │  relays    │  metrics │  metrics)   │
 └─────────────┘         └─────────────┘         └─────────────┘
 ```
 
-See `src/remote/types.js` for the metrics schema that would be transmitted.
+### Module Structure (`src/remote/`)
 
-**Key constraint**: Remote features will be opt-in and never compromise local-mode functionality.
+| Module | Responsibility |
+|--------|----------------|
+| `types.js` | `RemoteMetrics` schema — LUFS M/S/I, True Peak, PPM, stereo values |
+| `transport/websocket-client.js` | Auto-reconnecting WebSocket with exponential backoff |
+| `probe/probe-sender.js` | Collects metrics at 10 Hz, streams to broker |
+| `probe/metrics-collector.js` | Gathers values from metering instances |
+| `client/metrics-receiver.js` | Receives metrics, manages probe subscriptions |
+| `ui/remote-panel.js` | Toggle controls, probe list, status display |
+
+### Data Flow
+
+```
+Probe (source machine):
+  AudioContext → LUFSMeter/PPMMeter/etc → MetricsCollector → ProbeSender → WebSocket
+
+Broker (relay server):
+  WebSocket ← Probe metrics
+  WebSocket → Client metrics (broadcast to subscribers)
+
+Client (display machine):
+  WebSocket → MetricsReceiver → UI update callbacks → DOM/Canvas
+```
+
+### Key Design Decisions
+
+1. **Metrics only, never audio** — Only numerical values transmitted (~200 bytes/message)
+2. **10 Hz update rate** — Balances responsiveness with bandwidth
+3. **Message queuing** — Buffers during disconnection, flushes on reconnect
+4. **Heartbeat** — 5-second interval for connection health monitoring
+5. **Probe ID** — UUID + user-editable name for multi-probe environments
+
+**Key constraint**: Remote features are opt-in and have zero impact on local-mode functionality.
 
 ---
 
