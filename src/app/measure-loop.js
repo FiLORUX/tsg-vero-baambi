@@ -238,8 +238,8 @@ function measureLoop() {
   // ─────────────────────────────────────────────────────────────────────────
   const tpState = meters.truePeakMeter.getState();
 
-  if (tpState.peakHoldL > meterState.tpMaxL) meterState.tpMaxL = tpState.peakHoldL;
-  if (tpState.peakHoldR > meterState.tpMaxR) meterState.tpMaxR = tpState.peakHoldR;
+  if (tpState.peakLeft > meterState.tpMaxL) meterState.tpMaxL = tpState.peakLeft;
+  if (tpState.peakRight > meterState.tpMaxR) meterState.tpMaxR = tpState.peakRight;
   const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
 
   // TPmax display

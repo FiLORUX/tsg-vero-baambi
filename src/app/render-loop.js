@@ -323,12 +323,12 @@ function renderLoop() {
     // Local metering
     meters.ppmMeter.update(meters.bufL, meters.bufR);
     const ppmState = meters.ppmMeter.getState();
-    ppmDisplayL = ppmState.displayL;
-    ppmDisplayR = ppmState.displayR;
-    ppmL = ppmState.ppmL;
-    ppmR = ppmState.ppmR;
-    isSilentL = ppmState.isSilentL;
-    isSilentR = ppmState.isSilentR;
+    ppmDisplayL = ppmState.left;
+    ppmDisplayR = ppmState.right;
+    ppmL = ppmState.ppmLeft;
+    ppmR = ppmState.ppmRight;
+    isSilentL = ppmState.isSilentLeft;
+    isSilentR = ppmState.isSilentRight;
 
     // PPM peak-hold uses dBFS values (for bar drawing)
     if (ppmDisplayL > meterState.ppmPeakHoldL) {

@@ -331,8 +331,8 @@ export class MetricsCollector {
     try {
       const state = meter.getState();
       return {
-        left: this.#sanitiseLevel(state.displayL),
-        right: this.#sanitiseLevel(state.displayR)
+        left: this.#sanitiseLevel(state.left),
+        right: this.#sanitiseLevel(state.right)
       };
     } catch (error) {
       console.warn('[MetricsCollector] PPM collection error:', error);

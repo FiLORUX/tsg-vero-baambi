@@ -35,8 +35,7 @@
  *               │   └─► renderer.js      - Render loop orchestration
  *               ├─► config/storage.js    - LocalStorage versioning
  *               ├─► remote/types.js      - Metrics schema (probe/client)
- *               ├─► metering/            - EBU R128, LUFS, True Peak, PPM
- *               ├─► stereo/              - Phase correlation
+ *               ├─► metering/            - EBU R128, LUFS, True Peak, PPM, stereo
  *               ├─► audio/               - AudioContext, worklets
  *               │   └─► engine.js        - AudioEngine class
  *               ├─► ui/                  - Display components
