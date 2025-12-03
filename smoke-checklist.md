@@ -191,24 +191,36 @@
 
 ---
 
-## 10. Future: Remote Features (Phase 3+)
+## 10. Remote Metering Features
 
-> These tests apply when remote/probe features are implemented.
+> Test the probe/broker/client architecture for distributed monitoring.
 
 ### 10.1 Local-Only Mode (Default)
 - [ ] No network requests in local mode
-- [ ] Remote indicator shows "LOCAL"
+- [ ] Remote panel shows "Local Mode"
 - [ ] All features work offline
+- [ ] No console errors about WebSocket
 
-### 10.2 Probe Mode (when implemented)
-- [ ] Probe broadcasts metrics
-- [ ] No data sent without explicit opt-in
-- [ ] Graceful fallback if broker unavailable
+### 10.2 Broker Server
+- [ ] `cd broker && node server.js` starts without error
+- [ ] Server listens on ws://localhost:8765
+- [ ] Console shows client connections/disconnections
 
-### 10.3 Client Mode (when implemented)
-- [ ] Client receives metrics from probe
-- [ ] Meter displays match probe readings
-- [ ] Connection status indicator works
+### 10.3 Probe Mode (`probe.html`)
+- [ ] Page loads and captures system audio
+- [ ] Goniometer renders at correct scale
+- [ ] Metrics stream to broker (check broker console)
+- [ ] Probe ID appears in broker logs
+- [ ] Reconnects automatically if broker restarts
+
+### 10.4 Client Mode (`index.html`)
+- [ ] Enable "Remote Mode" toggle in settings
+- [ ] Probe list populates from broker
+- [ ] Selecting probe starts receiving metrics
+- [ ] LUFS/TP/PPM displays match probe readings
+- [ ] Latency indicator shows reasonable value (<100ms)
+- [ ] Switching back to local mode works correctly
+- [ ] Screen capture (getDisplayMedia) works after remote mode
 
 ---
 

@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2024-12-10
+
+### Added
+- **Remote metering module** — complete probe/broker/client architecture for distributed monitoring
+  - WebSocket transport with auto-reconnect and exponential backoff
+  - Probe sender collecting LUFS/True Peak/PPM/Stereo metrics at 10 Hz
+  - Client receiver with subscription management and latency tracking
+  - Minimal Node.js broker server for relay functionality
+  - UI panel component with toggle controls and status display
+- `probe.html` — standalone remote probe application
+- BS.1770-4 calibration constant (−0.691 dB) for LUFS calculation
+- IEC 60268-10 RC detector model for PPM (analogue-accurate ballistics)
+- Strict JSDoc type annotations for TypeScript validation
+- Expanded test coverage (35 tests across all metering algorithms)
+
+### Changed
+- **Enforced British English exclusively** — removed all American spelling aliases
+  - Functions: `getCorrelationColour`, `normalise`, `normaliseAngle`
+  - Variables: `centreX`, `centreY`, `colour`, `colours`
+  - No legacy aliases for backwards compatibility (no external consumers)
+- Remote features now opt-in and fully functional (previously marked "Future")
+- Directory structure updated with `broker/` and `src/remote/` modules
+
+### Fixed
+- Source switching from remote mode preserves user gesture for getDisplayMedia
+- Goniometer output scale in probe mode (0.501 for −6 dBFS alignment)
+
 ## [2.0.0] - 2024-12-05
 
 ### Added
@@ -21,7 +48,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refactored monolithic codebase into domain modules
 - Softened compliance claims to reflect practical (non-certified) status
 - Improved K-weighting documentation with sample rate limitations
-- Standardised British English spelling throughout
 
 ### Fixed
 - Goniometer phosphor decay now frame-rate independent
