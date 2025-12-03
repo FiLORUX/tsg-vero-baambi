@@ -1116,7 +1116,7 @@
         font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
         font-size="100">
 
-    <!-- TSG Suite i samma cyan som tagline -->
+    <!-- TSG Suite in matching cyan -->
     <tspan fill="#93C5FD" font-weight="800" letter-spacing="0.75">TSG Suite</tspan>
 
     <!-- separator -->
@@ -1130,7 +1130,7 @@
     <!-- separator -->
     <tspan fill="#6B7280" font-weight="300" dx="1.2em">|</tspan>
 
-    <!-- Tagline i samma cyan som TSG Suite -->
+    <!-- Tagline in matching cyan -->
     <tspan fill="#93C5FD" font-weight="600" font-size="75" letter-spacing="2.5" dx="1.2em">
       Broadcast Audio Alignment &amp; Meter Bridge Interface
     </tspan>
@@ -1497,7 +1497,7 @@
       return '#4488cc';                     // Blue: below low level
     }
 
-    // Radar radius: LUFS → LU relativt LOUDNESS_TARGET, EBU R128 scale (-36 till +9 LU)
+    // Radar radius: LUFS → LU relative to LOUDNESS_TARGET, EBU R128 scale (−36 to +9 LU)
     function lufsToRadius(lufs, rOuter, rInner) {
       const lu = lufs - LOUDNESS_TARGET;
       const clampedLu = Math.max(MOMENTARY_LU_MIN, Math.min(MOMENTARY_LU_MAX, lu));
@@ -1512,7 +1512,7 @@
       if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
       if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
       if (lu >= -6) return '#ffd94a';   // yellow – near target (-6 to 0)
-      if (lu >= -12) return '#88d65c';  // light green – normal (-12 till -6)
+      if (lu >= -12) return '#88d65c';  // light green – normal (−12 to −6)
       return '#4488cc';                 // blue – low level (below -12 LU per EBU R128)
     }
 
@@ -1544,7 +1544,7 @@
       ctx.lineCap = 'round';
       ctx.globalAlpha = 0.55;
 
-      // Ringar var 6 LU (utom target som ritas separat)
+      // Rings every 6 LU (target ring drawn separately)
       const GRID_STEP_LU = 6;
       for (let lu = MOMENTARY_LU_MIN; lu <= MOMENTARY_LU_MAX; lu += GRID_STEP_LU) {
         if (lu === 0) continue;
@@ -1631,9 +1631,9 @@
         }
 
         ctx.fill();
-        ctx.shadowBlur = 0;  // Reset efter fill
+        ctx.shadowBlur = 0;  // Reset after fill
 
-        // Mjukare kant som tonar med segmentet
+        // Soft edge that fades with segment opacity
         ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.3})`;
         ctx.lineWidth = 0.75;
         ctx.stroke();
@@ -1690,9 +1690,9 @@
       ctx.restore();
     }
 
-    // TC/RTW-style outer ring med momentary bargraph
+    // TC/RTW-style outer ring with momentary bargraph
     // Geometry: 270° arc, -18 to +9 LU = 27 LU, 10° per LU
-    // Ticks var 2°, major tick var 10° (1 per LU)
+    // Ticks every 2°, major tick every 10° (1 per LU)
     function drawOuterMomentaryRing(ctx, cx, cy, rOuter, canvasWidth, momentaryLufs) {
       ctx.save();
 
@@ -3715,7 +3715,7 @@
     // Update DOM-based peak LED
     if (peakLed) peakLed.classList.toggle('on', peakIndicatorOn);
 
-    // Label med peak-hold max och OVER-indikator
+    // Label with peak-hold max and OVER indicator
     // Always same width to avoid "jitter" – use visibility instead of removing
     const overVisible = tpOverFlag;
     const overHtml = `<span style="color:var(--hot);font-weight:bold;margin-left:8px;visibility:${overVisible ? 'visible' : 'hidden'}">OVER</span>`;
@@ -3756,7 +3756,7 @@
   const sLen = Math.max(1, Math.round(3.0 / frameDur));  // 3s window
   const mQ = []; const sQ = []; let intEnergy = 0, intCount = 0; let stHistory = [];
 
-  // R128 panel: TPmax och elapsed time
+  // R128 panel: TPmax and elapsed time
   let r128TpMax = -Infinity;
   let r128StartTime = performance.now();
   const r128TpMaxEl = document.getElementById('r128TpMax');
