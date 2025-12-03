@@ -429,17 +429,17 @@ export class MeterRenderer {
 
         switch (id) {
           case 'truePeak':
-            this._readings.truePeakL = state.left;
-            this._readings.truePeakR = state.right;
-            this._readings.truePeakHoldL = state.peakLeft;
-            this._readings.truePeakHoldR = state.peakRight;
+            this._readings.truePeakL = state.dbtpLeft;
+            this._readings.truePeakR = state.dbtpRight;
+            this._readings.truePeakHoldL = state.dbtpHoldLeft;
+            this._readings.truePeakHoldR = state.dbtpHoldRight;
             break;
 
           case 'ppm':
-            this._readings.ppmL = state.left;
-            this._readings.ppmR = state.right;
-            this._readings.ppmHoldL = state.peakLeft;
-            this._readings.ppmHoldR = state.peakRight;
+            this._readings.ppmL = state.dbfsLeft;
+            this._readings.ppmR = state.dbfsRight;
+            this._readings.ppmHoldL = state.dbfsHoldLeft;
+            this._readings.ppmHoldR = state.dbfsHoldRight;
             break;
 
           case 'stereo':

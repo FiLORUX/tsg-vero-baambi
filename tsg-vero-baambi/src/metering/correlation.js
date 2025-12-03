@@ -248,7 +248,7 @@ export class StereoMeter {
   getState() {
     return {
       correlation: this.correlationHold,
-      correlationRaw: this.correlationRaw,
+      correlationInstant: this.correlationRaw,
       balance: this.balanceHold,
       width: this.widthHold,
       zone: getCorrelationZone(this.correlationHold)
@@ -268,9 +268,9 @@ export class StereoMeter {
 /**
  * @typedef {Object} StereoMeterState
  * @property {number} correlation - Smoothed phase correlation (−1 to +1)
- * @property {number} correlationRaw - Instantaneous correlation
- * @property {number} balance - L/R balance (−1 to +1)
- * @property {number} width - Stereo width (0 = mono)
+ * @property {number} correlationInstant - Instantaneous correlation (−1 to +1)
+ * @property {number} balance - L/R balance (−1 left, 0 centre, +1 right)
+ * @property {number} width - Stereo width (0 = mono, 1 = typical stereo)
  * @property {'good'|'caution'|'problem'} zone - Correlation zone for display
  */
 

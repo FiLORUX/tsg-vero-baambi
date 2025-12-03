@@ -306,9 +306,9 @@ export class MetricsCollector {
     try {
       const state = meter.getState();
       return {
-        left: this.#sanitiseLevel(state.left),
-        right: this.#sanitiseLevel(state.right),
-        max: this.#sanitiseLevel(Math.max(state.left, state.right))
+        left: this.#sanitiseLevel(state.dbtpLeft),
+        right: this.#sanitiseLevel(state.dbtpRight),
+        max: this.#sanitiseLevel(Math.max(state.dbtpLeft, state.dbtpRight))
       };
     } catch (error) {
       console.warn('[MetricsCollector] True Peak collection error:', error);
@@ -331,8 +331,8 @@ export class MetricsCollector {
     try {
       const state = meter.getState();
       return {
-        left: this.#sanitiseLevel(state.left),
-        right: this.#sanitiseLevel(state.right)
+        left: this.#sanitiseLevel(state.dbfsLeft),
+        right: this.#sanitiseLevel(state.dbfsRight)
       };
     } catch (error) {
       console.warn('[MetricsCollector] PPM collection error:', error);

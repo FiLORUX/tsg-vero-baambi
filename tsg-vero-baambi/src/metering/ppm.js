@@ -465,17 +465,17 @@ export class PPMMeter {
     const displayR = Math.max(PPM_MIN_DBFS, Math.min(PPM_MAX_DBFS, this.holdR));
 
     return {
-      // dBFS values (for meter drawing)
-      left: displayL,
-      right: displayR,
-      peakLeft: this.peakHoldL,
-      peakRight: this.peakHoldR,
+      // dBFS values (digital domain)
+      dbfsLeft: displayL,
+      dbfsRight: displayR,
+      dbfsHoldLeft: this.peakHoldL,
+      dbfsHoldRight: this.peakHoldR,
 
-      // PPM scale values (for display)
-      ppmLeft: dbfsToPPM(displayL),
-      ppmRight: dbfsToPPM(displayR),
-      ppmPeakLeft: dbfsToPPM(this.peakHoldL),
-      ppmPeakRight: dbfsToPPM(this.peakHoldR),
+      // PPM scale values (Nordic -36 to +9)
+      ppmScaleLeft: dbfsToPPM(displayL),
+      ppmScaleRight: dbfsToPPM(displayR),
+      ppmScaleHoldLeft: dbfsToPPM(this.peakHoldL),
+      ppmScaleHoldRight: dbfsToPPM(this.peakHoldR),
 
       // Silence detection
       isSilentLeft: displayL <= PPM_MIN_DBFS + 1,
@@ -494,16 +494,16 @@ export class PPMMeter {
 
 /**
  * @typedef {Object} PPMMeterState
- * @property {number} left - Left level in dBFS (clamped to scale)
- * @property {number} right - Right level in dBFS (clamped to scale)
- * @property {number} peakLeft - Left peak hold in dBFS
- * @property {number} peakRight - Right peak hold in dBFS
- * @property {number} ppmLeft - Left level in PPM scale
- * @property {number} ppmRight - Right level in PPM scale
- * @property {number} ppmPeakLeft - Left peak hold in PPM scale
- * @property {number} ppmPeakRight - Right peak hold in PPM scale
- * @property {boolean} isSilentLeft - True if left channel is below scale
- * @property {boolean} isSilentRight - True if right channel is below scale
+ * @property {number} dbfsLeft - Current left level (dBFS)
+ * @property {number} dbfsRight - Current right level (dBFS)
+ * @property {number} dbfsHoldLeft - Peak hold left (dBFS, 3s)
+ * @property {number} dbfsHoldRight - Peak hold right (dBFS, 3s)
+ * @property {number} ppmScaleLeft - Current left level (Nordic PPM, -36 to +9)
+ * @property {number} ppmScaleRight - Current right level (Nordic PPM)
+ * @property {number} ppmScaleHoldLeft - Peak hold left (Nordic PPM)
+ * @property {number} ppmScaleHoldRight - Peak hold right (Nordic PPM)
+ * @property {boolean} isSilentLeft - Left channel below scale minimum
+ * @property {boolean} isSilentRight - Right channel below scale minimum
  */
 
 // ─────────────────────────────────────────────────────────────────────────────

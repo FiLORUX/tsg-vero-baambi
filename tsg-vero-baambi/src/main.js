@@ -507,12 +507,12 @@ function renderModuleStatusUI(container) {
   (Expected: ~-23 LUFS for K-weighted sine)
 
 <b>True Peak:</b>
-  Left:  ${formatTruePeak(tpState.left)}
-  Right: ${formatTruePeak(tpState.right)}
+  Left:  ${formatTruePeak(tpState.dbtpLeft)}
+  Right: ${formatTruePeak(tpState.dbtpRight)}
 
 <b>PPM:</b>
-  Left:  ${formatPPM(ppmState.ppmL)}
-  Right: ${formatPPM(ppmState.ppmR)}
+  Left:  ${formatPPM(ppmState.ppmScaleLeft)}
+  Right: ${formatPPM(ppmState.ppmScaleRight)}
 
 <b>Stereo:</b>
   Correlation: ${formatCorrelation(stereoState.correlation)} (${getCorrelationZone(stereoState.correlation)})
