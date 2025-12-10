@@ -287,8 +287,8 @@ export class StereoMeter {
  */
 export function lrToMs(left, right) {
   return {
-    mid: (left + right) * 0.5,   // Mono content (centre)
-    side: (left - right) * 0.5  // Stereo difference
+    mid: (left + right) * 0.5, // Mono content (centre)
+    side: (left - right) * 0.5 // Stereo difference
   };
 }
 
@@ -318,9 +318,9 @@ export function msToLr(mid, side) {
  * @returns {'good'|'caution'|'problem'} Display zone
  */
 export function getCorrelationZone(correlation) {
-  if (correlation >= 0.3) return 'good';     // Green: good mono compatibility
+  if (correlation >= 0.3) return 'good'; // Green: good mono compatibility
   if (correlation >= -0.3) return 'caution'; // Amber: wide stereo, watch it
-  return 'problem';                           // Red: phase issues
+  return 'problem'; // Red: phase issues
 }
 
 /**
@@ -377,9 +377,9 @@ export function formatBalance(balance) {
 
   if (balance < 0) {
     return `L ${db.toFixed(0)}dB`;
-  } else {
-    return `R ${db.toFixed(0)}dB`;
   }
+    return `R ${db.toFixed(0)}dB`;
+
 }
 
 /**

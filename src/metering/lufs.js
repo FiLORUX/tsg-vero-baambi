@@ -415,10 +415,10 @@ export function loudnessZone(lufs, target = DEFAULT_TARGET_LUFS) {
 
   const offset = lufs - target;
 
-  if (offset >= -1 && offset <= 1) return 'on-target';  // Green: ±1 LU
-  if (offset < -1) return 'quiet';                       // Cyan: too quiet
-  if (offset <= 3) return 'loud';                        // Amber: bit loud
-  return 'too-loud';                                     // Red: too loud
+  if (offset >= -1 && offset <= 1) return 'on-target'; // Green: ±1 LU
+  if (offset < -1) return 'quiet'; // Cyan: too quiet
+  if (offset <= 3) return 'loud'; // Amber: bit loud
+  return 'too-loud'; // Red: too loud
 }
 
 /**

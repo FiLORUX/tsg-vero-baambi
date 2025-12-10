@@ -66,8 +66,8 @@ export function getCss(prop) {
 export function loudnessColour(lufs, targetLufs) {
   if (!isFinite(lufs)) return 'var(--muted)';
   const offset = lufs - targetLufs;
-  if (offset >= -1 && offset <= 1) return getCss('--ok');      // On target: green
-  if (offset < -1) return getCss('--cyan');                     // Too quiet: cyan
-  if (offset <= 3) return getCss('--warn');                     // Bit loud: amber
-  return getCss('--hot');                                        // Too loud: red
+  if (offset >= -1 && offset <= 1) return getCss('--ok'); // On target: green
+  if (offset < -1) return getCss('--cyan'); // Too quiet: cyan
+  if (offset <= 3) return getCss('--warn'); // Bit loud: amber
+  return getCss('--hot'); // Too loud: red
 }

@@ -62,11 +62,11 @@ export const TRUE_PEAK_CONFIG = {
   cellCount: 126,
   cellsPerDb: 2,
   getColour: (db, colours = DEFAULT_COLOURS) => {
-    if (db >= 0) return '#ff2020';        // Above 0 dBTP: bright red
-    if (db >= -1) return colours.hot;       // -1 to 0: red
-    if (db >= -3) return colours.caution;   // -3 to -1: orange
-    if (db >= -6) return colours.warn;      // -6 to -3: amber
-    return colours.ok;                       // Below -6: green
+    if (db >= 0) return '#ff2020'; // Above 0 dBTP: bright red
+    if (db >= -1) return colours.hot; // -1 to 0: red
+    if (db >= -3) return colours.caution; // -3 to -1: orange
+    if (db >= -6) return colours.warn; // -6 to -3: amber
+    return colours.ok; // Below -6: green
   },
   getPeakColour: (db, colours = DEFAULT_COLOURS) => {
     if (db >= 0) return '#ff4040';
@@ -89,12 +89,12 @@ export const PPM_CONFIG = {
   cellCount: 90,
   cellsPerDb: 2,
   getColour: (dbfs, colours = DEFAULT_COLOURS) => {
-    const ppm = dbfs + 18;  // dBFS to PPM conversion
-    if (ppm >= 6) return colours.hot;       // +6 to +9: red (over)
-    if (ppm >= 0) return colours.caution;   // 0 to +6: amber (nominal)
-    return colours.ok;                       // Below 0: green
+    const ppm = dbfs + 18; // dBFS to PPM conversion
+    if (ppm >= 6) return colours.hot; // +6 to +9: red (over)
+    if (ppm >= 0) return colours.caution; // 0 to +6: amber (nominal)
+    return colours.ok; // Below 0: green
   },
-  referenceDb: -18,  // 0 PPM = -18 dBFS
+  referenceDb: -18, // 0 PPM = -18 dBFS
   referenceColour: 'cyan'
 };
 

@@ -145,13 +145,13 @@ export const APP_VERSION = '2.0.0-phase5';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** @type {AudioContext|null} */
-let audioContext = null;
+const audioContext = null;
 
 /** @type {boolean} */
 let isInitialized = false;
 
 /** @type {Object|null} - Meter instances for demo */
-let meters = null;
+const meters = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC API

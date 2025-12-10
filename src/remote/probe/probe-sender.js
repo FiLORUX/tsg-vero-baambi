@@ -286,10 +286,10 @@ export class ProbeSender {
     if (this.#isEnabled) {
       this.stop();
       return false;
-    } else {
+    }
       await this.start();
       return true;
-    }
+
   }
 
   /**

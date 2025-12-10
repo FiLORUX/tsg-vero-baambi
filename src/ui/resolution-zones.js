@@ -68,8 +68,8 @@
  * @type {ResolutionProfile}
  */
 export const RESOLUTION_PROFILE_DBFS = [
-  { from: -60, to: -18, multiplier: 2 },  // Background to TEST level
-  { from: -18, to: 0,   multiplier: 4 },  // TEST and above (working range)
+  { from: -60, to: -18, multiplier: 2 }, // Background to TEST level
+  { from: -18, to: 0, multiplier: 4 }, // TEST and above (working range)
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,8 +84,8 @@ export const RESOLUTION_PROFILE_DBFS = [
  * @type {ResolutionProfile}
  */
 export const RESOLUTION_PROFILE_TP = [
-  { from: -60, to: -12, multiplier: 2 },  // Background to warm zone
-  { from: -12, to: 3,   multiplier: 4 },  // Working range and above
+  { from: -60, to: -12, multiplier: 2 }, // Background to warm zone
+  { from: -12, to: 3, multiplier: 4 }, // Working range and above
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,14 +101,14 @@ export const RESOLUTION_PROFILE_TP = [
  * @type {ResolutionProfile}
  */
 export const RESOLUTION_PROFILE_PPM = [
-  { from: -54, to: -24, multiplier: 2 },  // Background (-36 to -6 PPM)
-  { from: -24, to: -9,  multiplier: 4 },  // Working range (-6 to +9 PPM)
+  { from: -54, to: -24, multiplier: 2 }, // Background (-36 to -6 PPM)
+  { from: -24, to: -9, multiplier: 4 }, // Working range (-6 to +9 PPM)
 ];
 
 // Extended profile with same multipliers (for backward compat)
 export const RESOLUTION_PROFILE_PPM_EXTENDED = [
-  { from: -54, to: -24, multiplier: 2 },  // Background (-36 to -6 PPM)
-  { from: -24, to: -9,  multiplier: 4 },  // Working range (-6 to +9 PPM)
+  { from: -54, to: -24, multiplier: 2 }, // Background (-36 to -6 PPM)
+  { from: -24, to: -9, multiplier: 4 }, // Working range (-6 to +9 PPM)
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -60,9 +60,9 @@ let measureInterval = null;
 // DISPLAY DELAY CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DELAY_M = 1;   // Momentary: show after 1s
-const DELAY_S = 10;  // Short-term: show after 10s
-const DELAY_I = 30;  // Integrated: show after 30s
+const DELAY_M = 1; // Momentary: show after 1s
+const DELAY_S = 10; // Short-term: show after 10s
+const DELAY_I = 30; // Integrated: show after 30s
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INITIALISATION

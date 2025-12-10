@@ -48,25 +48,25 @@ const METER_BADGES = {
   ppm: 'Nordic PPM (IEC 60268-10)'
 };
 
-const N = 3;                           // Number of states
-const STEP_DEGREES = 360 / N;          // 120° between states
+const N = 3; // Number of states
+const STEP_DEGREES = 360 / N; // 120° between states
 const STATE_TO_INDEX = { tp: 0, rms: 1, ppm: 2 };
 const INDEX_TO_STATE = ['tp', 'rms', 'ppm'];
 
 // Physics constants
-const STIFFNESS = 0.15;      // Spring force coefficient (toward target)
-const DAMPING = 0.65;        // Velocity retained per frame (lower = more friction = less bounce)
-const EPSILON = 0.01;        // Settling threshold (degrees)
-const V_EPSILON = 0.001;     // Velocity settling threshold
+const STIFFNESS = 0.15; // Spring force coefficient (toward target)
+const DAMPING = 0.65; // Velocity retained per frame (lower = more friction = less bounce)
+const EPSILON = 0.01; // Settling threshold (degrees)
+const V_EPSILON = 0.001; // Velocity settling threshold
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODULE STATE
 // ─────────────────────────────────────────────────────────────────────────────
 
-let position = 0;            // Continuous position (degrees, ℝ)
-let velocity = 0;            // Angular velocity (degrees/frame)
-let targetPosition = 0;      // Target position (degrees)
-let animationId = null;      // RAF handle
+let position = 0; // Continuous position (degrees, ℝ)
+let velocity = 0; // Angular velocity (degrees/frame)
+let targetPosition = 0; // Target position (degrees)
+let animationId = null; // RAF handle
 
 // DOM element references (initialised via setup)
 let cylinder = null;

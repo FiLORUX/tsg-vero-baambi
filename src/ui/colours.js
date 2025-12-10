@@ -42,12 +42,12 @@
  * @type {Object<string, string>}
  */
 export const DEFAULT_COLOURS = {
-  ok: '#00d4aa',        // Green - on target
-  cyan: '#4488cc',      // Blue/Cyan - too quiet
-  warn: '#ffaa00',      // Amber - bit loud
-  caution: '#ff8800',   // Orange - approaching limit
-  hot: '#ff4444',       // Red - over limit
-  muted: '#666666',     // Grey - inactive/silent
+  ok: '#00d4aa', // Green - on target
+  cyan: '#4488cc', // Blue/Cyan - too quiet
+  warn: '#ffaa00', // Amber - bit loud
+  caution: '#ff8800', // Orange - approaching limit
+  hot: '#ff4444', // Red - over limit
+  muted: '#666666', // Grey - inactive/silent
 
   // Background colours
   bgPrimary: '#1a1a2e',
@@ -86,10 +86,10 @@ export function getLoudnessColour(lufs, target = -23, colours = DEFAULT_COLOURS)
 
   const offset = lufs - target;
 
-  if (offset >= -1 && offset <= 1) return colours.ok;    // ±1 LU: on target
-  if (offset < -1) return colours.cyan;                   // Below -1 LU: too quiet
-  if (offset <= 3) return colours.warn;                   // +1 to +3 LU: bit loud
-  return colours.hot;                                      // Above +3 LU: too loud
+  if (offset >= -1 && offset <= 1) return colours.ok; // ±1 LU: on target
+  if (offset < -1) return colours.cyan; // Below -1 LU: too quiet
+  if (offset <= 3) return colours.warn; // +1 to +3 LU: bit loud
+  return colours.hot; // Above +3 LU: too loud
 }
 
 /**
@@ -106,11 +106,11 @@ export function getRadarColour(lufs, target = -23, colours = DEFAULT_COLOURS) {
   const lu = lufs - target;
 
   // EBU R128 defines < -12 LU as "low level"
-  if (lu < -12) return colours.cyan;        // Low level (blue)
-  if (lu < -1) return colours.ok;           // Normal low (green)
-  if (lu <= 1) return colours.ok;           // On target (green)
-  if (lu <= 3) return colours.warn;         // Bit loud (amber)
-  return colours.hot;                         // Too loud (red)
+  if (lu < -12) return colours.cyan; // Low level (blue)
+  if (lu < -1) return colours.ok; // Normal low (green)
+  if (lu <= 1) return colours.ok; // On target (green)
+  if (lu <= 3) return colours.warn; // Bit loud (amber)
+  return colours.hot; // Too loud (red)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,10 +128,10 @@ export function getRadarColour(lufs, target = -23, colours = DEFAULT_COLOURS) {
 export function getTruePeakColour(dbTP, limit = -1, colours = DEFAULT_COLOURS) {
   if (!isFinite(dbTP) || dbTP < -60) return colours.muted;
 
-  if (dbTP >= limit) return colours.hot;           // Over limit
-  if (dbTP >= limit - 3) return colours.caution;   // Approaching limit
-  if (dbTP >= limit - 6) return colours.warn;      // Warning zone
-  return colours.ok;                                 // Safe
+  if (dbTP >= limit) return colours.hot; // Over limit
+  if (dbTP >= limit - 3) return colours.caution; // Approaching limit
+  if (dbTP >= limit - 6) return colours.warn; // Warning zone
+  return colours.ok; // Safe
 }
 
 /**
@@ -143,11 +143,11 @@ export function getTruePeakColour(dbTP, limit = -1, colours = DEFAULT_COLOURS) {
  * @returns {string} CSS colour
  */
 export function getTruePeakBarColour(dbTP, limit = -1, colours = DEFAULT_COLOURS) {
-  if (dbTP >= 0) return colours.hot;              // Clipping
-  if (dbTP >= limit) return colours.caution;      // Over limit
-  if (dbTP >= -6) return colours.warn;            // -6 to limit
-  if (dbTP >= -18) return colours.ok;             // Normal range
-  return colours.cyan;                             // Low level
+  if (dbTP >= 0) return colours.hot; // Clipping
+  if (dbTP >= limit) return colours.caution; // Over limit
+  if (dbTP >= -6) return colours.warn; // -6 to limit
+  if (dbTP >= -18) return colours.ok; // Normal range
+  return colours.cyan; // Low level
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,10 +162,10 @@ export function getTruePeakBarColour(dbTP, limit = -1, colours = DEFAULT_COLOURS
  * @returns {string} CSS colour
  */
 export function getPPMBarColour(ppm, colours = DEFAULT_COLOURS) {
-  if (ppm >= 6) return colours.hot;       // +6 and above (TEST and above)
-  if (ppm >= 0) return colours.warn;      // 0 to +6 (above reference)
-  if (ppm >= -9) return colours.ok;       // -9 to 0 (normal range)
-  return colours.cyan;                     // Below -9 (low level)
+  if (ppm >= 6) return colours.hot; // +6 and above (TEST and above)
+  if (ppm >= 0) return colours.warn; // 0 to +6 (above reference)
+  if (ppm >= -9) return colours.ok; // -9 to 0 (normal range)
+  return colours.cyan; // Below -9 (low level)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,9 +182,9 @@ export function getPPMBarColour(ppm, colours = DEFAULT_COLOURS) {
 export function getCorrelationColour(correlation, colours = DEFAULT_COLOURS) {
   if (!isFinite(correlation)) return colours.muted;
 
-  if (correlation >= 0.3) return colours.ok;      // Good correlation
-  if (correlation >= -0.3) return colours.warn;   // Moderate (wide stereo)
-  return colours.hot;                               // Anti-phase (problem)
+  if (correlation >= 0.3) return colours.ok; // Good correlation
+  if (correlation >= -0.3) return colours.warn; // Moderate (wide stereo)
+  return colours.hot; // Anti-phase (problem)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -201,10 +201,10 @@ export function getCorrelationColour(correlation, colours = DEFAULT_COLOURS) {
 export function getBalanceColour(balanceDb, colours = DEFAULT_COLOURS) {
   const abs = Math.abs(balanceDb);
 
-  if (abs < 1.5) return colours.ok;       // Good balance
-  if (abs < 3) return colours.cyan;       // Slight deviation
-  if (abs < 6) return colours.warn;       // Noticeable
-  return colours.hot;                       // Severe imbalance
+  if (abs < 1.5) return colours.ok; // Good balance
+  if (abs < 3) return colours.cyan; // Slight deviation
+  if (abs < 6) return colours.warn; // Noticeable
+  return colours.hot; // Severe imbalance
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

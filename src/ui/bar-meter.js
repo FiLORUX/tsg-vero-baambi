@@ -189,7 +189,7 @@ export function drawDiodeBar_TP(canvas, valueL, valueR, peakHoldL, peakHoldR) {
 
   // Colour zones (unchanged from original)
   function segColour(db) {
-    if (db >= 0) return '#ff2020';   // Above 0 dBTP: aggressive bright red
+    if (db >= 0) return '#ff2020'; // Above 0 dBTP: aggressive bright red
     if (db >= -1) return getCss('--hot');
     if (db >= -3) return getCss('--caution');
     if (db >= -6) return getCss('--warn');
@@ -314,9 +314,9 @@ export function drawHBar_PPM(canvas, dBfsL, dBfsR, peakHoldL, peakHoldR) {
   // Nordic PPM colour zones (unchanged from original)
   function segColour(db) {
     const ppm = db + 18; // dBFS -> PPM/dBu
-    if (ppm >= 6) return getCss('--hot');      // +6..+9: red (over PML)
-    if (ppm >= 0) return getCss('--caution');  // 0..+6: amber (nominal / varning)
-    return getCss('--ok');                      // <0: green (everything below line-up)
+    if (ppm >= 6) return getCss('--hot'); // +6..+9: red (over PML)
+    if (ppm >= 0) return getCss('--caution'); // 0..+6: amber (nominal / varning)
+    return getCss('--ok'); // <0: green (everything below line-up)
   }
 
   // Draw a single channel with RTW segment form

@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GlitchDebug = {
-  enabled: false,  // Disabled by default. Enable in console: GlitchDebug.enabled = true
+  enabled: false, // Disabled by default. Enable in console: GlitchDebug.enabled = true
   lastFrameTime: performance.now(),
   lastCorrelation: 1,
   lastRmsL: 0,

@@ -419,9 +419,9 @@ export class PPMMeter {
       // Apply IEC Type I ballistics: instant attack, linear decay
       // With hysteresis to prevent instability on constant tones
       if (peakDbL > this.holdL) {
-        this.holdL = peakDbL;  // Instant attack
+        this.holdL = peakDbL; // Instant attack
       } else if (peakDbL < this.holdL - PPM_HYSTERESIS_DB) {
-        this.holdL = Math.max(PPM_MIN_DBFS, this.holdL - decayDb);  // Linear decay
+        this.holdL = Math.max(PPM_MIN_DBFS, this.holdL - decayDb); // Linear decay
       }
 
       if (peakDbR > this.holdR) {
@@ -539,7 +539,7 @@ export function ppmToDbfs(ppm) {
  * @returns {number} Level in dBu
  */
 export function dbfsToDBu(dbfs) {
-  return dbfs + PPM_DBFS_OFFSET;  // Same as PPM for EBU R68
+  return dbfs + PPM_DBFS_OFFSET; // Same as PPM for EBU R68
 }
 
 /**

@@ -32,7 +32,7 @@ export class RotationMeter {
   // Colours: M (centre) = #3b82f6 (blue), S (edges) = #22d3ee (cyan)
   rotationColour(rotationValue) {
     // |rotation| 0 = M colour (blue), |rotation| 1 = S colour (cyan)
-    const t = Math.abs(rotationValue);  // 0..1
+    const t = Math.abs(rotationValue); // 0..1
     // M colour: rgb(59, 130, 246), S colour: rgb(34, 211, 238)
     const r = Math.round(59 + t * (34 - 59));
     const g = Math.round(130 + t * (211 - 130));

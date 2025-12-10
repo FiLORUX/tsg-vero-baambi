@@ -88,8 +88,8 @@ export class Goniometer {
         const R = bufR[i];
 
         // M/S transform (DK/RTW standard)
-        const M = 0.5 * (L + R);  // Mid = mono content
-        const S = 0.5 * (R - L);  // Side: +S = right, -S = left
+        const M = 0.5 * (L + R); // Mid = mono content
+        const S = 0.5 * (R - L); // Side: +S = right, -S = left
 
         // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
         const x = (S * VECTORSCOPE_GAIN * w / 2) + w / 2;
@@ -97,7 +97,7 @@ export class Goniometer {
 
         if (prevX !== null) {
           // Glow layer first (wider, more transparent)
-          ctx.globalAlpha = .15;
+          ctx.globalAlpha = 0.15;
           ctx.strokeStyle = 'rgba(105,191,255,.5)';
           ctx.lineWidth = 3 * dpr;
           ctx.beginPath();
@@ -106,7 +106,7 @@ export class Goniometer {
           ctx.stroke();
 
           // Main line (thicker than before)
-          ctx.globalAlpha = .35;
+          ctx.globalAlpha = 0.35;
           ctx.strokeStyle = 'rgba(105,191,255,.35)';
           ctx.lineWidth = 1.5 * dpr;
           ctx.beginPath();
@@ -114,7 +114,7 @@ export class Goniometer {
           ctx.lineTo(x, y);
           ctx.stroke();
         }
-        ctx.globalAlpha = .85;
+        ctx.globalAlpha = 0.85;
         ctx.fillRect(x, y, px, px);
         prevX = x; prevY = y;
       }
@@ -131,8 +131,8 @@ export class Goniometer {
     // Horizontal centre line (SIDE axis)
     ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
     // Diagonal lines (L and R directions)
-    ctx.moveTo(0, 0); ctx.lineTo(w, h);      // L direction (top-left to bottom-right)
-    ctx.moveTo(w, 0); ctx.lineTo(0, h);      // R direction (top-right to bottom-left)
+    ctx.moveTo(0, 0); ctx.lineTo(w, h); // L direction (top-left to bottom-right)
+    ctx.moveTo(w, 0); ctx.lineTo(0, h); // R direction (top-right to bottom-left)
     ctx.stroke();
 
     // Axis labels (DK/RTW style)
@@ -203,8 +203,8 @@ export class Goniometer {
 
       let prevX = null, prevY = null;
       for (let i = 0; i < numPoints; i++) {
-        const M = points[i * 2];      // Mid (normalized ±1)
-        const S = points[i * 2 + 1];  // Side (normalized ±1)
+        const M = points[i * 2]; // Mid (normalized ±1)
+        const S = points[i * 2 + 1]; // Side (normalized ±1)
 
         // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
         // Points are already M/S transformed, just apply gain and position
@@ -213,7 +213,7 @@ export class Goniometer {
 
         if (prevX !== null) {
           // Glow layer
-          ctx.globalAlpha = .15;
+          ctx.globalAlpha = 0.15;
           ctx.strokeStyle = 'rgba(105,191,255,.5)';
           ctx.lineWidth = 3 * dpr;
           ctx.beginPath();
@@ -222,7 +222,7 @@ export class Goniometer {
           ctx.stroke();
 
           // Main line
-          ctx.globalAlpha = .35;
+          ctx.globalAlpha = 0.35;
           ctx.strokeStyle = 'rgba(105,191,255,.35)';
           ctx.lineWidth = 1.5 * dpr;
           ctx.beginPath();
@@ -230,7 +230,7 @@ export class Goniometer {
           ctx.lineTo(x, y);
           ctx.stroke();
         }
-        ctx.globalAlpha = .85;
+        ctx.globalAlpha = 0.85;
         ctx.fillRect(x, y, px, px);
         prevX = x; prevY = y;
       }
@@ -327,8 +327,8 @@ export function computeGoniometerPoints(bufL, bufR, numPoints = 128) {
 
     // M/S transform (DK/RTW standard)
     // Must match draw() which uses M = 0.5*(L+R), S = 0.5*(R-L)
-    output[i * 2] = 0.5 * (L + R);      // Mid
-    output[i * 2 + 1] = 0.5 * (R - L);  // Side
+    output[i * 2] = 0.5 * (L + R); // Mid
+    output[i * 2 + 1] = 0.5 * (R - L); // Side
   }
 
   return output;

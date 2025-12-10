@@ -33,17 +33,17 @@ const SPECTRUM_CENTER_FREQS = [
 const SPECTRUM_NUM_BANDS = SPECTRUM_CENTER_FREQS.length; // 31
 
 // 1/3-octave factor: 2^(1/6) ≈ 1.1225
-const THIRD_OCT_FACTOR = Math.pow(2, 1/6);
+const THIRD_OCT_FACTOR = Math.pow(2, 1 / 6);
 
 // RTW/TC Visual Constants (UI only)
-const RTW_VISIBLE_TOP_DB = 9;       // Top of visual range
-const RTW_VISIBLE_BOTTOM_DB = -48;  // Bottom of visual range
+const RTW_VISIBLE_TOP_DB = 9; // Top of visual range
+const RTW_VISIBLE_BOTTOM_DB = -48; // Bottom of visual range
 const RTW_RANGE_DB = RTW_VISIBLE_TOP_DB - RTW_VISIBLE_BOTTOM_DB; // 57 dB
-const RTW_VISUAL_BOOST = 18;        // Boost to shift FFT values into visible range
-const RTW_FALL_RATE = 12;           // Bar fall: 12 dB/s
-const RTW_PEAK_HOLD_MS = 750;       // Peak hold: 600-900ms
-const RTW_PEAK_FALL_RATE = 18;      // Peak marker fall: 18 dB/s
-const RTW_DISPLAY_SMOOTH = 0.15;    // Visual smoothing factor (0.85/0.15 blend)
+const RTW_VISUAL_BOOST = 18; // Boost to shift FFT values into visible range
+const RTW_FALL_RATE = 12; // Bar fall: 12 dB/s
+const RTW_PEAK_HOLD_MS = 750; // Peak hold: 600-900ms
+const RTW_PEAK_FALL_RATE = 18; // Peak marker fall: 18 dB/s
+const RTW_DISPLAY_SMOOTH = 0.15; // Visual smoothing factor (0.85/0.15 blend)
 
 export class SpectrumAnalyzer {
   constructor(canvas, analyserL, analyserR, wrapperSelector) {
@@ -62,9 +62,9 @@ export class SpectrumAnalyzer {
     this.spectrumPeakHold = new Float32Array(SPECTRUM_NUM_BANDS);
 
     // RTW/TC Visual Display State (UI only - does not affect DSP)
-    this.spectrumDisplayVal = new Float32Array(SPECTRUM_NUM_BANDS);  // Smoothed display values
-    this.spectrumPeakMarker = new Float32Array(SPECTRUM_NUM_BANDS);  // Peak marker positions
-    this.spectrumPeakTimer = new Float32Array(SPECTRUM_NUM_BANDS);   // Peak hold timers
+    this.spectrumDisplayVal = new Float32Array(SPECTRUM_NUM_BANDS); // Smoothed display values
+    this.spectrumPeakMarker = new Float32Array(SPECTRUM_NUM_BANDS); // Peak marker positions
+    this.spectrumPeakTimer = new Float32Array(SPECTRUM_NUM_BANDS); // Peak hold timers
 
     // Initialize to floor
     for (let i = 0; i < SPECTRUM_NUM_BANDS; i++) {
@@ -177,10 +177,10 @@ export class SpectrumAnalyzer {
     // =========================================================
 
     // Layout calculations
-    const paddingL = Math.round(28 * dpr);  // Left padding for dB labels
+    const paddingL = Math.round(28 * dpr); // Left padding for dB labels
     const paddingR = Math.round(6 * dpr);
     const paddingT = Math.round(6 * dpr);
-    const paddingB = Math.round(18 * dpr);  // Bottom padding for freq labels
+    const paddingB = Math.round(18 * dpr); // Bottom padding for freq labels
     const barAreaW = w - paddingL - paddingR;
     const barAreaH = h - paddingT - paddingB;
     const gap = Math.round(1 * dpr);
@@ -220,7 +220,7 @@ export class SpectrumAnalyzer {
 
       // RTW Ballistics: instant rise, 12 dB/s fall
       if (actualValue > this.spectrumDisplayVal[b]) {
-        this.spectrumDisplayVal[b] = actualValue;  // Instant rise
+        this.spectrumDisplayVal[b] = actualValue; // Instant rise
       } else {
         this.spectrumDisplayVal[b] = Math.max(this.spectrumDisplayVal[b] - RTW_FALL_RATE * deltaTime, actualValue);
       }
@@ -244,23 +244,23 @@ export class SpectrumAnalyzer {
 
       // LED-style rendering: 57 cells (1 dB each, from -48 to +9)
       const LED_CELLS = 57;
-      const LED_GAP = Math.max(1, Math.round(1 * dpr));  // Gap between cells
+      const LED_GAP = Math.max(1, Math.round(1 * dpr)); // Gap between cells
       const cellH = (barAreaH - LED_GAP * (LED_CELLS - 1)) / LED_CELLS;
 
       // Draw LED cells from bottom to top
       for (let cell = 0; cell < LED_CELLS; cell++) {
-        const cellDb = RTW_VISIBLE_BOTTOM_DB + cell;  // -36 + cell = dB value for this cell
+        const cellDb = RTW_VISIBLE_BOTTOM_DB + cell; // -36 + cell = dB value for this cell
         const cellY = bottomY - (cell + 1) * (cellH + LED_GAP) + LED_GAP;
 
         // Only draw lit cells (up to displayDb)
         if (cellDb < displayDb) {
           // Colour based on dB level
           if (cellDb >= 0) {
-            ctx.fillStyle = '#ff3b2f';  // Red: above 0 dB
+            ctx.fillStyle = '#ff3b2f'; // Red: above 0 dB
           } else if (cellDb >= -6) {
-            ctx.fillStyle = '#ff9500';  // Orange: -6 to 0 dB
+            ctx.fillStyle = '#ff9500'; // Orange: -6 to 0 dB
           } else {
-            ctx.fillStyle = '#f2c74e';  // Yellow: below -6 dB
+            ctx.fillStyle = '#f2c74e'; // Yellow: below -6 dB
           }
           ctx.fillRect(barX, cellY, barWidth, cellH);
         }
@@ -309,7 +309,7 @@ export class SpectrumAnalyzer {
     ];
     for (const fl of freqLabels) {
       // Find band index for this frequency
-      let bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
+      const bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
       if (bandIdx >= 0) {
         const x = paddingL + bandIdx * (barWidth + gap) + barWidth / 2;
         ctx.fillText(fl.label, x, bottomY + 3 * dpr);
@@ -493,7 +493,7 @@ export class SpectrumAnalyzer {
       { freq: 16000, label: '16k' }
     ];
     for (const fl of freqLabels) {
-      let bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
+      const bandIdx = SPECTRUM_CENTER_FREQS.findIndex(f => Math.abs(f - fl.freq) < fl.freq * 0.1);
       if (bandIdx >= 0) {
         const x = paddingL + bandIdx * (barWidth + gap) + barWidth / 2;
         ctx.fillText(fl.label, x, bottomY + 3 * dpr);

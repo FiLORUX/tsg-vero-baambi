@@ -32,10 +32,10 @@ const LETTERS = {
   Å: [polyline([[0, 0], [0.5, 1], [1, 0]]), polyline([[0.2, 0.4], [0.8, 0.4]]), createRing(0.5, 1.22, 0.12)],
   // S: proper vector S - top bar, down left, middle bar, down right, bottom bar
   S: [polyline([
-    [0.9, 1.0], [0.1, 1.0],  // top bar (right to left)
-    [0.1, 0.55],              // down left side
-    [0.9, 0.55],              // middle bar (left to right)
-    [0.9, 0.0], [0.1, 0.0]   // down right + bottom bar (right to left)
+    [0.9, 1.0], [0.1, 1.0], // top bar (right to left)
+    [0.1, 0.55], // down left side
+    [0.9, 0.55], // middle bar (left to right)
+    [0.9, 0.0], [0.1, 0.0] // down right + bottom bar (right to left)
   ])]
 };
 
@@ -96,10 +96,10 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
     const config = options.processorOptions || {};
     this.pointsPerSecond = config.pointsPerSecond || 1200;
     this.outputScale = config.outputScale || 0.8;
-    this.scrollSpeed = config.scrollSpeed || 0.15;  // Scroll cycles per second
+    this.scrollSpeed = config.scrollSpeed || 0.15; // Scroll cycles per second
     this.path = buildPath('THÅST', config.resampleStep, config.blankingLength, config.normalisationMargin);
     this.index = 0;
-    this.scrollPhase = 0;  // 0 to 1, controls horizontal scroll position
+    this.scrollPhase = 0; // 0 to 1, controls horizontal scroll position
     this.running = true;
 
     this.port.onmessage = (e) => {
@@ -149,7 +149,7 @@ class ThastVectorProcessor extends AudioWorkletProcessor {
 
       // Mirror horizontally and rotate 45° CCW for proper goniometer alignment
       const cos45 = 0.7071067811865476;
-      const mx = -x;  // Mirror on Y-axis
+      const mx = -x; // Mirror on Y-axis
       const rx = (mx + y) * cos45;
       const ry = (y - mx) * cos45;
 

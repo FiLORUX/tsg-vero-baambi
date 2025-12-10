@@ -105,10 +105,10 @@ export class BalanceMeter {
     // Colour based on deviation
     let col;
     const absDev = Math.abs(this.monoDevHold);
-    if (absDev < 1.5) col = getCss('--ok');       // Green: good balance
-    else if (absDev < 3) col = getCss('--cyan');  // Cyan: slight deviation
-    else if (absDev < 6) col = getCss('--warn');  // Amber: noticeable
-    else col = getCss('--hot');                    // Red: severe imbalance
+    if (absDev < 1.5) col = getCss('--ok'); // Green: good balance
+    else if (absDev < 3) col = getCss('--cyan'); // Cyan: slight deviation
+    else if (absDev < 6) col = getCss('--warn'); // Amber: noticeable
+    else col = getCss('--hot'); // Red: severe imbalance
 
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = col;
@@ -126,7 +126,7 @@ export class BalanceMeter {
       const absVal = Math.abs(this.monoDevHold);
       let balanceStr;
       if (absVal < 0.05) {
-        balanceStr = 'C 0.0 dB';  // Centrerad
+        balanceStr = 'C 0.0 dB'; // Centrerad
       } else if (this.monoDevHold > 0) {
         balanceStr = 'L ' + absVal.toFixed(1) + ' dB';
       } else {

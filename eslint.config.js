@@ -93,7 +93,29 @@ export default [
         // Media
         MediaStream: 'readonly',
         MediaStreamTrack: 'readonly',
-        MediaDevices: 'readonly'
+        MediaDevices: 'readonly',
+        // WebSocket & Network
+        WebSocket: 'readonly',
+        XMLHttpRequest: 'readonly',
+        // Web Audio additional
+        AudioWorkletNode: 'readonly',
+        GainNode: 'readonly',
+        AnalyserNode: 'readonly',
+        // DOM additional
+        getComputedStyle: 'readonly',
+        Node: 'readonly',
+        NodeList: 'readonly',
+        DOMParser: 'readonly',
+        // Crypto
+        crypto: 'readonly',
+        // Canvas
+        Path2D: 'readonly',
+        ImageData: 'readonly',
+        // Location & Dialogs
+        location: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly',
+        prompt: 'readonly'
       }
     },
     rules: {

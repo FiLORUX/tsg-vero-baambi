@@ -310,10 +310,10 @@ function testKWeightingResponse() {
   // Reference values from ITU-R BS.1770-4 at 48kHz
   // These are approximate expected gains
   const referencePoints = [
-    { freq: 100, gain: 0.0 },      // Below shelf, minimal effect
-    { freq: 1000, gain: 0.0 },     // Reference frequency
-    { freq: 4000, gain: 2.0 },     // Shelf transition
-    { freq: 10000, gain: 4.0 },    // Full shelf boost
+    { freq: 100, gain: 0.0 }, // Below shelf, minimal effect
+    { freq: 1000, gain: 0.0 }, // Reference frequency
+    { freq: 4000, gain: 2.0 }, // Shelf transition
+    { freq: 10000, gain: 4.0 }, // Full shelf boost
   ];
 
   console.log('  Expected K-weighting response (approximate):');
@@ -414,7 +414,7 @@ function testLufsIntegration() {
 
   // Test 1: Energy calculation for known signal
   // -18 dBFS sine RMS should give approximately -18 LUFS (mono, un-weighted)
-  const amplitude = Math.pow(10, -18 / 20);  // -18 dBFS
+  const amplitude = Math.pow(10, -18 / 20); // -18 dBFS
   const testSine = generateSine(sampleRate, 1000, amplitude, 0.1);
 
   // Calculate energy (mean square)
@@ -432,12 +432,12 @@ function testLufsIntegration() {
 
   // Test 2: Momentary window length
   const blockDuration = blockSize / sampleRate;
-  const momentaryLength = Math.round(0.4 / blockDuration);  // 400ms window
+  const momentaryLength = Math.round(0.4 / blockDuration); // 400ms window
   console.log(`  Momentary window: ${momentaryLength} blocks (${(momentaryLength * blockDuration * 1000).toFixed(0)}ms)`);
   assertClose('Momentary window duration', momentaryLength * blockDuration, 0.4, 0.05, 's');
 
   // Test 3: Short-term window length
-  const shortTermLength = Math.round(3.0 / blockDuration);  // 3s window
+  const shortTermLength = Math.round(3.0 / blockDuration); // 3s window
   console.log(`  Short-term window: ${shortTermLength} blocks (${(shortTermLength * blockDuration).toFixed(1)}s)`);
   assertClose('Short-term window duration', shortTermLength * blockDuration, 3.0, 0.2, 's');
 
@@ -454,8 +454,8 @@ function testPpmBallistics() {
   console.log('\n--- PPM Ballistics (IEC 60268-10 Type I) ---');
 
   // IEC 60268-10 Type I (Nordic PPM) specifications
-  const PPM_ATTACK_MS = 5;      // Integration time
-  const PPM_DECAY_DB_PER_S = 20 / 1.7;  // 20 dB in 1.7s
+  const PPM_ATTACK_MS = 5; // Integration time
+  const PPM_DECAY_DB_PER_S = 20 / 1.7; // 20 dB in 1.7s
 
   // Test 1: Decay rate
   assertClose('Decay rate', PPM_DECAY_DB_PER_S, 11.76, 0.1, ' dB/s');

@@ -204,6 +204,7 @@ const extMonVal = $('extMonVal');
 const btnExtMonMute = $('btnExtMonMute');
 const extTrimRange = $('extTrimRange');
 const extTrimVal = $('extTrimVal');
+const extTrimReset = $('extTrimReset');
 const extDevice = $('extDevice');
 const extCc = $('extCc');
 const extSr = $('extSr');
@@ -393,6 +394,7 @@ function loudnessColour(lufs) {
 // State: selectedMode = UI selection, activeCapture = currently running source
 let selectedInputMode = 'browser'; // 'browser', 'external', 'generator'
 let activeCapture = null; // null, 'browser', 'external', 'generator'
+let selectedRemoteProbeId = null; // Currently selected remote probe ID
 
 // Generator monitor and EBU pulse state
 let monitorMuted = false;
@@ -1039,9 +1041,6 @@ function stopRemoteCapture() {
  * Render available probes list in remote panel.
  * @param {Array} probes - Available probes from broker
  */
-/** @type {string|null} Currently selected remote probe ID */
-let selectedRemoteProbeId = null;
-
 function renderRemoteProbeList(probes) {
   if (!remoteProbeList) return;
 

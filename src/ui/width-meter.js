@@ -30,11 +30,11 @@ export class WidthMeter {
 
   // Colour zones: 0-30% M-colour (blue), 30-60% green, 60-80% yellow, 80-100% orange, >100% red
   widthColour(w) {
-    if (w >= 1.0) return '#ff4444';   // Red: >100%
-    if (w >= 0.8) return '#ff9a2d';   // Orange: 80-100%
-    if (w >= 0.6) return '#ffd94a';   // Yellow: 60-80%
-    if (w >= 0.3) return '#44bb66';   // Green: 30-60%
-    return '#3b82f6';                  // M-colour (blue): 0-30%
+    if (w >= 1.0) return '#ff4444'; // Red: >100%
+    if (w >= 0.8) return '#ff9a2d'; // Orange: 80-100%
+    if (w >= 0.6) return '#ffd94a'; // Yellow: 60-80%
+    if (w >= 0.3) return '#44bb66'; // Green: 30-60%
+    return '#3b82f6'; // M-colour (blue): 0-30%
   }
 
   draw(widthVal, widthPeak) {

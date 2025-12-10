@@ -29,7 +29,7 @@
 const MOMENTARY_LU_MIN = -36;
 const MOMENTARY_LU_MAX = 9;
 const MOMENTARY_LU_RANGE = MOMENTARY_LU_MAX - MOMENTARY_LU_MIN;
-const LOW_LEVEL_BELOW = -12;  // Below −12 LU = "low level" zone (cyan)
+const LOW_LEVEL_BELOW = -12; // Below −12 LU = "low level" zone (cyan)
 
 // Maps LU value to normalised 0–1 range for radial positioning
 function luToNormalised(lu, minLu, maxLu) {
@@ -38,21 +38,21 @@ function luToNormalised(lu, minLu, maxLu) {
 
 // TC/RTW colour logic for momentary ring
 function colourForLu(lu) {
-  if (lu >= 3) return '#ff4444';       // Red: +3 to +9 (too loud)
-  if (lu >= 0) return '#ffd700';       // Yellow: 0 to +3 (over target)
-  if (lu >= LOW_LEVEL_BELOW) return '#44bb66';  // Green: normal level
-  return '#4488cc';                     // Blue: below low level
+  if (lu >= 3) return '#ff4444'; // Red: +3 to +9 (too loud)
+  if (lu >= 0) return '#ffd700'; // Yellow: 0 to +3 (over target)
+  if (lu >= LOW_LEVEL_BELOW) return '#44bb66'; // Green: normal level
+  return '#4488cc'; // Blue: below low level
 }
 
 // Radar colour zones: LUFS → LU relative to LOUDNESS_TARGET (EBU R128 compliant)
 // EBU R128 defines < -12 LU as "low level"
 function radarColourForLufs(lufs, target) {
   const lu = lufs - target;
-  if (lu >= 3) return '#ff4335';    // red – over limit (+3 and above)
-  if (lu >= 0) return '#ff9a2d';    // orange – over target (0 to +3)
-  if (lu >= -6) return '#ffd94a';   // yellow – near target (-6 to 0)
-  if (lu >= -12) return '#88d65c';  // light green – normal (−12 to −6)
-  return '#4488cc';                 // blue – low level (below -12 LU per EBU R128)
+  if (lu >= 3) return '#ff4335'; // red – over limit (+3 and above)
+  if (lu >= 0) return '#ff9a2d'; // orange – over target (0 to +3)
+  if (lu >= -6) return '#ffd94a'; // yellow – near target (-6 to 0)
+  if (lu >= -12) return '#88d65c'; // light green – normal (−12 to −6)
+  return '#4488cc'; // blue – low level (below -12 LU per EBU R128)
 }
 
 /**
@@ -139,7 +139,7 @@ export class LoudnessRadar {
   // Target ring drawn separately AFTER segments so it appears on top
   drawTargetRing(ctx, cx, cy, rOuter, rInner) {
     ctx.save();
-    const lufs = 0 + this.target;  // LU=0 → LUFS
+    const lufs = 0 + this.target; // LU=0 → LUFS
     const r = this.lufsToRadius(lufs, rOuter, rInner);
 
     ctx.beginPath();
@@ -158,7 +158,7 @@ export class LoudnessRadar {
     const now = Date.now();
     const segmentCount = history.length;
     const anglePerSegment = (2 * Math.PI) / Math.max(segmentCount, 60);
-    const FADE_START = 0.85;  // Start fading at 85% of age
+    const FADE_START = 0.85; // Start fading at 85% of age
 
     history.forEach((point, index) => {
       const age = now - point.t;
@@ -194,7 +194,7 @@ export class LoudnessRadar {
       }
 
       ctx.fill();
-      ctx.shadowBlur = 0;  // Reset after fill
+      ctx.shadowBlur = 0; // Reset after fill
 
       // Soft edge that fades with segment opacity
       ctx.strokeStyle = `rgba(0, 0, 0, ${opacity * 0.3})`;
@@ -229,7 +229,7 @@ export class LoudnessRadar {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    const labelAngle = 0;  // 3 o'clock spoke
+    const labelAngle = 0; // 3 o'clock spoke
 
     RADAR_SCALE_LU.forEach(lu => {
       const lufs = lu + this.target;
@@ -242,7 +242,7 @@ export class LoudnessRadar {
         ctx.fillStyle = '#40a0ff';
         ctx.font = `700 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
       } else {
-        ctx.fillStyle = '#9ca3af';  // Lighter grey
+        ctx.fillStyle = '#9ca3af'; // Lighter grey
         ctx.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
       }
       // Show LU value (with + for positive)
@@ -267,12 +267,12 @@ export class LoudnessRadar {
 
     // 270° arc: -180° to +90° (6 o'clock to 3 o'clock)
     // -18 LU at -180° (6 o'clock, bottom), +9 LU at +90° (3 o'clock, right)
-    const START_ANGLE_DEG = -180;  // −18 LU (6 o'clock, bottom)
-    const END_ANGLE_DEG = 90;      // +9 LU (3 o'clock, right)
-    const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG;  // 270°
+    const START_ANGLE_DEG = -180; // −18 LU (6 o'clock, bottom)
+    const END_ANGLE_DEG = 90; // +9 LU (3 o'clock, right)
+    const TOTAL_ARC_DEG = END_ANGLE_DEG - START_ANGLE_DEG; // 270°
 
     // 27 LU = 270° → 10° per LU
-    const DEG_PER_LU = TOTAL_ARC_DEG / MOMENTARY_LU_RANGE;  // 10°
+    const DEG_PER_LU = TOTAL_ARC_DEG / MOMENTARY_LU_RANGE; // 10°
 
     // Tick every 2° → 135 ticks total
     const TICK_STEP_DEG = 2;
@@ -295,7 +295,7 @@ export class LoudnessRadar {
 
     for (let i = 0; i < NUM_TICKS; i++) {
       const angleDeg = START_ANGLE_DEG + i * TICK_STEP_DEG;
-      const angleRad = (angleDeg - 90) * Math.PI / 180;  // -90° offset for 12 o'clock
+      const angleRad = (angleDeg - 90) * Math.PI / 180; // -90° offset for 12 o'clock
 
       // Major tick every 10° (1 per LU)
       const isMajor = (Math.round(angleDeg - START_ANGLE_DEG) % 10 === 0);
@@ -415,15 +415,15 @@ export class LoudnessRadar {
 
     const cx = w / 2;
     const cy = h / 2;
-    const rOuter = Math.min(w, h) * 0.38;  // Larger to fill canvas better
-    const rInner = rOuter * 0.30;  // DONUT: 30% hole in centre
+    const rOuter = Math.min(w, h) * 0.38; // Larger to fill canvas better
+    const rInner = rOuter * 0.30; // DONUT: 30% hole in centre
     const maxAge = maxSeconds * 1000;
 
-    this.drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs);  // TC/RTW momentary bargraph
+    this.drawOuterMomentaryRing(ctx, cx, cy, rOuter, w, momentaryLufs); // TC/RTW momentary bargraph
     this.drawRadarBackground(ctx, cx, cy, rOuter, rInner);
     this.drawRadarSegments(ctx, cx, cy, rOuter, rInner, history, maxAge);
-    this.drawGridOverlay(ctx, cx, cy, rOuter, rInner);  // Grey rings + spokes (on top of segments)
-    this.drawTargetRing(ctx, cx, cy, rOuter, rInner);   // Target ring (on top of grid)
+    this.drawGridOverlay(ctx, cx, cy, rOuter, rInner); // Grey rings + spokes (on top of segments)
+    this.drawTargetRing(ctx, cx, cy, rOuter, rInner); // Target ring (on top of grid)
     this.drawRadarLabels(ctx, cx, cy, rOuter, rInner, w); // Labels on top
     // Peak LED now DOM-based (see .peak-led CSS) - canvas version disabled due to border-radius clipping
     // this.drawPeakIndicator(ctx, cx, cy, rOuter, w, peakFlag);

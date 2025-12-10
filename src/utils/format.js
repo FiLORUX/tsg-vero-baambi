@@ -184,7 +184,7 @@ export function formatBalance(balanceDb) {
 
   const abs = Math.abs(balanceDb);
   if (abs < 0.5) {
-    return 'C';  // Centre
+    return 'C'; // Centre
   }
 
   const side = balanceDb > 0 ? 'L' : 'R';
