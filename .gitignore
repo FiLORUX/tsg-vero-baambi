@@ -29,3 +29,9 @@ npm-debug.log*
 # Build artifacts (none expected, but just in case)
 dist/
 build/
+
+# AI/LLM local settings
+.claude/
+.cursor/
+.aider/
+.continue/
