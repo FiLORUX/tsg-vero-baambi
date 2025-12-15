@@ -7,6 +7,10 @@ broker/package-lock.json
 # Test files
 broker/test-probe.js
 
+# Environment
+.env
+.env.*
+
 # OS files
 .DS_Store
 Thumbs.db
