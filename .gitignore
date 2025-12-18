@@ -7,6 +7,10 @@ broker/package-lock.json
 # Test files
 broker/test-probe.js
 
+# Environment
+.env
+.env.*
+
 # OS files
 .DS_Store
 Thumbs.db
@@ -25,3 +29,9 @@ npm-debug.log*
 # Build artifacts (none expected, but just in case)
 dist/
 build/
+
+# AI/LLM local settings
+.claude/
+.cursor/
+.aider/
+.continue/
