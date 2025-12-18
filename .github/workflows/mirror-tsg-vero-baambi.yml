@@ -1,0 +1,37 @@
+name: Mirror tsg-vero-baambi to public
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "tsg-vero-baambi/**"
+  workflow_dispatch: {}
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "repo-sync"
+          git config user.email "repo-sync@users.noreply.github.com"
+
+      - name: Split subtree
+        id: split
+        run: |
+          test -d "tsg-vero-baambi"
+          SPLIT_SHA="$(git subtree split --prefix=tsg-vero-baambi)"
+          echo "sha=$SPLIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Push to public
+        env:
+          PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        run: |
+          git remote add public "https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/FiLORUX/tsg-vero-baambi.git"
+          git fetch public main
+          git push public "${{ steps.split.outputs.sha }}:refs/heads/main" --force-with-lease
