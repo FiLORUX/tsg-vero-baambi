@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<!--
+═══════════════════════════════════════════════════════════════════════════════
+TSG Suite – broadcast tools for alignment, metering, and signal verification
+Maintained by David Thåst  ·  https://github.com/FiLORUX
+
+VERO-BAAMBI PROBE – Lightweight Remote Metering Transmitter
+
+This is a minimal, CPU-efficient probe that captures audio and transmits
+metering data to a broker. No rendering, no canvas, no GPU usage.
+
+Designed for:
+  • Background tabs
+  • Headless browsers
+  • Embedded devices (Raspberry Pi)
+  • Battery-conscious laptops
+
+david@thast.se  ·  +46 700 30 30 60
+═══════════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TSG Suite | VERO-BAAMBI Probe</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%23141618'/><circle cx='32' cy='32' r='20' fill='none' stroke='%2358d38c' stroke-width='4'/><circle cx='32' cy='32' r='8' fill='%2358d38c'><animate attributeName='r' values='8;12;8' dur='2s' repeatCount='indefinite'/></circle></svg>">
+  <style>
+    /* ─────────────────────────────────────────────────────────────────────────
+       COLOUR PALETTE - Matches main VERO-BAAMBI GUI
+       ───────────────────────────────────────────────────────────────────────── */
+    :root {
+      --bg: #141618;
+      --panel: #1b1f23;
+      --ink: #e8eef9;
+      --muted: #a9b2c7;
+      --outline: #2a2f36;
+      --grid: #29323b;
+      --ok: #58d38c;
+      --warn: #ffde58;
+      --caution: #ff9a2d;
+      --hot: #ff5a63;
+      --cyan: #69bfff;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Inter, 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .probe-container {
+      width: 100%;
+      max-width: 440px;
+      background: var(--panel);
+      border: 1px solid var(--outline);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       HEADER - TSG Suite branding
+       ───────────────────────────────────────────────────────────────────────── */
+    .probe-header {
+      background: linear-gradient(135deg, #1b1f23 0%, #141618 100%);
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--outline);
+      text-align: center;
+    }
+
+    .probe-header .brand {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      color: #93C5FD;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .probe-header .logo {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 0.35rem;
+    }
+
+    .probe-header .logo-vero {
+      font-size: 1.4rem;
+      font-weight: 950;
+      letter-spacing: 2px;
+      color: var(--ink);
+    }
+
+    .probe-header .logo-baambi {
+      font-size: 1.4rem;
+      font-weight: 200;
+      letter-spacing: -1px;
+      color: var(--ink);
+    }
+
+    .probe-header .subtitle {
+      font-size: 0.7rem;
+      color: #93C5FD;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+    }
+
+    .probe-body { padding: 1.25rem; }
+
+    .section {
+      margin-bottom: 1.25rem;
+    }
+
+    .section:last-child { margin-bottom: 0; }
+
+    .section-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .field-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    input[type="text"], input[type="url"], select {
+      flex: 1;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--outline);
+      border-radius: 4px;
+      color: var(--ink);
+      font-size: 0.85rem;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--ok);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    button {
+      flex: 1;
+      padding: 0.6rem 1rem;
+      border: 1px solid var(--outline);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: var(--ok);
+      color: var(--ok);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button.active {
+      background: var(--ok);
+      border-color: var(--ok);
+      color: var(--bg);
+    }
+
+    button.stop {
+      border-color: var(--hot);
+      color: var(--hot);
+    }
+
+    button.stop:hover:not(:disabled) {
+      background: var(--hot);
+      color: white;
+    }
+
+    .source-buttons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .source-buttons button {
+      padding: 0.5rem;
+      font-size: 0.75rem;
+      line-height: 1.3;
+    }
+
+    .source-buttons button.selected {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+
+    .status-item {
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 0.6rem 0.75rem;
+    }
+
+    .status-item .label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .status-item .value {
+      font-size: 0.9rem;
+      font-weight: 500;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+    }
+
+    .status-item .value.ok { color: var(--ok); }
+    .status-item .value.warn { color: var(--warn); }
+    .status-item .value.error { color: var(--hot); }
+    .status-item .value.muted { color: var(--muted); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .metric {
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 0.5rem;
+      text-align: center;
+    }
+
+    .metric .label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+
+    .metric .value {
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: var(--bg);
+      border-radius: 4px;
+      margin-top: 0.75rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .status-dot.connected { background: var(--ok); }
+    .status-dot.connecting { background: var(--warn); animation: pulse 1s infinite; }
+    .status-dot.error { background: var(--hot); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .connection-text {
+      font-size: 0.8rem;
+      flex: 1;
+    }
+
+    .connection-latency {
+      font-size: 0.75rem;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      color: var(--muted);
+    }
+
+    .generator-select {
+      margin-top: 0.5rem;
+    }
+
+    .generator-select select {
+      width: 100%;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="probe-container">
+    <header class="probe-header">
+      <div class="brand">TSG Suite</div>
+      <div class="logo">
+        <span class="logo-vero">VERO</span><span class="logo-baambi">BAAMBI</span>
+      </div>
+      <div class="subtitle">Remote Metering Transmitter</div>
+    </header>
+
+    <div class="probe-body">
+      <!-- Broker Configuration -->
+      <div class="section">
+        <div class="section-label">Broker Connection</div>
+        <div class="field-row">
+          <input type="url" id="brokerUrl" placeholder="ws://localhost:8765" value="ws://localhost:8765">
+        </div>
+        <div class="field-row">
+          <input type="text" id="probeName" placeholder="Probe name (e.g. MCR Borås)" maxlength="32">
+        </div>
+      </div>
+
+      <!-- Source Selection -->
+      <div class="section">
+        <div class="section-label">Audio Source</div>
+        <div class="source-buttons">
+          <button id="btnBrowser" class="selected">Browser<br>Tab</button>
+          <button id="btnExternal">External<br>Device</button>
+          <button id="btnGenerator">Test<br>Tone</button>
+        </div>
+
+        <!-- External Device Selector -->
+        <div id="externalOptions" class="hidden">
+          <select id="deviceSelect">
+            <option value="">Select audio input...</option>
+          </select>
+        </div>
+
+        <!-- Generator Preset Selector -->
+        <div id="generatorOptions" class="hidden generator-select">
+          <select id="genPreset">
+            <option value="ebu400" data-freq="400" data-db="-18">400 Hz EBU Line-Up (−18 dBFS)</option>
+            <option value="smpte1k" data-freq="1000" data-db="-20">1 kHz SMPTE (−20 dBFS)</option>
+            <option value="pink" data-type="pink" data-db="-18">Pink Noise (−18 dBFS)</option>
+            <option value="thast" data-type="thast">THÅST Vector (Goniometer Test)</option>
+            <option value="silence" data-type="silence">Silence (Connection Test)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Control Buttons -->
+      <div class="section">
+        <div class="btn-row">
+          <button id="btnStart">Start Transmitting</button>
+          <button id="btnStop" class="stop" disabled>Stop</button>
+        </div>
+      </div>
+
+      <!-- Status Display -->
+      <div class="section">
+        <div class="section-label">Transmitter Status</div>
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="label">Source</div>
+            <div class="value muted" id="statusSource">–</div>
+          </div>
+          <div class="status-item">
+            <div class="label">TX</div>
+            <div class="value muted" id="statusTx">Stopped</div>
+          </div>
+          <div class="status-item">
+            <div class="label">Sample Rate</div>
+            <div class="value muted" id="statusSampleRate">–</div>
+          </div>
+          <div class="status-item">
+            <div class="label">Packets/sec</div>
+            <div class="value muted" id="statusPackets">–</div>
+          </div>
+        </div>
+
+        <!-- Live Metrics Preview -->
+        <div class="metrics-grid">
+          <div class="metric">
+            <div class="label">LUFS M</div>
+            <div class="value" id="metricLufsM">–</div>
+          </div>
+          <div class="metric">
+            <div class="label">TP Max</div>
+            <div class="value" id="metricTpMax">–</div>
+          </div>
+          <div class="metric">
+            <div class="label">Corr</div>
+            <div class="value" id="metricCorr">–</div>
+          </div>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="connection-status">
+          <div class="status-dot" id="connDot"></div>
+          <div class="connection-text" id="connText">Not connected</div>
+          <div class="connection-latency" id="connLatency"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * VERO-BAAMBI PROBE – Lightweight Metering Transmitter (TX)
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * Minimal JavaScript for audio capture and metrics transmission.
+     * No rendering, no canvas, no GPU usage.
+     */
+
+    import { LUFSMeter } from './src/metering/lufs.js';
+    import { TruePeakMeter } from './src/metering/true-peak.js';
+    import { PPMMeter } from './src/metering/ppm.js';
+    import { StereoMeter } from './src/metering/correlation.js';
+    import { StereoAnalysisEngine } from './src/ui/stereo-analysis.js';
+    import { computeGoniometerPoints } from './src/ui/goniometer.js';
+    import { computeSpectrumBands, SPECTRUM_NUM_BANDS } from './src/ui/spectrum.js';
+    import { ThastVectorTextGenerator } from './src/generators/thast-vector-text.js';
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONFIGURATION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const METRICS_INTERVAL_MS = 100; // 10 Hz transmission rate
+    const FFT_SIZE = 4096;
+    const GONIOMETER_POINTS = 128;   // Points per goniometer frame
+    const RECONNECT_BASE_DELAY_MS = 1000;
+    const MAX_RECONNECT_DELAY_MS = 30000;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // STATE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    let ac = null;
+    let sourceNode = null;
+    let analyserL = null;
+    let analyserR = null;
+    let splitter = null;
+
+    let lufsMeter = null;
+    let truePeakMeter = null;
+    let ppmMeter = null;
+    let stereoMeter = null;
+    let stereoAnalysis = null;
+
+    let ws = null;
+    let probeId = crypto.randomUUID();
+    let selectedSource = 'browser';
+    let isTransmitting = false;
+    let metricsInterval = null;
+    let reconnectAttempts = 0;
+    let packetCount = 0;
+    let lastPacketCountReset = Date.now();
+
+    const bufL = new Float32Array(FFT_SIZE);
+    const bufR = new Float32Array(FFT_SIZE);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DOM REFERENCES
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const $ = id => document.getElementById(id);
+
+    const dom = {
+      brokerUrl: $('brokerUrl'),
+      probeName: $('probeName'),
+      btnBrowser: $('btnBrowser'),
+      btnExternal: $('btnExternal'),
+      btnGenerator: $('btnGenerator'),
+      btnStart: $('btnStart'),
+      btnStop: $('btnStop'),
+      externalOptions: $('externalOptions'),
+      generatorOptions: $('generatorOptions'),
+      deviceSelect: $('deviceSelect'),
+      genPreset: $('genPreset'),
+      statusSource: $('statusSource'),
+      statusTx: $('statusTx'),
+      statusSampleRate: $('statusSampleRate'),
+      statusPackets: $('statusPackets'),
+      metricLufsM: $('metricLufsM'),
+      metricTpMax: $('metricTpMax'),
+      metricCorr: $('metricCorr'),
+      connDot: $('connDot'),
+      connText: $('connText'),
+      connLatency: $('connLatency')
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AUDIO CONTEXT & METERING
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function initAudioContext() {
+      if (ac) return;
+
+      ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+
+      // Create analysers for L/R
+      analyserL = ac.createAnalyser();
+      analyserR = ac.createAnalyser();
+      analyserL.fftSize = FFT_SIZE;
+      analyserR.fftSize = FFT_SIZE;
+      analyserL.smoothingTimeConstant = 0;
+      analyserR.smoothingTimeConstant = 0;
+
+      // Create splitter
+      splitter = ac.createChannelSplitter(2);
+
+      // Initialise meters
+      lufsMeter = new LUFSMeter({ sampleRate: ac.sampleRate, blockSize: FFT_SIZE });
+      truePeakMeter = new TruePeakMeter();
+      ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate });
+      stereoMeter = new StereoMeter();
+      stereoAnalysis = new StereoAnalysisEngine();
+
+      dom.statusSampleRate.textContent = `${ac.sampleRate} Hz`;
+      dom.statusSampleRate.classList.remove('muted');
+    }
+
+    function connectSource(node) {
+      // Disconnect previous
+      if (sourceNode) {
+        try { sourceNode.disconnect(); } catch {}
+      }
+
+      sourceNode = node;
+
+      // Route: source → splitter → analysers
+      sourceNode.connect(splitter);
+      splitter.connect(analyserL, 0);
+      splitter.connect(analyserR, 1);
+    }
+
+    function sampleBuffers() {
+      analyserL.getFloatTimeDomainData(bufL);
+      analyserR.getFloatTimeDomainData(bufR);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SOURCE CAPTURE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    async function startBrowserCapture() {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          channelCount: 2,
+          sampleRate: 48000,
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: false
+        }
+      });
+
+      // Stop video track (we only need audio)
+      stream.getVideoTracks().forEach(t => t.stop());
+
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) {
+        throw new Error('No audio track in capture');
+      }
+
+      const source = ac.createMediaStreamSource(new MediaStream([audioTrack]));
+      connectSource(source);
+
+      dom.statusSource.textContent = 'Browser Tab';
+      dom.statusSource.classList.remove('muted');
+      dom.statusSource.classList.add('ok');
+
+      return audioTrack;
+    }
+
+    async function startExternalCapture() {
+      const deviceId = dom.deviceSelect.value;
+      if (!deviceId) {
+        throw new Error('Please select an audio device');
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          channelCount: 2,
+          sampleRate: 48000,
+          autoGainControl: false,
+          noiseSuppression: false,
+          echoCancellation: false
+        }
+      });
+
+      const source = ac.createMediaStreamSource(stream);
+      connectSource(source);
+
+      const label = dom.deviceSelect.options[dom.deviceSelect.selectedIndex]?.text || 'External';
+      dom.statusSource.textContent = label.slice(0, 20);
+      dom.statusSource.classList.remove('muted');
+      dom.statusSource.classList.add('ok');
+
+      return stream.getAudioTracks()[0];
+    }
+
+    async function startGeneratorCapture() {
+      const opt = dom.genPreset.options[dom.genPreset.selectedIndex];
+      const type = opt.dataset.type || 'sine';
+      const freq = parseFloat(opt.dataset.freq) || 1000;
+      const db = parseFloat(opt.dataset.db) || -18;
+      const gain = Math.pow(10, db / 20);
+
+      let source;
+
+      if (type === 'silence') {
+        // Silent buffer source
+        const buffer = ac.createBuffer(2, ac.sampleRate, ac.sampleRate);
+        source = ac.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.start();
+      } else if (type === 'pink') {
+        // Pink noise generator
+        source = createPinkNoise(gain);
+      } else if (type === 'thast') {
+        // THÅST vector text generator
+        source = createThastVector();
+      } else {
+        // Sine oscillator - must be stereo for correct M/S goniometer display
+        const osc = ac.createOscillator();
+        const gainNode = ac.createGain();
+        osc.frequency.value = freq;
+        osc.connect(gainNode);
+        gainNode.gain.value = gain;
+        osc.start();
+
+        // Convert mono oscillator to stereo using a merger
+        // This ensures L and R get identical signals (true mono)
+        const merger = ac.createChannelMerger(2);
+        gainNode.connect(merger, 0, 0);  // Mono → Left
+        gainNode.connect(merger, 0, 1);  // Mono → Right
+        source = merger;
+      }
+
+      connectSource(source);
+
+      dom.statusSource.textContent = opt.text.split('(')[0].trim().slice(0, 20);
+      dom.statusSource.classList.remove('muted');
+      dom.statusSource.classList.add('ok');
+
+      return null; // No track to return
+    }
+
+    function createPinkNoise(gain) {
+      // Pink noise using Voss-McCartney algorithm
+      const bufferSize = 4096;
+      const processor = ac.createScriptProcessor(bufferSize, 0, 2);
+
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+
+      processor.onaudioprocess = (e) => {
+        const outL = e.outputBuffer.getChannelData(0);
+        const outR = e.outputBuffer.getChannelData(1);
+
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+
+          const pink = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11 * gain;
+          b6 = white * 0.115926;
+
+          outL[i] = pink;
+          outR[i] = pink + (Math.random() - 0.5) * 0.01 * gain; // Slight decorrelation
+        }
+      };
+
+      // Need a dummy source to keep processor alive
+      const dummy = ac.createBufferSource();
+      dummy.buffer = ac.createBuffer(1, 1, ac.sampleRate);
+      dummy.loop = true;
+      dummy.connect(processor);
+      dummy.start();
+
+      return processor;
+    }
+
+    function createThastVector() {
+      // THÅST vector text generator using ScriptProcessor
+      const bufferSize = 4096;
+      const processor = ac.createScriptProcessor(bufferSize, 0, 2);
+      const generator = new ThastVectorTextGenerator({
+        pointsPerSecond: 2400,  // Higher for smoother display
+        outputScale: 0.501      // Match internal generator -6 dBFS level (10^(-6/20) = 0.501)
+      });
+
+      processor.onaudioprocess = (e) => {
+        const outL = e.outputBuffer.getChannelData(0);
+        const outR = e.outputBuffer.getChannelData(1);
+        generator.fillBuffers(outL, outR, ac.sampleRate);
+      };
+
+      // Need a dummy source to keep processor alive
+      const dummy = ac.createBufferSource();
+      dummy.buffer = ac.createBuffer(1, 1, ac.sampleRate);
+      dummy.loop = true;
+      dummy.connect(processor);
+      dummy.start();
+
+      return processor;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WEBSOCKET CONNECTION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function connectBroker() {
+      const url = dom.brokerUrl.value.trim() || 'ws://localhost:8765';
+
+      updateConnectionStatus('connecting', 'Connecting...');
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        console.log('[TX] Connected to broker');
+        reconnectAttempts = 0;
+        updateConnectionStatus('connected', 'TX Connected');
+
+        // Register probe
+        const name = dom.probeName.value.trim() || `Probe ${probeId.slice(0, 8)}`;
+        ws.send(JSON.stringify({
+          type: 'register',
+          probeId,
+          name,
+          location: window.location.hostname
+        }));
+      };
+
+      ws.onmessage = (event) => {
+        if (event.data === '__ping__') {
+          ws.send('__pong__');
+          return;
+        }
+
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'registered') {
+            console.log('[TX] Registration acknowledged');
+          }
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        console.log('[TX] Disconnected');
+        updateConnectionStatus('error', 'Disconnected');
+
+        if (isTransmitting) {
+          scheduleReconnect();
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('[TX] WebSocket error:', error);
+        updateConnectionStatus('error', 'Connection error');
+      };
+    }
+
+    function scheduleReconnect() {
+      reconnectAttempts++;
+      const delay = Math.min(
+        RECONNECT_BASE_DELAY_MS * Math.pow(2, reconnectAttempts - 1),
+        MAX_RECONNECT_DELAY_MS
+      );
+
+      console.log(`[TX] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+      updateConnectionStatus('connecting', `Reconnecting in ${Math.round(delay / 1000)}s...`);
+
+      setTimeout(() => {
+        if (isTransmitting) {
+          connectBroker();
+        }
+      }, delay);
+    }
+
+    function updateConnectionStatus(state, text) {
+      dom.connDot.className = 'status-dot ' + state;
+      dom.connText.textContent = text;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // METRICS TRANSMISSION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function startMetricsTransmission() {
+      if (metricsInterval) return;
+
+      packetCount = 0;
+      lastPacketCountReset = Date.now();
+
+      metricsInterval = setInterval(() => {
+        try {
+          if (!ac || !analyserL || !analyserR) return;
+          if (!lufsMeter || !truePeakMeter || !ppmMeter || !stereoMeter) return;
+
+          // Sample audio buffers
+          sampleBuffers();
+
+          // Calculate LUFS (need to calculate energy first, then push)
+          const energy = lufsMeter.calculateBlockEnergy(bufL, bufR);
+          lufsMeter.pushBlock(energy);
+          const lufs = lufsMeter.getReadings();
+
+          // Update other meters (they use update() + getState() API)
+          truePeakMeter.update(bufL, bufR);
+          ppmMeter.update(bufL, bufR);
+          stereoMeter.update(bufL, bufR);
+
+          // Run stereo analysis for width, rotation, M/S levels
+          if (stereoAnalysis) {
+            stereoAnalysis.analyze(bufL, bufR);
+          }
+
+          // Calculate RMS for dBFS meter and balance
+          let rmsL = 0, rmsR = 0;
+          for (let i = 0; i < bufL.length; i++) {
+            rmsL += bufL[i] * bufL[i];
+            rmsR += bufR[i] * bufR[i];
+          }
+          rmsL = Math.sqrt(rmsL / bufL.length);
+          rmsR = Math.sqrt(rmsR / bufR.length);
+          const rmsDbL = rmsL > 1e-10 ? 20 * Math.log10(rmsL) : -60;
+          const rmsDbR = rmsR > 1e-10 ? 20 * Math.log10(rmsR) : -60;
+
+          // Balance in dB (positive = L louder, negative = R louder)
+          // Matches what BalanceMeter.draw() calculates internally
+          const balanceDb = 20 * Math.log10((rmsL + 1e-12) / (rmsR + 1e-12));
+          const clampedBalanceDb = Math.max(-12, Math.min(12, isFinite(balanceDb) ? balanceDb : 0));
+
+          // Get current meter states
+          const tp = truePeakMeter.getState();
+          const ppm = ppmMeter.getState();
+          const stereo = stereoMeter.getState();
+
+          // Update local display
+          updateMetricsDisplay(lufs, tp, stereo);
+
+          // ─────────────────────────────────────────────────────────────────
+          // VISUALIZATION DATA (Goniometer + Spectrum)
+          // Pre-computed on probe → transmitted as compact arrays
+          // Goniometer: 128 M/S points = 256 floats = ~1 KB
+          // Spectrum: 31 bands = ~124 bytes
+          // Total: ~1.2 KB/frame @ 10 Hz = ~12 KB/s (vs 380 KB/s raw audio)
+          // ─────────────────────────────────────────────────────────────────
+
+          // Compute goniometer M/S points from L/R buffers
+          const goniometerPoints = computeGoniometerPoints(bufL, bufR, GONIOMETER_POINTS);
+
+          // Compute 1/3-octave spectrum bands from FFT
+          const spectrumBands = computeSpectrumBands(analyserL, analyserR, ac.sampleRate);
+
+          // Transmit to broker
+          if (ws?.readyState === WebSocket.OPEN) {
+            const payload = {
+              probe: {
+                id: probeId,
+                name: dom.probeName.value.trim() || `Probe ${probeId.slice(0, 8)}`
+              },
+              timestamp: Date.now(),
+              metrics: {
+                lufs: {
+                  momentary: lufs.momentary,
+                  shortTerm: lufs.shortTerm,
+                  integrated: lufs.integrated,
+                  lra: lufs.lra
+                },
+                truePeak: {
+                  left: tp.left,
+                  right: tp.right,
+                  max: tp.maxPeak
+                },
+                ppm: {
+                  left: ppm.displayL,
+                  right: ppm.displayR
+                },
+                rms: {
+                  left: rmsDbL,
+                  right: rmsDbR
+                },
+                stereo: {
+                  correlation: stereo.correlation,
+                  balance: clampedBalanceDb,
+                  width: stereoAnalysis ? stereoAnalysis.getWidth() : 0,
+                  widthPeak: stereoAnalysis ? stereoAnalysis.getWidthPeak() : 0,
+                  midLevel: stereoAnalysis ? stereoAnalysis.getMidLevel() : -60,
+                  sideLevel: stereoAnalysis ? stereoAnalysis.getSideLevel() : -60,
+                  rotation: stereoAnalysis ? stereoAnalysis.getRotation() : 0
+                }
+              },
+              // ─────────────────────────────────────────────────────────────
+              // VISUALIZATION DATA
+              // Pre-computed for remote rendering without raw audio streaming
+              // ─────────────────────────────────────────────────────────────
+              visualization: {
+                // M/S goniometer points: [M0,S0, M1,S1, ...] normalised ±1
+                goniometer: Array.from(goniometerPoints),
+                // 1/3-octave spectrum: 31 dB values
+                spectrum: Array.from(spectrumBands)
+              }
+            };
+
+            ws.send(JSON.stringify({ type: 'metrics', payload }));
+            packetCount++;
+          }
+
+          // Update packets/sec display
+          const elapsed = (Date.now() - lastPacketCountReset) / 1000;
+          if (elapsed >= 1) {
+            const pps = Math.round(packetCount / elapsed);
+            dom.statusPackets.textContent = pps;
+            dom.statusPackets.classList.toggle('ok', pps >= 8);
+            dom.statusPackets.classList.toggle('warn', pps > 0 && pps < 8);
+            dom.statusPackets.classList.toggle('muted', pps === 0);
+            packetCount = 0;
+            lastPacketCountReset = Date.now();
+          }
+        } catch (error) {
+          console.error('[TX] Metrics error:', error);
+        }
+
+      }, METRICS_INTERVAL_MS);
+    }
+
+    function stopMetricsTransmission() {
+      if (metricsInterval) {
+        clearInterval(metricsInterval);
+        metricsInterval = null;
+      }
+    }
+
+    function updateMetricsDisplay(lufs, tp, stereo) {
+      // LUFS Momentary
+      if (isFinite(lufs.momentary) && lufs.momentary > -60) {
+        dom.metricLufsM.textContent = lufs.momentary.toFixed(1);
+      } else {
+        dom.metricLufsM.textContent = '–';
+      }
+
+      // True Peak Max
+      const tpMax = Math.max(tp.left, tp.right);
+      if (isFinite(tpMax) && tpMax > -60) {
+        dom.metricTpMax.textContent = tpMax.toFixed(1);
+      } else {
+        dom.metricTpMax.textContent = '–';
+      }
+
+      // Correlation
+      if (isFinite(stereo.correlation)) {
+        dom.metricCorr.textContent = stereo.correlation.toFixed(2);
+      } else {
+        dom.metricCorr.textContent = '–';
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONTROL FLOW
+    // ─────────────────────────────────────────────────────────────────────────
+
+    async function start() {
+      try {
+        initAudioContext();
+        await ac.resume();
+
+        // Start capture based on selected source
+        if (selectedSource === 'browser') {
+          await startBrowserCapture();
+        } else if (selectedSource === 'external') {
+          await startExternalCapture();
+        } else if (selectedSource === 'generator') {
+          await startGeneratorCapture();
+        }
+
+        // Connect to broker
+        connectBroker();
+
+        // Start metrics transmission
+        startMetricsTransmission();
+
+        isTransmitting = true;
+        updateUI();
+
+        dom.statusTx.textContent = 'Active';
+        dom.statusTx.classList.remove('muted');
+        dom.statusTx.classList.add('ok');
+
+      } catch (error) {
+        console.error('[TX] Start failed:', error);
+        alert('Failed to start: ' + error.message);
+      }
+    }
+
+    function stop() {
+      isTransmitting = false;
+
+      // Stop metrics transmission
+      stopMetricsTransmission();
+
+      // Close WebSocket
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+
+      // Disconnect source
+      if (sourceNode) {
+        try { sourceNode.disconnect(); } catch {}
+        sourceNode = null;
+      }
+
+      // Reset meters
+      lufsMeter?.reset();
+      truePeakMeter?.reset();
+
+      // Update UI
+      updateUI();
+
+      dom.statusSource.textContent = '–';
+      dom.statusSource.className = 'value muted';
+      dom.statusTx.textContent = 'Stopped';
+      dom.statusTx.className = 'value muted';
+      dom.statusPackets.textContent = '–';
+      dom.statusPackets.className = 'value muted';
+      dom.metricLufsM.textContent = '–';
+      dom.metricTpMax.textContent = '–';
+      dom.metricCorr.textContent = '–';
+
+      updateConnectionStatus('', 'Not connected');
+    }
+
+    function updateUI() {
+      dom.btnStart.disabled = isTransmitting;
+      dom.btnStop.disabled = !isTransmitting;
+
+      if (isTransmitting) {
+        dom.btnStart.classList.add('active');
+      } else {
+        dom.btnStart.classList.remove('active');
+      }
+    }
+
+    function selectSource(source) {
+      selectedSource = source;
+
+      // Update button states
+      dom.btnBrowser.classList.toggle('selected', source === 'browser');
+      dom.btnExternal.classList.toggle('selected', source === 'external');
+      dom.btnGenerator.classList.toggle('selected', source === 'generator');
+
+      // Show/hide options
+      dom.externalOptions.classList.toggle('hidden', source !== 'external');
+      dom.generatorOptions.classList.toggle('hidden', source !== 'generator');
+
+      // Enumerate devices when external selected
+      if (source === 'external') {
+        enumerateDevices();
+      }
+    }
+
+    async function enumerateDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+        dom.deviceSelect.innerHTML = '<option value="">Select audio input...</option>' +
+          audioInputs.map(d =>
+            `<option value="${d.deviceId}">${d.label || 'Audio Input ' + d.deviceId.slice(0, 8)}</option>`
+          ).join('');
+      } catch (error) {
+        console.error('[TX] Device enumeration failed:', error);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // EVENT BINDINGS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    dom.btnBrowser.onclick = () => selectSource('browser');
+    dom.btnExternal.onclick = () => selectSource('external');
+    dom.btnGenerator.onclick = () => selectSource('generator');
+    dom.btnStart.onclick = start;
+    dom.btnStop.onclick = stop;
+
+    // Save probe name to localStorage on change
+    dom.probeName.addEventListener('input', () => {
+      const name = dom.probeName.value.trim();
+      if (name) {
+        localStorage.setItem('tsg-probe-name', name);
+      } else {
+        localStorage.removeItem('tsg-probe-name');
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // INITIALISATION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Restore probe name from localStorage
+    const savedProbeName = localStorage.getItem('tsg-probe-name');
+    if (savedProbeName) {
+      dom.probeName.value = savedProbeName;
+    }
+
+    console.log('[TX] VERO-BAAMBI Probe Transmitter initialised');
+    console.log('[TX] Probe ID:', probeId);
+
+  </script>
+</body>
+</html>
