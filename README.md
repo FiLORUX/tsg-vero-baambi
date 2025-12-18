@@ -6,10 +6,11 @@
 > True Peak detection, and Nordic PPM — designed for verification and monitoring
 > in broadcast workflows.
 
-> *VERO* – "true" in Italian and Esperanto
+**Name:**
+> *VERO* — from Latin verus (“true”)
 > *BAAMBI* – Broadcast Audio Alignment & Metering for Broadcast Infrastructure
 
-Part of the TSG Suite – tools for alignment, metering, and signal verification.
+Part of the **TSG Suite** – tools for alignment, metering, and signal verification.
 
 ---
 
