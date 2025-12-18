@@ -12,7 +12,7 @@ VERO BAAMBI is a local-first, dependency-minimised implementation of:
 ## Name
 
 - **VERO** — from Latin *vērus* (“true”)
-- **BAAMBI** — Broadcast Audio Alignment & Metering for Broadcast Infrastructure
+- **BAAMBI** — Broadcast Audio Alignment & Metering Bridge Interface
 
 Part of the **TSG Suite**.
 
