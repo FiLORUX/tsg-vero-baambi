@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VERO-BAAMBI Wallboard – TSG Suite</title>
+  <style>
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * TSG Suite – broadcast tools for alignment, metering, and signal verification
+     * Maintained by David Thåst  ·  https://github.com/FiLORUX
+     *
+     * WALLBOARD VIEW
+     * Low-bandwidth NOC display for multi-probe monitoring
+     * ═══════════════════════════════════════════════════════════════════════════════
+     */
+
+    :root {
+      --bg: #0a0c0e;
+      --card-bg: #0f1214;
+      --border: #1a1f24;
+      --text: #a9b2c7;
+      --text-dim: #6b7280;
+      --ok: #58d38c;
+      --warn: #ffde58;
+      --alert: #ef4444;
+      --cyan: #69bfff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Header - TSG Suite branding */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #0f1214 0%, #0a0c0e 100%);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-logo {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-logo .suite {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: #93C5FD;
+      text-transform: uppercase;
+    }
+
+    .header-logo .product {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+    }
+
+    .header-logo .product-vero {
+      font-size: 1.4rem;
+      font-weight: 950;
+      letter-spacing: 2px;
+      color: #e8eef9;
+    }
+
+    .header-logo .product-baambi {
+      font-size: 1.4rem;
+      font-weight: 200;
+      letter-spacing: -1px;
+      color: #e8eef9;
+    }
+
+    .header-logo .mode {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: #93C5FD;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+    }
+
+    .status-indicator.offline { background: var(--alert); }
+    .status-indicator.connecting { background: var(--warn); animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 24px;
+      padding: 10px 24px;
+      background: rgba(15, 18, 20, 0.6);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      overflow-x: auto;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 80px;
+    }
+
+    .stat-label {
+      color: var(--text-dim);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cyan);
+    }
+
+    .stat-value.ok { color: var(--ok); }
+    .stat-value.warn { color: var(--warn); }
+    .stat-value.alert { color: var(--alert); }
+
+    /* Settings bar */
+    .settings {
+      display: flex;
+      gap: 16px;
+      padding: 8px 24px;
+      background: rgba(15, 18, 20, 0.8);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+
+    .settings label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-dim);
+    }
+
+    .settings input, .settings select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 4px 8px;
+      font-size: 11px;
+    }
+
+    /* Probe grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      padding: 24px;
+    }
+
+    /* Probe card */
+    .probe-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .probe-card.in-spec { border-color: rgba(88, 211, 140, 0.3); }
+    .probe-card.out-of-spec { border-color: var(--alert); }
+    .probe-card.offline { opacity: 0.5; }
+
+    .probe-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .probe-name {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .probe-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .probe-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .probe-status-dot.online { background: var(--ok); }
+    .probe-status-dot.offline { background: var(--alert); }
+
+    .probe-body {
+      padding: 12px;
+    }
+
+    .probe-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .metric {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      padding: 8px;
+    }
+
+    .metric-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 18px;
+      font-weight: 600;
+      font-feature-settings: 'tnum';
+    }
+
+    .metric-unit {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-left: 2px;
+    }
+
+    .metric.integrated {
+      grid-column: span 2;
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .metric.integrated .metric-value {
+      font-size: 28px;
+      color: var(--cyan);
+    }
+
+    .metric.ok .metric-value { color: var(--ok); }
+    .metric.warn .metric-value { color: var(--warn); }
+    .metric.alert .metric-value { color: var(--alert); }
+
+    /* Alert banner */
+    .probe-alert {
+      display: none;
+      padding: 6px 12px;
+      background: rgba(239, 68, 68, 0.15);
+      border-top: 1px solid rgba(239, 68, 68, 0.3);
+      font-size: 11px;
+      color: var(--alert);
+    }
+
+    .probe-card.out-of-spec .probe-alert {
+      display: block;
+    }
+
+    /* Empty state */
+    .empty-state {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+    }
+
+    .empty-state h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .grid {
+        grid-template-columns: 1fr;
+        padding: 12px;
+        gap: 12px;
+      }
+
+      .header {
+        flex-direction: column;
+        gap: 8px;
+        text-align: center;
+      }
+
+      .settings {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="header-logo">
+      <span class="suite">TSG Suite</span>
+      <div class="product">
+        <span class="product-vero">VERO</span><span class="product-baambi">BAAMBI</span>
+      </div>
+      <span class="mode">Wallboard</span>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-item">
+      <span class="status-indicator connecting" id="connectionIndicator"></span>
+      <span id="connectionStatus">Connecting...</span>
+    </div>
+    <div class="status-item">
+      <span id="probeCount">0 probes</span>
+    </div>
+    <div class="status-item">
+      <span id="lastUpdate">--:--:--</span>
+    </div>
+  </div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-label">Broker Uptime</span>
+    <span class="stat-value" id="brokerUptime">--:--:--</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Messages</span>
+    <span class="stat-value" id="messageCount">0</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Data Received</span>
+    <span class="stat-value" id="dataReceived">0 B</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Msg/sec</span>
+    <span class="stat-value" id="messageRate">0.0</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">In Spec</span>
+    <span class="stat-value ok" id="inSpecCount">0 / 0</span>
+  </div>
+  <div class="stat">
+    <span class="stat-label">Violations</span>
+    <span class="stat-value" id="violationCount">0</span>
+  </div>
+</div>
+
+<div class="settings">
+  <label>
+    Broker:
+    <input type="url" id="brokerUrl" value="ws://localhost:8765" style="width: 180px" />
+    <button id="btnReconnect" style="padding: 4px 8px; cursor: pointer">Connect</button>
+  </label>
+  <label>
+    Target:
+    <select id="targetLufs">
+      <option value="-23">−23 LUFS (EBU)</option>
+      <option value="-24">−24 LUFS (ATSC)</option>
+      <option value="-16">−16 LUFS (Streaming)</option>
+      <option value="-14">−14 LUFS (Podcast)</option>
+    </select>
+  </label>
+  <label>
+    Tolerance:
+    <select id="tolerance">
+      <option value="1">±1 LU</option>
+      <option value="2">±2 LU</option>
+      <option value="3">±3 LU</option>
+    </select>
+  </label>
+  <label>
+    TP Limit:
+    <select id="tpLimit">
+      <option value="-1">−1 dBTP</option>
+      <option value="-2">−2 dBTP</option>
+      <option value="-3">−3 dBTP</option>
+    </select>
+  </label>
+</div>
+
+<div class="grid" id="probeGrid">
+  <div class="empty-state">
+    <h2>No Probes Connected</h2>
+    <p>Waiting for probes to register with the broker...</p>
+  </div>
+</div>
+
+<script type="module">
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * WALLBOARD CLIENT
+ * Low-bandwidth WebSocket client for NOC display
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
+// DOM elements
+const brokerUrl = document.getElementById('brokerUrl');
+const btnReconnect = document.getElementById('btnReconnect');
+const targetLufs = document.getElementById('targetLufs');
+const tolerance = document.getElementById('tolerance');
+const tpLimit = document.getElementById('tpLimit');
+const connectionIndicator = document.getElementById('connectionIndicator');
+const connectionStatus = document.getElementById('connectionStatus');
+const probeCount = document.getElementById('probeCount');
+const lastUpdate = document.getElementById('lastUpdate');
+const probeGrid = document.getElementById('probeGrid');
+
+// Stats elements
+const brokerUptimeEl = document.getElementById('brokerUptime');
+const messageCountEl = document.getElementById('messageCount');
+const dataReceivedEl = document.getElementById('dataReceived');
+const messageRateEl = document.getElementById('messageRate');
+const inSpecCountEl = document.getElementById('inSpecCount');
+const violationCountEl = document.getElementById('violationCount');
+
+// State
+let ws = null;
+const probes = new Map();
+let reconnectTimer = null;
+let updateTimer = null;
+
+// Stats tracking
+const stats = {
+  messageCount: 0,
+  bytesReceived: 0,
+  connectionTime: null,
+  messagesLastSecond: [],
+  inSpecProbes: 0,
+  outOfSpecProbes: 0
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONNECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+function connect() {
+  if (ws) {
+    ws.close();
+  }
+
+  const url = brokerUrl.value.trim();
+  if (!url) return;
+
+  // Reset stats on new connection
+  stats.messageCount = 0;
+  stats.bytesReceived = 0;
+  stats.connectionTime = null;
+  stats.messagesLastSecond = [];
+  updateStatsDisplay();
+
+  connectionIndicator.className = 'status-indicator connecting';
+  connectionStatus.textContent = 'Connecting...';
+
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    setOffline('Invalid URL');
+    return;
+  }
+
+  ws.onopen = () => {
+    connectionIndicator.className = 'status-indicator';
+    connectionStatus.textContent = 'Connected';
+    stats.connectionTime = Date.now();
+    // Request probe list
+    ws.send(JSON.stringify({ type: 'list' }));
+    // Subscribe to all probes
+    for (const [probeId] of probes) {
+      ws.send(JSON.stringify({ type: 'subscribe', probeId }));
+    }
+  };
+
+  ws.onmessage = (event) => {
+    // Track stats
+    stats.messageCount++;
+    stats.bytesReceived += event.data.length;
+    stats.messagesLastSecond.push(Date.now());
+
+    handleMessage(JSON.parse(event.data));
+    updateStatsDisplay();
+  };
+
+  ws.onclose = () => {
+    setOffline('Disconnected');
+    scheduleReconnect();
+  };
+
+  ws.onerror = () => {
+    setOffline('Connection error');
+  };
+}
+
+function setOffline(reason) {
+  connectionIndicator.className = 'status-indicator offline';
+  connectionStatus.textContent = reason;
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(connect, 5000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MESSAGE HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function handleMessage(message) {
+  switch (message.type) {
+    case 'probeList':
+      handleProbeList(message.probes);
+      break;
+
+    case 'probeOnline':
+      handleProbeOnline(message);
+      break;
+
+    case 'probeOffline':
+      handleProbeOffline(message.probeId);
+      break;
+
+    case 'metrics':
+      handleMetrics(message.probeId, message.payload);
+      break;
+  }
+}
+
+function handleProbeList(list) {
+  for (const probe of list) {
+    probes.set(probe.id, {
+      name: probe.name,
+      location: probe.location,
+      online: true,
+      metrics: null
+    });
+
+    // Subscribe to probe
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'subscribe', probeId: probe.id }));
+    }
+  }
+
+  renderGrid();
+}
+
+function handleProbeOnline(message) {
+  probes.set(message.probeId, {
+    name: message.name,
+    location: message.location || null,
+    online: true,
+    metrics: null
+  });
+
+  // Subscribe to new probe
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'subscribe', probeId: message.probeId }));
+  }
+
+  renderGrid();
+}
+
+function handleProbeOffline(probeId) {
+  const probe = probes.get(probeId);
+  if (probe) {
+    probe.online = false;
+    probe.metrics = null;
+  }
+  renderGrid();
+}
+
+function handleMetrics(probeId, payload) {
+  const probe = probes.get(probeId);
+  if (!probe) return;
+
+  probe.online = true;
+  probe.metrics = payload;
+  probe.lastUpdate = Date.now();
+
+  updateProbeCard(probeId, probe);
+  updateLastUpdateTime();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RENDERING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function renderGrid() {
+  if (probes.size === 0) {
+    probeGrid.innerHTML = `
+      <div class="empty-state">
+        <h2>No Probes Connected</h2>
+        <p>Waiting for probes to register with the broker...</p>
+      </div>
+    `;
+    probeCount.textContent = '0 probes';
+    return;
+  }
+
+  probeGrid.innerHTML = '';
+  let count = 0;
+
+  for (const [probeId, probe] of probes) {
+    const card = createProbeCard(probeId, probe);
+    probeGrid.appendChild(card);
+    count++;
+  }
+
+  probeCount.textContent = `${count} probe${count !== 1 ? 's' : ''}`;
+}
+
+function createProbeCard(probeId, probe) {
+  const card = document.createElement('div');
+  card.className = 'probe-card';
+  card.id = `probe-${probeId}`;
+  card.dataset.probeId = probeId;
+
+  if (!probe.online) {
+    card.classList.add('offline');
+  }
+
+  card.innerHTML = `
+    <div class="probe-header">
+      <div class="probe-name">${escapeHtml(probe.name)}</div>
+      <div class="probe-status">
+        <span class="probe-status-dot ${probe.online ? 'online' : 'offline'}"></span>
+        <span>${probe.online ? 'Online' : 'Offline'}</span>
+      </div>
+    </div>
+    <div class="probe-body">
+      <div class="probe-metrics">
+        <div class="metric integrated">
+          <div class="metric-label">Integrated</div>
+          <div class="metric-value">--.-<span class="metric-unit">LUFS</span></div>
+        </div>
+        <div class="metric shortterm">
+          <div class="metric-label">Short-term</div>
+          <div class="metric-value">--.-<span class="metric-unit">LUFS</span></div>
+        </div>
+        <div class="metric truepeak">
+          <div class="metric-label">True Peak</div>
+          <div class="metric-value">--.-<span class="metric-unit">dBTP</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="probe-alert"></div>
+  `;
+
+  if (probe.metrics) {
+    updateProbeCard(probeId, probe);
+  }
+
+  return card;
+}
+
+function updateProbeCard(probeId, probe) {
+  const card = document.getElementById(`probe-${probeId}`);
+  if (!card) return;
+
+  const metrics = probe.metrics;
+  if (!metrics) return;
+
+  const target = parseInt(targetLufs.value, 10);
+  const tol = parseFloat(tolerance.value);
+  const tp = parseFloat(tpLimit.value);
+
+  // Get values - handle both payload formats:
+  // Format 1 (MetricsCollector): { lufs, truePeak, ... } directly on payload
+  // Format 2 (probe.html): { metrics: { lufs, truePeak, ... } } nested
+  const lufs = metrics.lufs || metrics.metrics?.lufs || {};
+  const truePeak = metrics.truePeak || metrics.metrics?.truePeak || {};
+
+  const integrated = lufs.integrated;
+  const shortTerm = lufs.shortTerm;
+  const maxTp = Math.max(truePeak.left ?? -Infinity, truePeak.right ?? -Infinity);
+
+  // Update integrated
+  const intEl = card.querySelector('.metric.integrated .metric-value');
+  if (intEl && isFinite(integrated)) {
+    intEl.innerHTML = `${integrated.toFixed(1)}<span class="metric-unit">LUFS</span>`;
+  }
+
+  // Update short-term
+  const stEl = card.querySelector('.metric.shortterm .metric-value');
+  if (stEl && isFinite(shortTerm)) {
+    stEl.innerHTML = `${shortTerm.toFixed(1)}<span class="metric-unit">LUFS</span>`;
+  }
+
+  // Update true peak
+  const tpEl = card.querySelector('.metric.truepeak .metric-value');
+  if (tpEl && isFinite(maxTp)) {
+    tpEl.innerHTML = `${maxTp.toFixed(1)}<span class="metric-unit">dBTP</span>`;
+  }
+
+  // Check spec
+  const violations = [];
+
+  if (isFinite(integrated)) {
+    const deviation = integrated - target;
+    const intMetric = card.querySelector('.metric.integrated');
+    if (Math.abs(deviation) > tol) {
+      intMetric.className = 'metric integrated alert';
+      violations.push(`LUFS ${deviation > 0 ? '+' : ''}${deviation.toFixed(1)} LU from target`);
+    } else if (Math.abs(deviation) > tol * 0.7) {
+      intMetric.className = 'metric integrated warn';
+    } else {
+      intMetric.className = 'metric integrated ok';
+    }
+  }
+
+  if (isFinite(maxTp)) {
+    const tpMetric = card.querySelector('.metric.truepeak');
+    if (maxTp > tp) {
+      tpMetric.className = 'metric truepeak alert';
+      violations.push(`True Peak ${maxTp.toFixed(1)} dBTP exceeds ${tp} dBTP`);
+    } else if (maxTp > tp - 1) {
+      tpMetric.className = 'metric truepeak warn';
+    } else {
+      tpMetric.className = 'metric truepeak ok';
+    }
+  }
+
+  // Update card status
+  const alertEl = card.querySelector('.probe-alert');
+  if (violations.length > 0) {
+    card.classList.add('out-of-spec');
+    card.classList.remove('in-spec');
+    alertEl.textContent = violations.join(' · ');
+  } else if (isFinite(integrated)) {
+    card.classList.remove('out-of-spec');
+    card.classList.add('in-spec');
+    alertEl.textContent = '';
+  }
+}
+
+function updateLastUpdateTime() {
+  const now = new Date();
+  lastUpdate.textContent = now.toLocaleTimeString();
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS DISPLAY
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Format bytes to human-readable string
+ * @param {number} bytes - Byte count
+ * @returns {string} Formatted string (e.g., "1.5 KB")
+ */
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return (bytes / Math.pow(k, i)).toFixed(i > 0 ? 1 : 0) + ' ' + sizes[i];
+}
+
+/**
+ * Format duration as HH:MM:SS
+ * @param {number} ms - Duration in milliseconds
+ * @returns {string} Formatted time string
+ */
+function formatDuration(ms) {
+  if (!ms) return '--:--:--';
+  const seconds = Math.floor(ms / 1000) % 60;
+  const minutes = Math.floor(ms / 60000) % 60;
+  const hours = Math.floor(ms / 3600000);
+  return [hours, minutes, seconds]
+    .map(v => v.toString().padStart(2, '0'))
+    .join(':');
+}
+
+/**
+ * Update all stats display elements
+ */
+function updateStatsDisplay() {
+  // Message count
+  messageCountEl.textContent = stats.messageCount.toLocaleString();
+
+  // Bytes received
+  dataReceivedEl.textContent = formatBytes(stats.bytesReceived);
+
+  // Broker uptime (time since connection)
+  if (stats.connectionTime) {
+    brokerUptimeEl.textContent = formatDuration(Date.now() - stats.connectionTime);
+  }
+
+  // Message rate (messages per second over last 5 seconds)
+  const now = Date.now();
+  stats.messagesLastSecond = stats.messagesLastSecond.filter(t => now - t < 5000);
+  const rate = stats.messagesLastSecond.length / 5;
+  messageRateEl.textContent = rate.toFixed(1);
+
+  // In-spec vs out-of-spec probes
+  let inSpec = 0;
+  let outOfSpec = 0;
+  let totalViolations = 0;
+
+  for (const [, probe] of probes) {
+    if (!probe.online || !probe.metrics) continue;
+
+    const metrics = probe.metrics;
+    const target = parseInt(targetLufs.value, 10);
+    const tol = parseFloat(tolerance.value);
+    const tp = parseFloat(tpLimit.value);
+
+    const lufs = metrics.lufs || metrics.metrics?.lufs || {};
+    const truePeak = metrics.truePeak || metrics.metrics?.truePeak || {};
+    const integrated = lufs.integrated;
+    const maxTp = Math.max(truePeak.left ?? -Infinity, truePeak.right ?? -Infinity);
+
+    let hasViolation = false;
+
+    if (isFinite(integrated) && Math.abs(integrated - target) > tol) {
+      hasViolation = true;
+      totalViolations++;
+    }
+
+    if (isFinite(maxTp) && maxTp > tp) {
+      hasViolation = true;
+      totalViolations++;
+    }
+
+    if (hasViolation) {
+      outOfSpec++;
+    } else if (isFinite(integrated)) {
+      inSpec++;
+    }
+  }
+
+  // Update in-spec display
+  const total = inSpec + outOfSpec;
+  inSpecCountEl.textContent = `${inSpec} / ${total}`;
+  if (total > 0) {
+    if (outOfSpec > 0) {
+      inSpecCountEl.className = 'stat-value alert';
+    } else {
+      inSpecCountEl.className = 'stat-value ok';
+    }
+  } else {
+    inSpecCountEl.className = 'stat-value';
+  }
+
+  // Update violations
+  violationCountEl.textContent = totalViolations.toString();
+  if (totalViolations > 0) {
+    violationCountEl.className = 'stat-value alert';
+  } else {
+    violationCountEl.className = 'stat-value';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EVENT HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+btnReconnect.onclick = connect;
+
+brokerUrl.onkeydown = (e) => {
+  if (e.key === 'Enter') connect();
+};
+
+targetLufs.onchange = renderGrid;
+tolerance.onchange = renderGrid;
+tpLimit.onchange = renderGrid;
+
+// Initial connection
+connect();
+
+// Periodic re-render for stale detection
+setInterval(() => {
+  const now = Date.now();
+  for (const [probeId, probe] of probes) {
+    if (probe.lastUpdate && (now - probe.lastUpdate) > 10000) {
+      probe.online = false;
+      const card = document.getElementById(`probe-${probeId}`);
+      if (card) {
+        card.classList.add('offline');
+        card.querySelector('.probe-status-dot').className = 'probe-status-dot offline';
+        card.querySelector('.probe-status span:last-child').textContent = 'Stale';
+      }
+    }
+  }
+  // Update stats display (uptime, msg/sec)
+  updateStatsDisplay();
+}, 1000);
+</script>
+
+</body>
+</html>

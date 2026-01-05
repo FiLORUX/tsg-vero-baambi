@@ -1,0 +1,35 @@
+{
+  "name": "tsg-vero-baambi",
+  "version": "1.0.0",
+  "description": "TSG VERO-BAAMBI – Broadcast Audio Metering Suite",
+  "type": "module",
+  "bin": {
+    "tsg": "./tsg"
+  },
+  "scripts": {
+    "start": "./tsg start",
+    "broker": "node broker/server.js",
+    "dev": "node --watch broker/server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "David Thast <david@thast.se>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FiLORUX/tsg-vero-baambi"
+  },
+  "keywords": [
+    "broadcast",
+    "audio",
+    "metering",
+    "loudness",
+    "lufs",
+    "ebu-r128",
+    "true-peak"
+  ]
+}

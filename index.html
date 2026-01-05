@@ -1,0 +1,3644 @@
+<!doctype html>
+<!--
+ ═══════════════════════════════════════════════════════════════════════════════
+ TSG Suite – broadcast tools for alignment, metering, and signal verification
+ Maintained by David Thåst  ·  https://github.com/FiLORUX
+
+ Built with the assumption that behaviour should be predictable,
+ output should be verifiable, and silence should mean silence
+
+ david@thast.se  ·  +46 700 30 30 60
+ ═══════════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TSG Suite | VERO-BAAMBI</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%230d0f11'/><g fill='%2369bfff'><rect x='6' y='10' width='28' height='6'/><rect x='18' y='16' width='6' height='38'/><rect x='38' y='10' width='20' height='6'/><rect x='38' y='10' width='6' height='22'/><rect x='38' y='26' width='20' height='6'/><rect x='52' y='26' width='6' height='22'/><rect x='38' y='48' width='20' height='6'/><rect x='6' y='36' width='28' height='6'/><rect x='6' y='36' width='6' height='22'/><rect x='18' y='52' width='16' height='6'/><animate attributeName='opacity' values='1;0.85;1' dur='6s' repeatCount='indefinite'/></g></svg>">
+  <!--
+  ═══════════════════════════════════════════════════════════════════════════════
+  TSG SUITE | VERO BAAMBI | BROADCAST AUDIO ALIGNMENT  & METER BRIDGE INTERFACE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  PURPOSE
+  ───────
+  Professional-grade audio metering for broadcast, streaming, and production.
+  Implements EBU R128 (Europe), ITU BS.1770-4 (international), and legacy
+  Nordic PPM (IEC 60268-10 Type I) standards within a single unified interface.
+
+  SIGNAL FLOW
+  ───────────
+  Source → Channel Splitter → K-weighting Filter → LUFS Integration
+                           ↓
+                     Analysis Bus → True Peak Detection (4× oversampling)
+                           ↓
+                     Goniometer → Phase Correlation → Stereo Width
+
+  STANDARDS ADHERENCE
+  ───────────────────
+  • EBU R128 / R128s1: Programme loudness, LRA, True Peak
+  • ITU-R BS.1770-4: K-weighting, gating algorithm, LUFS/LKFS
+  • ITU-R BS.1771-1: Loudness metering requirements
+  • EBU Tech 3341/3342: Loudness meters, loudness range
+  • IEC 60268-10 Type I: Nordic PPM ballistics (5ms attack, 1.7s/20dB decay)
+  • EBU R68: Reference level alignment (0 dBu = −18 dBFS peak)
+  • ITU-R BR.1385: Stereo identification signal
+
+  ARCHITECTURAL NOTES
+  ───────────────────
+  • Web Audio API with AudioWorklet for sample-accurate processing
+  • K-weighting via cascaded biquad filters (HP 38Hz + HS +4dB@4kHz)
+  • True Peak via time-domain analysis with 4× interpolation
+  • 400ms momentary / 3s short-term integration windows per BS.1770
+  • Relative gating at −10 LU below ungated integrated loudness
+
+  ═══════════════════════════════════════════════════════════════════════════════
+  -->
+  <style>
+    /* ═══════════════════════════════════════════════════════════════════════
+       DESIGN SYSTEM: BROADCAST CONTROL ROOM PALETTE
+       ═══════════════════════════════════════════════════════════════════════
+       Colour semantics aligned with broadcast monitoring conventions:
+       • Green (--ok): Within tolerance, nominal operation
+       • Amber (--warn): Approaching limit, attention required
+       • Orange (--caution): Near limit, corrective action advised
+       • Red (--hot): Exceeds limit, immediate attention
+       • Cyan (--cyan): Reference/alignment markers (−18 dBFS = 0 dBu)
+    */
+    :root{
+      --bg:#141618; --panel:#1b1f23; --ink:#e8eef9; --muted:#a9b2c7; --outline:#2a2f36; --grid:#29323b;
+      --ok:#58d38c; --warn:#ffde58; --caution:#ff9a2d; --hot:#ff5a63; --cyan:#69bfff;
+      --btn:#2d6bff; --btn-dark:#1e4edd; --btn-ghost:#0b1222;
+      --accent:#69bfff; --accent-rgb:105,191,255;
+      --meter-gap: 1.2em;
+      --bar-inset: 10%;  /* Horizontal meter edge padding - single source of truth */
+      /* Secondary tick heights (gap-filling ticks between main scale marks) */
+      --secondary-tick-top-height: 5%;     /* Height of upper secondary ticks (anchored to top) */
+      --secondary-tick-bottom-height: 5%;  /* Height of lower secondary ticks (anchored to bottom) */
+      /* Layout constants */
+      --canvas-border-radius: 10px;
+      --resize-debounce-delay: 16ms;
+      --visibility-threshold: 0.1;
+      /* Responsive sidebar: 25% of viewport, bounded */
+      --sidebar-width: clamp(200px, 25vw, 360px);
+    }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
+
+    /* Boot splash */
+    #splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;transition:opacity 0.3s ease-out}
+    #splash.hide{opacity:0;pointer-events:none}
+    #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink)}
+    #splash .splash-logo .vero{font-weight:900;margin-right:0.15em}
+    #splash .splash-logo .baambi{font-weight:200;letter-spacing:-1px}
+    #splash .splash-spinner{width:120px;height:120px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,var(--cyan) 25%,transparent 50%,rgba(105,191,255,0.3) 75%,transparent 100%);animation:splash-spin 1s linear infinite}
+    #splash .splash-spinner::before{content:'';position:absolute;inset:24px;background:var(--bg);border-radius:50%}
+    #splash .splash-spinner{position:relative}
+    @keyframes splash-spin{to{transform:rotate(360deg)}}
+
+    /* Meter Verification Modal - matches calibration wizard theme */
+    .verify-modal{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;opacity:0;visibility:hidden;transition:opacity 0.2s,visibility 0.2s}
+    .verify-modal.open{opacity:1;visibility:visible}
+    .verify-modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px)}
+    .verify-modal-content{position:relative;width:90%;max-width:480px;max-height:80vh;background:var(--panel);border:1px solid var(--outline);border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.6);display:flex;flex-direction:column}
+    .verify-modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--outline);background:rgba(15,18,20,0.5)}
+    .verify-modal-header h2{margin:0;font-size:17px;font-weight:600;color:var(--ink)}
+    .verify-modal-close{width:32px;height:32px;border-radius:8px;background:transparent;border:1px solid var(--outline);color:var(--muted);font-size:20px;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center}
+    .verify-modal-close:hover{background:rgba(255,90,99,0.15);border-color:var(--hot);color:var(--hot)}
+    .verify-modal-body{padding:20px;overflow-y:auto;flex:1}
+    .verify-intro p{margin:0 0 12px;font-size:13px;color:var(--muted)}
+    .verify-warning{color:var(--caution)!important;font-weight:500}
+    .verify-progress{margin-bottom:20px}
+    .verify-progress-bar{height:6px;background:var(--outline);border-radius:3px;overflow:hidden}
+    .verify-progress-fill{height:100%;background:var(--cyan);width:0}
+    .verify-progress-text{font-size:12px;color:var(--muted);margin-top:8px;text-align:center}
+    .verify-tests{display:flex;flex-direction:column;gap:8px}
+    .verify-test{display:flex;align-items:center;gap:12px;padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid var(--outline);border-radius:8px;transition:border-color 0.2s,background 0.2s}
+    .verify-test.running{border-color:var(--cyan);background:rgba(105,191,255,0.05)}
+    .verify-test.passed{border-color:var(--ok)}
+    .verify-test.failed{border-color:var(--warn)}
+    .verify-test-status{width:20px;font-size:16px;text-align:center;color:var(--muted)}
+    .verify-test.running .verify-test-status{color:var(--cyan)}
+    .verify-test.passed .verify-test-status{color:var(--ok)}
+    .verify-test.failed .verify-test-status{color:var(--warn)}
+    .verify-test-info{flex:1;min-width:0}
+    .verify-test-name{font-size:13px;font-weight:500;color:var(--ink)}
+    .verify-test-desc{font-size:11px;color:var(--muted);margin-top:2px}
+    .verify-test-result{font-size:12px;font-family:monospace;color:var(--muted)}
+    .verify-test.passed .verify-test-result{color:var(--ok)}
+    .verify-test.failed .verify-test-result{color:var(--warn)}
+    .verify-summary{display:flex;align-items:center;gap:12px;padding:16px;margin-top:16px;border-radius:8px;background:rgba(255,255,255,0.03)}
+    .verify-summary-icon{font-size:24px}
+    .verify-summary-icon.success{color:var(--ok)}
+    .verify-summary-icon.warning{color:var(--caution)}
+    .verify-summary-text{font-size:13px;color:var(--ink)}
+    .verify-modal-footer{padding:16px 20px;border-top:1px solid var(--outline);display:flex;justify-content:flex-end;gap:10px}
+    .verify-btn{padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:background 0.15s,transform 0.1s}
+    .verify-btn-start{background:var(--cyan);color:#000}
+    .verify-btn-start:hover{background:#85d4ff}
+    .verify-btn-abort{background:var(--warn);color:#000}
+    .verify-btn-close{background:var(--outline);color:var(--ink)}
+    .verify-btn-close:hover{background:rgba(255,255,255,0.1)}
+    .verify-meters-btn .verify-icon{color:var(--ok);margin-right:4px}
+
+    header{position:sticky;top:0;z-index:10;background:linear-gradient(180deg,rgba(20,22,24,.95),rgba(20,22,24,.6));backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--outline)}
+    .hdr{display:flex;justify-content:space-between;align-items:center;padding:0 20px}
+
+    /* Header calibration indicator */
+    .header-cal-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: rgba(88, 211, 140, 0.12);
+      border: 1px solid rgba(88, 211, 140, 0.3);
+      color: var(--ok);
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 0 4px rgba(88, 211, 140, 0.2);
+      transition: width 120ms ease-out;
+    }
+
+    /* Glow animation that plays once and fades out */
+    .header-cal-indicator.cal-glow-in {
+      animation: calGlowFade 2.5s ease-out forwards;
+    }
+
+    @keyframes calGlowFade {
+      0% { box-shadow: 0 0 20px rgba(88, 211, 140, 0.8); }
+      30% { box-shadow: 0 0 16px rgba(88, 211, 140, 0.6); }
+      60% { box-shadow: 0 0 10px rgba(88, 211, 140, 0.4); }
+      100% { box-shadow: 0 0 4px rgba(88, 211, 140, 0.2); }
+    }
+
+    .header-cal-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--ok);
+      color: #000;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .header-cal-text {
+      color: var(--ok);
+    }
+
+    .header-cal-standard {
+      font-family: monospace;
+      font-size: 11px;
+      margin-left: auto;
+      text-align: right;
+      color: var(--muted);
+    }
+
+    /* Header session indicator (matches calibration indicator style exactly) */
+    .header-session-indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-left: 12px;
+      white-space: nowrap;
+      transition: width 120ms ease-out;
+    }
+
+    .header-session-indicator.session-idle {
+      background: rgba(100, 116, 139, 0.12);
+      border: 1px solid rgba(100, 116, 139, 0.3);
+      color: var(--muted);
+      box-shadow: 0 0 4px rgba(100, 116, 139, 0.2);
+    }
+
+    .header-session-indicator.session-capturing {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--err);
+      box-shadow: 0 0 4px rgba(239, 68, 68, 0.2);
+    }
+
+    .session-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      background: #64748b;
+    }
+
+    .session-icon::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: #000;
+      border-radius: 50%;
+    }
+
+    .session-capturing .session-icon {
+      background: #ef4444;
+    }
+
+    .session-duration {
+      font-family: monospace;
+      font-size: 11px;
+      margin-left: auto;
+      text-align: right;
+    }
+
+    /* Toggle switch */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: var(--outline);
+      border-radius: 10px;
+      transition: background-color 0.2s;
+    }
+
+    .toggle-slider::before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: var(--ink);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: var(--ok);
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
+    h1{margin:0;padding:16px 20px;font-size:16px;letter-spacing:.3px}
+
+    /* ===== TWO-COLUMN STEREO LAYOUT ===== */
+    .stereoContainer {
+      display: flex;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+      container-type: inline-size;
+      container-name: stereo-area;
+    }
+
+    /* Left column: Goniometer + Phase Correlation (stacked) */
+    .stereoLeftCol {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      min-height: 0;
+    }
+
+    /* Vectorscope - keeps aspect ratio, JS sets size */
+    .gonioSquare {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    /* Phase correlation widget under goniometer - takes remaining height */
+    .corrWidget {
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Right column: 2x2 grid + spectrum spanning full width */
+    .stereoRightCol {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr 2fr;
+      gap: 6px;
+      flex: 1;
+      min-height: 0;
+      min-width: clamp(120px, 30cqw, 240px);
+    }
+
+    /* Spectrum spans both columns and double height */
+    .stereoRightCol .histogramWidget {
+      grid-column: 1 / -1;
+    }
+
+    /* Individual widgets in right column */
+    .phaseWidget {
+      background: rgba(22, 26, 30, 0.6);
+      border: 1px solid var(--outline);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: 6px 8px;
+    }
+
+    /* Widget label */
+    .widgetLabel {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* K-weighting toggle button */
+    .k-weight-toggle {
+      font-size: 8px;
+      font-weight: 700;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 3px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      margin-left: auto;
+    }
+    .k-weight-toggle:hover {
+      background: rgba(0,212,255,0.15);
+      border-color: rgba(0,212,255,0.4);
+      color: #00d4ff;
+    }
+    .k-weight-toggle.active {
+      background: rgba(0,212,255,0.25);
+      border-color: #00d4ff;
+      color: #00d4ff;
+      box-shadow: 0 0 6px rgba(0,212,255,0.3);
+    }
+
+    /* Phase correlation, L/R balance, rotation and spectrum wraps */
+    .phaseWidget .corrWrap,
+    .phaseWidget .monoDevWrap,
+    .phaseWidget .rotationWrap,
+    .phaseWidget .spectrumWrap {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .phaseWidget .corrWrap .canvasPad,
+    .phaseWidget .monoDevWrap .canvasPad,
+    .phaseWidget .rotationWrap .canvasPad,
+    .phaseWidget .spectrumWrap .canvasPad {
+      width: 100%;
+      height: 100%;
+    }
+
+    .phaseWidget .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      transform: translateX(-50%);
+      font-size: 10px;
+      padding: 2px 6px;
+      background: rgba(0,0,0,.5);
+      border-radius: 4px;
+    }
+
+    /* Canvas in widgets (direct children only, not inside .canvasPad) */
+    .phaseWidget > canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      min-height: clamp(2em, 8%, 4em);
+      border-radius: 0.25em;
+      background: #0a0c0e;
+    }
+
+    /* Rotation axis labels */
+    .rotationAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+    .rotationAxis span:nth-child(2) {
+      font-weight: 700;
+    }
+
+    /* L/R Balance axis - same style as rotationAxis */
+    .balanceAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+    .balanceAxis span:nth-child(2) {
+      font-family: ui-monospace, 'SF Mono', monospace;
+      font-weight: 600;
+      opacity: 1;
+      color: var(--cyan);
+    }
+
+    /* M/S Meter */
+    .msCompact {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+      justify-content: center;
+    }
+    .msBar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .msLabel {
+      font-size: 10px;
+      font-weight: 700;
+      width: 14px;
+      color: var(--muted);
+    }
+    .msTrack {
+      flex: 1;
+      height: 12px;
+      background: #0a0c0e;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .msFill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.05s linear;
+    }
+    .msFillM { background: linear-gradient(90deg, #3b82f6, #60a5fa); width: 0%; }
+    .msFillS { background: linear-gradient(90deg, #22d3ee, #67e8f9); width: 0%; }
+    .msValue {
+      font-size: 10px;
+      font-weight: 600;
+      width: 52px;
+      text-align: right;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Histogram widget */
+    .histogramWidget {
+      flex: 1.2;
+    }
+    .histogramAxis {
+      display: flex;
+      justify-content: space-between;
+      font-size: 8px;
+      color: var(--muted);
+      opacity: 0.7;
+      margin-top: 3px;
+      padding: 0 2px;
+    }
+
+    /* Responsive: stack columns vertically on narrow screens */
+    @media (max-width: 700px) {
+      .stereoContainer {
+        flex-direction: column;
+      }
+      .stereoLeftCol {
+        flex-direction: row;
+        gap: 8px;
+      }
+      .stereoRightCol {
+        flex-direction: row;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .phaseWidget {
+        flex: 1 1 45%;
+        min-width: 120px;
+      }
+    }
+
+    /* Goniometer canvas + overlay */
+    .gonioSquare .canvasPad {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    .gonioSquare .overlay {
+      position: absolute;
+      left: 50%;
+      bottom: 8px;
+      transform: translateX(-50%);
+      z-index: 2;
+      pointer-events: none;
+      background: rgba(0,0,0,.4);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    /* ===== LOUDNESS DISPLAY (right column) ===== */
+    /* Vertical layout: radar (with overlay), secondary row, history */
+    .loudnessModule {
+      display: grid;
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto auto;
+      grid-template-areas:
+        "radar"
+        "secondary"
+        "history";
+      gap: 8px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Radar wrapper – square, sized by CSS (no JS sizing needed) */
+    .radarWrap {
+      grid-area: radar;
+      position: relative;
+      justify-self: center;
+      align-self: center;
+      aspect-ratio: 1;
+      max-width: 100%;
+      max-height: 100%;
+      min-width: 100px;
+      min-height: 100px;
+    }
+
+    #loudnessRadar {
+      width: 100%;
+      height: 100%;
+      background: #181c20;
+      border-radius: 50%;
+      border: 2px solid var(--outline);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+      display: block;
+    }
+
+    .radar-lufs-value {
+      display: none; /* Dold - LUFS visas i R128-panelen under radarn */
+    }
+
+    /* Peak LED - DOM-based, positioned inside radarWrap corner */
+    .peak-led {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 4px 3px 6px;
+      border-radius: 8px;
+      background: rgba(20, 24, 28, 0.7);
+      pointer-events: none;
+      z-index: 10;
+    }
+    .peak-led::after {
+      content: '';
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      background: #3a1c1c;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+      transition: all 0.1s;
+      flex-shrink: 0;
+    }
+    .peak-led span {
+      font-size: 9px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.4);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1;
+      transition: color 0.1s;
+    }
+    .peak-led.on::after {
+      background: #ff4e2d;
+      box-shadow: 0 0 8px 3px rgba(255,78,45,0.7), inset 0 1px 2px rgba(255,255,255,0.3);
+    }
+    .peak-led.on span {
+      color: #ff6655;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       RADAR VALUES OVERLAY
+       Floating M/S/I display in radar centre for maximum readability
+       ═══════════════════════════════════════════════════════════════════════ */
+    .radar-values-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.02) 40%, rgba(255, 255, 255, 0) 100%);
+      backdrop-filter: blur(2px);
+      -webkit-backdrop-filter: blur(2px);
+      border-radius: 50%;
+      width: 140px;
+      height: 140px;
+      text-align: center;
+      z-index: 5;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Overlay rows - vertical stack M → S → I */
+    .overlay-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 4px;
+      line-height: 1.1;
+    }
+    .overlay-row small {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--muted);
+      opacity: 0.6;
+    }
+    .overlay-row .lufs-value {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* M: smallest, most muted (top) */
+    .overlay-m .lufs-value {
+      font-size: 24px;
+      font-weight: 500;
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    /* S: medium (middle) */
+    .overlay-s .lufs-value {
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* I: largest, primary (bottom) */
+    .overlay-i .lufs-value {
+      font-size: 52px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .overlay-i .lufs-value.integrated {
+      color: var(--cyan);
+    }
+
+    /* LUFS unit label below I value */
+    .overlay-unit small {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--muted);
+      opacity: 0.5;
+      letter-spacing: 0.5px;
+    }
+
+    /* Secondary values row (LRA, TP, Crest, Elapsed) */
+    .r128-secondary-row {
+      grid-area: secondary;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 4px;
+      background: rgba(15, 19, 23, 0.5);
+      border-radius: 6px;
+    }
+    .r128-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex: 1;
+      min-width: 0;
+    }
+    .r128-item small {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      opacity: 0.7;
+    }
+    .r128-item span {
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    /* Header button group - right-aligned with spacing */
+    .header-btn-group {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+    }
+
+    /* Radar export / control buttons in header */
+    .radar-export-btn {
+      padding: 4px 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .radar-export-btn:hover {
+      background: rgba(64,160,255,0.15);
+      border-color: rgba(64,160,255,0.4);
+      color: #40a0ff;
+    }
+    .radar-export-btn:active {
+      transform: scale(0.95);
+    }
+    .radar-export-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .radar-export-btn:disabled:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.12);
+      color: var(--muted);
+    }
+    /* Pause button paused state */
+    #btnMeasurePause.paused {
+      background: rgba(255, 180, 50, 0.12);
+      color: #ffb432;
+      border-color: rgba(255, 180, 50, 0.35);
+    }
+    #btnMeasurePause.paused:hover {
+      background: rgba(255, 180, 50, 0.18);
+      border-color: rgba(255, 180, 50, 0.45);
+    }
+
+    /* Radar hover tooltip */
+    .radar-tooltip {
+      position: absolute;
+      background: rgba(16, 20, 24, 0.95);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #e0e0e0;
+      pointer-events: none;
+      z-index: 100;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transform: translate(-50%, -100%);
+      margin-top: -8px;
+      font-variant-numeric: tabular-nums;
+      min-width: 90px;
+      text-align: center;
+    }
+    .radar-tooltip .tooltip-lufs {
+      font-weight: 700;
+      font-size: 13px;
+      color: #40a0ff;
+      font-variant-numeric: tabular-nums;
+    }
+    .radar-tooltip .tooltip-time {
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .wrap{
+      box-sizing:border-box;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      gap: 16px;
+      height:calc(100dvh - 56px);
+    }
+
+    /*
+     * Sidebar Collapse System
+     * Both grid-template-columns and margin-left animate the same distance
+     * This keeps sidebar edge and content edge perfectly synchronized
+     */
+    .sidebar-container {
+      position: relative;
+      overflow: visible;
+      z-index: 10;
+    }
+
+    .sidebar-content {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--sidebar-width);
+      margin-left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Content area – fills available space */
+    .visning {
+      height: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    /* Animated transitions – only during sidebar toggle */
+    .sidebar-transitioning .wrap {
+      transition: grid-template-columns 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .sidebar-transitioning .sidebar-content {
+      transition: margin-left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Collapsed state */
+    .wrap.sidebar-collapsed {
+      grid-template-columns: 0px 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    .wrap.sidebar-collapsed .sidebar-content {
+      margin-left: calc(-1 * var(--sidebar-width) - 20px);
+      pointer-events: none;
+    }
+
+    /* Initial collapsed state (no animation on page load) */
+    .sidebar-start-collapsed .wrap {
+      grid-template-columns: 0px 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-start-collapsed .sidebar-content {
+      margin-left: calc(-1 * var(--sidebar-width) - 20px);
+      pointer-events: none;
+    }
+    
+    .collapse-toggle {
+      position: fixed;
+      left: calc(var(--sidebar-width) + 20px - 24px);
+      top: 50%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--panel), rgba(147, 197, 253, 0.1));
+      border: 1px solid var(--outline);
+      border-radius: 24px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      opacity: 0; /* hidden by default */
+      transition: opacity 0.2s ease;
+    }
+
+    /* Collapsed state – repositioned (toggle is inside .wrap) */
+    .wrap.sidebar-collapsed .collapse-toggle,
+    .sidebar-start-collapsed .collapse-toggle {
+      left: 24px;
+    }
+
+    /* Transition – only during sidebar toggle */
+    .sidebar-transitioning .collapse-toggle {
+      transition: left 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  opacity 0.2s ease;
+    }
+    /* Toggle shown/hidden via JavaScript based on mouse movement */
+
+    .collapse-toggle:hover {
+      background: linear-gradient(135deg, rgba(147, 197, 253, 0.2), rgba(34, 211, 238, 0.1));
+      box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 16px rgba(147, 197, 253, 0.3);
+      transform: translateY(-50%) scale(1.05);
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+
+    .collapse-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--ink);
+    }
+
+    .sidebar-transitioning .collapse-toggle svg {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .wrap.sidebar-collapsed .collapse-toggle svg,
+    .sidebar-start-collapsed .collapse-toggle svg {
+      transform: rotate(180deg);
+    }
+
+    .collapse-toggle:hover svg {
+      fill: rgba(147, 197, 253, 0.9);
+    }
+    .card{background:var(--panel);border:1px solid var(--outline);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:14px;min-height:0}
+    /* Sidebar cards: no internal scroll, sidebar scrolls instead */
+    .sidebar-content .card{overflow:visible;flex-shrink:0}
+    .card h2{margin:0 0 10px;font-size:13px;color:var(--muted);letter-spacing:.35px;font-weight:700;text-transform:uppercase}
+
+    /* Collapsible Panel System */
+    .card.collapsible {
+      transition: padding 0.2s ease;
+    }
+    .card.collapsible.collapsed {
+      padding-bottom: 14px;
+    }
+    .card.collapsible h2 {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      transition: margin 0.2s ease;
+    }
+    .card.collapsible.collapsed h2 {
+      margin-bottom: 0;
+    }
+    .card.collapsible h2::before {
+      content: '';
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-left: 5px solid var(--muted);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+    .card.collapsible:not(.collapsed) h2::before {
+      transform: rotate(90deg);
+    }
+    .card.collapsible h2:hover {
+      color: var(--ink);
+    }
+    .card.collapsible h2:hover::before {
+      border-left-color: var(--ink);
+    }
+    /* Smooth collapse animation using CSS Grid */
+    .card.collapsible .card-body-wrapper {
+      display: grid;
+      grid-template-rows: 1fr;
+      transition: grid-template-rows 0.25s ease-out;
+    }
+    .card.collapsible.collapsed .card-body-wrapper {
+      grid-template-rows: 0fr;
+    }
+    .card.collapsible .card-body {
+      overflow: hidden;
+      min-height: 0;
+    }
+    /* Collapsed summary text */
+    .card.collapsible .collapse-summary {
+      font-size: 11px;
+      color: var(--cyan);
+      margin-left: auto;
+      font-weight: 500;
+      font-family: monospace;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
+    }
+    .card.collapsible.collapsed .collapse-summary {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.15s ease 0.25s, visibility 0.15s ease 0.25s;
+    }
+
+    .visning{
+      grid-column:2;
+      grid-row:1;
+      display:grid;
+      grid-template-rows:1fr;
+      gap:12px;
+      min-height:0;
+      /* Container query context for meters layout */
+      container-type: inline-size;
+      container-name: visning-area;
+    }
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    button{background:var(--btn);border:0;color:white;padding:9px 12px;border-radius:11px;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .btn-ghost{background:var(--btn-ghost);color:var(--ink);border:1px solid #2a3a5f}
+    .btn-active{background:var(--btn-dark)}
+    .btn-muted{background:var(--hot);color:white}
+
+    /* Source selector buttons with icons */
+    .source-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px;
+      line-height: 1.2;
+      font-size: 10px;
+    }
+    .source-icon {
+      width: 20px;
+      height: 20px;
+      opacity: 0.7;
+    }
+    .source-btn.btn-active .source-icon {
+      opacity: 1;
+    }
+    .source-btn.source-measuring,
+    #btnStartCapture.capture-active {
+      border-color: rgba(255, 82, 82, 0.6) !important;
+    }
+
+    /* Capture transport buttons */
+    .capture-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 44px;
+      padding: 6px 12px;
+    }
+    .capture-icon {
+      width: 14px;
+      height: 14px;
+      opacity: 0.8;
+    }
+    #btnStartCapture .capture-icon {
+      color: var(--hot);
+    }
+
+    label{font-size:12px;color:var(--muted)}
+    code.small{font-size:12px;color:var(--muted)}
+
+    /* Inline editable value fields */
+    .inline-edit {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--ink);
+      font-size: 12px;
+      font-family: monospace;
+      padding: 2px 4px;
+      width: 44px;
+      text-align: center;
+      flex-shrink: 0;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .inline-edit:hover {
+      border-color: var(--outline);
+      background: rgba(255,255,255,0.05);
+    }
+    .inline-edit:focus {
+      border-color: var(--cyan);
+      background: rgba(0,0,0,0.3);
+      outline: none;
+    }
+    /* Fixed-width control buttons for consistent alignment */
+    .btn-ctrl {
+      width: 56px;
+      flex-shrink: 0;
+      padding: 6px 0;
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Sidebar buttons - match bargraph-tab Nordic-minimal style
+       ═══════════════════════════════════════════════════════════════════════ */
+    .sidebar-content button,
+    .sidebar-content .btn-ghost,
+    .sidebar-content .btn-ctrl {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border: 1px solid var(--outline);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .sidebar-content button:hover,
+    .sidebar-content .btn-ghost:hover,
+    .sidebar-content .btn-ctrl:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: #9fb3c7;
+      border-color: rgba(147, 197, 253, 0.3);
+    }
+    .sidebar-content button:active,
+    .sidebar-content .btn-ghost:active,
+    .sidebar-content .btn-ctrl:active {
+      transform: scale(0.98);
+    }
+    .sidebar-content .btn-active {
+      background: #1e2832;
+      color: #e8f0f8;
+      box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.15),
+                  0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    .sidebar-content .btn-muted {
+      background: rgba(255, 90, 99, 0.15);
+      color: var(--hot);
+      border-color: rgba(255, 90, 99, 0.3);
+    }
+
+    /* Key-active state for keyboard feedback */
+    #btnMeasurePause.key-active,
+    #r128Reset.key-active {
+      background: rgba(255, 255, 255, 0.06);
+      transform: scale(0.95);
+      border-color: rgba(147, 197, 253, 0.4);
+    }
+
+    /* Frozen value indicator when paused */
+    .lufs-value.paused,
+    .r128-value.paused {
+      opacity: 0.55;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Gray minimalist range sliders
+       ═══════════════════════════════════════════════════════════════════════ */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #4a5568;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #6b7d8f;
+      transform: scale(1.1);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: #4a5568;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+    input[type="range"]::-moz-range-thumb:hover {
+      background: #6b7d8f;
+      transform: scale(1.1);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Discrete checkbox styling
+       ═══════════════════════════════════════════════════════════════════════ */
+    input[type="checkbox"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 3px;
+      cursor: pointer;
+      vertical-align: middle;
+      margin-right: 6px;
+      position: relative;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    input[type="checkbox"]:hover {
+      border-color: rgba(147, 197, 253, 0.4);
+    }
+    input[type="checkbox"]:checked {
+      background: #1e2832;
+      border-color: rgba(147, 197, 253, 0.5);
+    }
+    input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 10px;
+      color: var(--cyan);
+      font-weight: 700;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       Discrete dropdown/select styling
+       ═══════════════════════════════════════════════════════════════════════ */
+    select {
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      border-radius: 6px;
+      color: var(--ink);
+      padding: 6px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    select:hover {
+      border-color: rgba(147, 197, 253, 0.3);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    select:focus {
+      outline: none;
+      border-color: rgba(147, 197, 253, 0.4);
+      box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.1);
+    }
+    select option {
+      background: #1b1f23;
+      color: var(--ink);
+    }
+
+    /* Source panels container - collapse-swap-expand animation */
+    .source-panels-container {
+      display: grid;
+      grid-template-rows: 1fr;
+      overflow: hidden;
+      transition: grid-template-rows 0.2s ease-out;
+    }
+    .source-panels-container.collapsed {
+      grid-template-rows: 0fr;
+    }
+    .source-panels-container-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* Individual source panels - simple show/hide */
+    .source-panel {
+      display: none;
+    }
+    .source-panel.source-panel-active {
+      display: block;
+    }
+    .source-panel-content {
+      /* Just a wrapper for content */
+    }
+
+    /* Visning */
+    .meters{
+      display:grid;
+      grid-template-columns: minmax(350px, 65fr) minmax(280px, 35fr);
+      grid-template-rows:1fr;
+      height:100%;
+      gap:12px;
+      min-height:0;
+      overflow:hidden;
+      /* Container query context for child layout decisions */
+      container-type: inline-size;
+      container-name: meters-area;
+    }
+    .stack-left{
+      display: grid;
+      grid-template-rows: minmax(200px, 2fr) minmax(100px, 1fr);  /* Vectorscope 2/3, active meter 1/3 */
+      gap: 12px;
+      min-height: 0;
+      align-items: stretch;
+      height: 100%;
+      /* Container query context for goniometer/meter sizing */
+      container-type: size;
+      container-name: left-stack;
+    }
+
+    /* Bargraph meter module (TP/RMS/Nordic/BBC) */
+    .meter[data-meter-type="bargraph"] {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* Bargraph content area: panels left, tabs right */
+    .bargraph-content {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+    }
+    /* ═══════════════════════════════════════════════════════════════════════
+       Bargraph segmented control (TP/RMS/SP/Nordic/BBC) - horizontal in header
+       ═══════════════════════════════════════════════════════════════════════ */
+    .bargraph-tabs {
+      display: flex;
+      flex-direction: row;
+      gap: 0;
+      margin-left: auto;
+      background: #0d1114;
+      border-radius: 4px;
+      border: 1px solid var(--outline);
+      overflow: hidden;
+    }
+    .bargraph-tab {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: #6b7d8f;
+      border: none;
+      border-radius: 0;
+      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: inherit;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      transition: color 0.15s ease, background 0.15s ease;
+    }
+    /* Dividers between tabs (vertical for horizontal layout) */
+    .bargraph-tab + .bargraph-tab::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 0;
+      width: 1px;
+      height: calc(100% - 4px);
+      background: #2a3642;
+    }
+    /* Hover state - subtle brightening */
+    .bargraph-tab:hover:not(.active) {
+      color: #9fb3c7;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    /* Focus state - only show on keyboard navigation, not mouse */
+    .bargraph-tab:focus {
+      outline: none;
+    }
+    .bargraph-tab:focus-visible {
+      outline: 2px solid rgba(147, 197, 253, 0.6);
+      outline-offset: -2px;
+      z-index: 1;
+    }
+    /* Pressed state - trigger-agnostic glow animation */
+    .bargraph-tab.pressed {
+      animation: bargraph-press 150ms ease-out;
+    }
+    @keyframes bargraph-press {
+      0% {
+        transform: scale(0.96);
+        box-shadow: inset 0 0 0 2px rgba(147, 197, 253, 0.5);
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0);
+      }
+    }
+    /* Selected state - highlighted but minimal */
+    .bargraph-tab.active {
+      background: #1e2832;
+      color: #e8f0f8;
+      box-shadow: inset 0 0 0 1px rgba(147, 197, 253, 0.15),
+                  0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+    /* Remove dividers adjacent to active tab */
+    .bargraph-tab.active::before,
+    .bargraph-tab.active + .bargraph-tab::before {
+      display: none;
+    }
+    .bargraph-panels {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      position: relative;
+      overflow: visible;
+      perspective: 600px;
+      perspective-origin: center center;
+      /* Container query context for responsive meter sizing */
+      container-type: size;
+      container-name: bargraph-area;
+    }
+    /* Cylinder container - rotates as a unit */
+    .bargraph-cylinder {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      /* Rotation driven by --cylinder-angle CSS variable */
+      /* Animation handled by JS physics - no CSS transition */
+      transform: rotateX(calc(var(--cylinder-angle, 0) * 1deg));
+      will-change: transform;
+    }
+    .bargraph-panel {
+      position: absolute;
+      inset: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      backface-visibility: hidden;
+      /* Each panel positioned on cylinder surface at 90° intervals (4 panels) */
+      transform-origin: center center;
+      pointer-events: none;
+      opacity: 0;
+    }
+    /* Panel 0 (TP): front face */
+    .bargraph-panel[data-meter="tp"] {
+      transform: rotateX(0deg);
+    }
+    /* Panel 1 (RMS): 72° down */
+    .bargraph-panel[data-meter="rms"] {
+      transform: rotateX(-72deg);
+    }
+    /* Panel 2 (SP): 144° down */
+    .bargraph-panel[data-meter="sp"] {
+      transform: rotateX(-144deg);
+    }
+    /* Panel 3 (Nordic): 216° down */
+    .bargraph-panel[data-meter="nordic"] {
+      transform: rotateX(-216deg);
+    }
+    /* Panel 4 (BBC): 288° down */
+    .bargraph-panel[data-meter="bbc"] {
+      transform: rotateX(-288deg);
+    }
+    /* Active panel (facing viewer) gets pointer events and opacity */
+    .bargraph-panel.facing {
+      pointer-events: auto;
+      opacity: 1;
+    }
+    .bargraph-carousel-ready .bargraph-panel {
+      transition: opacity 200ms ease-out;
+    }
+    .bargraph-panel .hMeter {
+      flex: 1;
+      min-height: 0;
+      margin-bottom: 0;
+    }
+    .stack-right{display:grid;grid-template-rows:1fr;gap:12px;min-height:0;container-type:inline-size;container-name:loudness-col}
+    .meter{
+      background: #111416;
+      border: 1px solid var(--outline);
+      border-radius: 12px;
+      padding: var(--meter-gap) 2vw;
+      position: relative;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      flex: 1 1 0;
+      height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .meter header{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: var(--meter-gap);
+      background: transparent;
+      border-bottom: none;
+    }
+    .meter header label{
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .meter header .badge{
+      font-size: 10px;
+      text-transform: none;
+      letter-spacing: 0.3px;
+      color: rgba(169, 178, 199, 0.5);
+    }
+    .badge{font-size:11px;padding:3px 8px;border-radius:999px;border:none;background:transparent;color:var(--muted)}
+    .tiny{opacity:.85;font-size:12px}
+
+    canvas{display:block;width:100%;height:100%;background:#0d0f11;border-radius:10px;border:1px solid var(--outline)}
+
+    /* Canvas for goniometer and correlation */
+    #xy, #corr, #monoDev {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+/*
+ * Tabular Numbers – Future-proof implementation
+ *
+ * font-variant-numeric: tabular-nums ensures ALL digits render at equal width
+ * regardless of typeface (provided the font supports OpenType tnum feature).
+ *
+ * This is the modern standard (CSS Fonts Module Level 4) and allows
+ * free typeface substitution without numeric "jitter".
+ *
+ * Fallback: font-feature-settings for older browsers.
+ * Monospace fallback only if font lacks tnum support.
+ */
+.tabular-nums,
+.mono-num,
+.big,
+.hLabel b,
+.overlay b,
+#r128Time,
+#corrVal,
+#monoDevVal,
+#lufsM,
+#lufsS,
+#lufsI,
+#lra,
+#r128TpMax {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1; /* fallback for older browsers */
+}
+
+/*
+ * For elements requiring absolute fixed-width (e.g. timers, counters)
+ * add monospace as an additional safeguard:
+ */
+.mono-num-strict {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-family: ui-monospace, 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Mono Deviation meter – fills container width */
+.monoDevWrap {
+  width: 100%;
+  padding: 4px 0;
+}
+.monoDevWrap .canvasPad {
+  height: 32px;
+  width: 100%;
+}
+.monoDevWrap canvas {
+  border-radius: 6px !important;
+}
+
+/* Canvas-pad gemensamma regler */
+.canvasPad {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.canvasPad > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--outline);
+  background: #0d0f11;
+  box-sizing: border-box;
+}
+
+    /* Horisontella stapel-metrar – inset via --bar-inset for edge labels */
+    .hMeter{position:relative;height:100%;min-height:clamp(60px, 15cqh, 160px);margin-bottom: var(--meter-gap)}
+    .hMeter canvas{position:absolute;top:0;bottom:0;left:var(--bar-inset);width:calc(100% - 2 * var(--bar-inset));height:100%}
+    .hScale{position:absolute;top:0;bottom:0;left:var(--bar-inset);width:calc(100% - 2 * var(--bar-inset));pointer-events:none;overflow:visible}
+    .hLabel{position:absolute;bottom:16%;left:calc(var(--bar-inset) + 7cqh);font-size:11px;color:#cfe1ff;background:transparent;padding:0;border:none;z-index:10}
+    /* Bargraph override: fill panel completely */
+    .bargraph-panel .hMeter canvas,
+    .bargraph-panel .hScale {
+      left: 0;
+      width: 100%;
+    }
+    .bargraph-panel .hLabel {
+      left: 3%;
+      bottom: 3%;
+    }
+    /* Fixed-width value display for stable positioning */
+    .hLabel b {
+      display: inline-block;
+      min-width: 3.8em;
+      text-align: left;
+    }
+
+    .overlay{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.25);padding:2px 6px;border-radius:8px;font-size:12px;color:#cfe1ff;border:1px solid #2a2f36;text-align:left}
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       LOUDNESS HISTORY STRIP
+       Rolling time-domain visualisation of M/S/I values
+       ═══════════════════════════════════════════════════════════════════════ */
+    .loudness-history-container {
+      grid-area: history;
+      padding-top: 8px;
+    }
+
+    .loudness-history-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+
+    .loudness-history-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-right: auto;
+    }
+
+    /* Trace toggle buttons (S/M/I/T) - square, right-aligned */
+    .trace-toggle {
+      font-size: 8px;
+      font-weight: 700;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: rgba(255,255,255,0.25);
+      opacity: 0.5;
+    }
+    .trace-toggle:hover {
+      filter: brightness(1.3);
+    }
+    /* Active state = trace visible = normal colored text */
+    .trace-toggle.active {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      opacity: 1;
+    }
+    /* S - Short-term (green) */
+    .trace-toggle[data-trace="s"].active {
+      color: #88d65c;
+    }
+    /* M - Momentary (orange) */
+    .trace-toggle[data-trace="m"].active {
+      color: #ff9a2d;
+    }
+    /* I - Integrated (yellow/gold) */
+    .trace-toggle[data-trace="i"].active {
+      color: #fbbf24;
+    }
+    /* T - True Peak (cyan) */
+    .trace-toggle[data-trace="tp"].active {
+      color: #4dd4e0;
+    }
+
+    .loudness-history-canvas {
+      display: block;
+      width: 100%;
+      height: clamp(100px, 15cqh, 160px);  /* Dynamic: ~2x original, responsive to container */
+      border-radius: 6px;
+      background: rgba(10, 12, 14, 0.8);
+    }
+
+    .kv{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+    .kv div{background:#0f1214;border:1px solid var(--outline);border-radius:9px;padding:6px 8px}
+    .kv small{display:block;font-size:11px;color:#a9b2c7}
+    .kv .wide{grid-column:span 2}
+
+    /* Calibration status box in Status & Live Data - same style as Monitor */
+    .cal-status-box #calStatusContent {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .cal-status-box .cal-status-profile,
+    .cal-status-box .cal-status-standard {
+      display: block;
+    }
+
+    /* Keyboard shortcuts section */
+    .shortcuts-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center}
+    .shortcut-row{display:contents}
+    .shortcut-row kbd{background:#1a1d21;border:1px solid var(--outline);border-radius:4px;padding:2px 8px;font-family:inherit;font-size:11px;color:#fff;min-width:32px;text-align:center}
+    .shortcut-row span{font-size:12px;color:#a9b2c7}
+    .shortcuts-hint{margin-top:10px;font-size:10px;color:#6b7280;font-style:italic}
+
+    /* Settings rows */
+    .setting-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--outline)}
+    .setting-row:last-child{border-bottom:none}
+    .setting-row label{font-size:12px;color:var(--muted);flex-shrink:0}
+    .setting-row select{min-width:140px}
+    /* Uniform dropdown width in Metering Settings */
+    #panelMeteringSettings .setting-row select{width:170px}
+
+    input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
+    .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
+    .brand{flex:1 1 60%;min-width:clamp(280px, 40vw, 480px)}
+    .brand svg{display:block;height:64px;width:100%}
+    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
+    .brand svg{display:block;height:60px;width:auto}
+    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
+
+    /* Divider/linje under rubrik */
+    .meter .divider {
+      border: none;
+      border-top: 1px solid var(--outline);
+      margin: 0 0 var(--meter-gap) 0;
+      width: 100%;
+      background: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       CALIBRATION UI
+       Reference-level calibration wizard and status badge styles
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    /* Calibration Badge Container (sidebar placement) */
+    .calibration-badge-container {
+      margin-bottom: 10px;
+    }
+
+    /* Calibration Badge - matches btn-ghost styling */
+    .cal-badge-wrap {
+      display: flex;
+      width: 100%;
+    }
+
+    .cal-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      width: 100%;
+      min-height: 44px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--outline);
+      transition: all 0.15s ease;
+      background: var(--btn-ghost);
+      color: var(--muted);
+    }
+
+    .cal-badge-profile {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cal-badge-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .cal-badge-status {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      opacity: 0.7;
+      min-height: 14px;
+    }
+
+    .cal-badge:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: #9fb3c7;
+      border-color: rgba(147, 197, 253, 0.3);
+    }
+
+    .cal-badge:active {
+      transform: scale(0.98);
+    }
+
+    .cal-badge.cal-calibrated {
+      background: rgba(88, 211, 140, 0.12);
+      color: var(--ok);
+      border-color: rgba(88, 211, 140, 0.25);
+    }
+
+    .cal-badge.cal-calibrated.cal-warning {
+      background: rgba(255, 222, 88, 0.12);
+      color: var(--warn);
+      border-color: rgba(255, 222, 88, 0.25);
+    }
+
+    .cal-badge.cal-uncalibrated,
+    .cal-badge.cal-stale {
+      background: rgba(255, 222, 88, 0.12);
+      color: var(--warn);
+      border-color: rgba(255, 222, 88, 0.25);
+    }
+
+    .cal-badge.cal-na {
+      background: var(--btn-ghost);
+      color: var(--muted);
+      border-color: var(--outline);
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .cal-badge-icon {
+      font-size: 12px;
+    }
+
+    .cal-badge-detail {
+      opacity: 0.7;
+      font-weight: 400;
+    }
+
+    /* Verification Badge - mirrors Calibration Badge styling */
+    .verify-badge-wrap {
+      display: flex;
+      width: 100%;
+    }
+
+    .verify-badge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      width: 100%;
+      min-height: 44px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--outline);
+      transition: all 0.15s ease;
+      background: var(--btn-ghost);
+      color: var(--muted);
+    }
+
+    .verify-badge-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .verify-badge-status {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      opacity: 0.7;
+      min-height: 14px;
+    }
+
+    .verify-badge:hover {
+      background: rgba(255, 255, 255, 0.03);
+      color: #9fb3c7;
+      border-color: rgba(147, 197, 253, 0.3);
+    }
+
+    .verify-badge:active {
+      transform: scale(0.98);
+    }
+
+    .verify-badge.verify-verified {
+      background: rgba(88, 211, 140, 0.12);
+      color: var(--ok);
+      border-color: rgba(88, 211, 140, 0.25);
+    }
+
+    .verify-badge.verify-not-verified,
+    .verify-badge.verify-stale,
+    .verify-badge.verify-partial {
+      background: rgba(255, 222, 88, 0.12);
+      color: var(--warn);
+      border-color: rgba(255, 222, 88, 0.25);
+    }
+
+    .verify-badge-icon {
+      font-size: 12px;
+    }
+
+    .verify-badge-detail {
+      opacity: 0.7;
+      font-weight: 400;
+    }
+
+    /* Calibration Modal Overlay */
+    .cal-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      backdrop-filter: blur(4px);
+    }
+
+    .cal-modal {
+      background: var(--panel);
+      border: 1px solid var(--outline);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 580px;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    }
+
+    .cal-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--outline);
+      background: rgba(15, 18, 20, 0.5);
+    }
+
+    .cal-modal-header h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    .cal-modal-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: transparent;
+      border: 1px solid var(--outline);
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cal-modal-close:hover {
+      background: rgba(255, 90, 99, 0.15);
+      border-color: var(--hot);
+      color: var(--hot);
+    }
+
+    .cal-modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* Mode Selection */
+    .cal-device-info {
+      margin-bottom: 20px;
+    }
+
+    .cal-device-label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .cal-device-name {
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .cal-existing-profile {
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: rgba(105, 191, 255, 0.08);
+      border: 1px solid rgba(105, 191, 255, 0.2);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .cal-existing-label {
+      color: var(--muted);
+    }
+
+    .cal-existing-name {
+      color: var(--cyan);
+      font-weight: 600;
+      margin-left: 6px;
+    }
+
+    .cal-existing-meta {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .cal-mode-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .cal-mode-card {
+      background: rgba(15, 18, 20, 0.6);
+      border: 2px solid var(--outline);
+      border-radius: 12px;
+      padding: 18px 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .cal-mode-card:hover {
+      border-color: var(--cyan);
+      background: rgba(105, 191, 255, 0.05);
+    }
+
+    .cal-mode-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .cal-mode-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .cal-mode-desc {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .cal-mode-badge {
+      margin-top: 12px;
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .cal-mode-recommended {
+      background: rgba(88, 211, 140, 0.18);
+      color: var(--ok);
+    }
+
+    .cal-existing-actions {
+      text-align: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--outline);
+    }
+
+    .cal-btn-delete {
+      color: var(--hot) !important;
+      font-size: 11px;
+    }
+
+    .cal-profile-io {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--outline);
+    }
+
+    .cal-profile-io-title {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .cal-profile-io-buttons {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .cal-profile-io-buttons button {
+      font-size: 12px;
+      padding: 6px 12px;
+    }
+
+    .cal-profile-io-buttons button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Profile List */
+    .cal-profile-list {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .cal-profile-list-header {
+      font-size: 12px;
+      color: var(--muted);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--outline);
+      margin-bottom: 10px;
+    }
+
+    .cal-profile-list-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .cal-profile-list-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+
+    .cal-profile-row {
+      display: flex;
+      align-items: stretch;
+      gap: 12px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--outline);
+      border-radius: 8px;
+      transition: border-color 0.15s;
+    }
+
+    .cal-profile-row:hover {
+      border-color: var(--accent);
+    }
+
+    /* Green themed row when profile is active */
+    .cal-profile-row.cal-profile-active {
+      border-color: rgba(88, 211, 140, 0.4);
+      background: rgba(88, 211, 140, 0.08);
+    }
+
+    .cal-profile-row.cal-profile-current-device {
+      border-left: 3px solid var(--ok);
+    }
+
+    /* LEFT COLUMN - status badges */
+    .cal-profile-status {
+      width: 54px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .cal-status-badge {
+      display: inline-block;
+      padding: 4px 6px;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      line-height: 1.2;
+      text-align: center;
+      border-radius: 4px;
+    }
+
+    .cal-active-source-badge {
+      background: var(--hot);
+      color: #fff;
+    }
+
+    .cal-active-profile-badge {
+      background: rgba(88, 211, 140, 0.2);
+      color: var(--ok);
+      border: 1px solid rgba(88, 211, 140, 0.4);
+    }
+
+    /* CENTER COLUMN - profile info */
+    .cal-profile-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cal-profile-row-top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .cal-profile-name {
+      font-weight: 500;
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cal-profile-trim {
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .cal-profile-row-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .cal-profile-meta {
+      display: flex;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .cal-profile-meta span {
+      padding: 1px 5px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
+    }
+
+    .cal-profile-source {
+      color: var(--accent) !important;
+    }
+
+    .cal-profile-date {
+      font-size: 10px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    /* RIGHT COLUMN - action buttons */
+    .cal-profile-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Profile row action buttons - all same base size */
+    .cal-row-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 52px;
+      height: 20px;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 0 8px;
+      text-align: center;
+      border-radius: 4px;
+      border: 1px solid var(--outline);
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .cal-row-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--ink);
+      border-color: var(--muted);
+    }
+
+    /* DELETE button - hover red */
+    .cal-btn-delete-row:hover {
+      color: var(--hot);
+      border-color: rgba(255, 90, 99, 0.4);
+      background: rgba(255, 90, 99, 0.1);
+    }
+
+    /* Actions footer with split layout */
+    .cal-actions-split {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Disable all input profiles button */
+    .cal-btn-disable-all {
+      color: var(--muted);
+      border-color: var(--outline);
+    }
+
+    .cal-btn-disable-all:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--ink);
+    }
+
+    /* Setup Steps */
+    .cal-step {
+      margin-bottom: 12px;
+      border: 1px solid var(--outline);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .cal-step-active {
+      border-color: var(--cyan);
+    }
+
+    .cal-step-complete {
+      border-color: var(--ok);
+    }
+
+    .cal-step-pending {
+      opacity: 0.5;
+    }
+
+    .cal-step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(15, 18, 20, 0.4);
+    }
+
+    .cal-step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--outline);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .cal-step-active .cal-step-num {
+      background: var(--cyan);
+      color: var(--bg);
+    }
+
+    .cal-step-complete .cal-step-num {
+      background: var(--ok);
+      color: var(--bg);
+    }
+
+    .cal-step-title {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .cal-step-body {
+      padding: 14px;
+    }
+
+    /* Form Fields */
+    .cal-field {
+      margin-bottom: 14px;
+    }
+
+    .cal-field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .cal-select,
+    .cal-input {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #0f1214;
+      border: 1px solid var(--outline);
+      color: var(--ink);
+      font-size: 13px;
+    }
+
+    .cal-select:focus,
+    .cal-input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .cal-radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .cal-radio {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .cal-radio input {
+      accent-color: var(--cyan);
+    }
+
+    .cal-info-box {
+      background: rgba(105, 191, 255, 0.06);
+      border: 1px solid rgba(105, 191, 255, 0.15);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .cal-info-box p {
+      margin: 0 0 8px 0;
+    }
+
+    .cal-info-box ol {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .cal-info-box li {
+      margin-bottom: 4px;
+    }
+
+    .cal-info-note {
+      background: rgba(88, 211, 140, 0.08);
+      border-color: rgba(88, 211, 140, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .cal-info-note p {
+      margin: 0;
+    }
+
+    /* Measurement Display */
+    .cal-measure-display {
+      margin-bottom: 16px;
+    }
+
+    .cal-measure-primary {
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .cal-measure-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .cal-measure-value {
+      font-size: 42px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .cal-measure-unit {
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    .cal-measure-secondary {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .cal-measure-item {
+      text-align: center;
+    }
+
+    .cal-measure-value-sm {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Progress */
+    .cal-progress {
+      margin-bottom: 12px;
+    }
+
+    .cal-progress-bar {
+      height: 6px;
+      background: var(--outline);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .cal-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--ok));
+      transition: width 0.1s;
+    }
+
+    .cal-progress-text {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Confidence */
+    .cal-confidence {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11px;
+    }
+
+    .cal-confidence-label {
+      color: var(--muted);
+    }
+
+    .cal-confidence-bar {
+      flex: 1;
+      height: 5px;
+      background: var(--outline);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .cal-confidence-fill {
+      height: 100%;
+      background: var(--ok);
+      transition: width 0.2s;
+    }
+
+    .cal-confidence-value {
+      font-weight: 600;
+      min-width: 32px;
+    }
+
+    /* Manual Calibration */
+    .cal-manual-meters {
+      margin-bottom: 16px;
+    }
+
+    .cal-meter-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--outline);
+    }
+
+    .cal-meter-row:last-child {
+      border-bottom: none;
+    }
+
+    .cal-meter-highlight {
+      background: rgba(105, 191, 255, 0.05);
+      margin: 0 -14px;
+      padding: 10px 14px;
+    }
+
+    .cal-meter-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .cal-meter-value {
+      font-size: 14px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cal-meter-dim {
+      opacity: 0.6;
+    }
+
+    .cal-meter-large {
+      font-size: 22px;
+    }
+
+    /* Offset Display */
+    .cal-offset-display {
+      text-align: center;
+      padding: 18px;
+      background: rgba(15, 18, 20, 0.6);
+      border-radius: 10px;
+      margin-bottom: 14px;
+      border: 1px solid var(--outline);
+    }
+
+    .cal-offset-display.cal-offset-on-target {
+      background: rgba(88, 211, 140, 0.08);
+      border-color: rgba(88, 211, 140, 0.3);
+    }
+
+    .cal-offset-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .cal-offset-value {
+      font-size: 42px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .cal-offset-indicator {
+      margin-top: 12px;
+    }
+
+    .cal-offset-scale {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .cal-offset-track {
+      position: relative;
+      height: 10px;
+      background: linear-gradient(90deg, var(--warn), var(--ok) 50%, var(--hot));
+      border-radius: 5px;
+    }
+
+    .cal-offset-marker {
+      position: absolute;
+      top: -3px;
+      width: 4px;
+      height: 16px;
+      background: white;
+      border-radius: 2px;
+      transform: translateX(-50%);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    }
+
+    .cal-offset-target {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: white;
+      opacity: 0.4;
+    }
+
+    .cal-offset-ok {
+      margin-top: 10px;
+      color: var(--ok);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .cal-offset-hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    /* Colour Classes */
+    .cal-on-target { color: var(--ok); }
+    .cal-close { color: var(--cyan); }
+    .cal-over { color: var(--hot); }
+    .cal-under { color: var(--warn); }
+    .cal-ok { color: var(--ok); }
+    .cal-warn { color: var(--warn); }
+
+    /* Results */
+    .cal-result {
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .cal-result-passed {
+      background: rgba(88, 211, 140, 0.1);
+      border: 1px solid rgba(88, 211, 140, 0.3);
+    }
+
+    .cal-result-warning {
+      background: rgba(255, 222, 88, 0.1);
+      border: 1px solid rgba(255, 222, 88, 0.3);
+    }
+
+    .cal-result-status {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .cal-result-icon {
+      font-size: 18px;
+    }
+
+    .cal-result-text {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .cal-result-passed .cal-result-status { color: var(--ok); }
+    .cal-result-warning .cal-result-status { color: var(--warn); }
+
+    .cal-result-details {
+      font-size: 12px;
+    }
+
+    .cal-result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .cal-result-row:last-child {
+      border-bottom: none;
+    }
+
+    .cal-result-highlight {
+      background: rgba(255, 255, 255, 0.04);
+      margin: 0 -16px;
+      padding: 8px 16px;
+    }
+
+    /* Actions */
+    .cal-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--outline);
+    }
+
+    .cal-measure-actions,
+    .cal-manual-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .cal-hint {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* Animated dots for "Calibrating..." */
+    .cal-dots {
+      display: inline-block;
+      min-width: 100px;
+      text-align: left;
+    }
+
+    .cal-dots::after {
+      content: '';
+      animation: calDots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes calDots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+      100% { content: ''; }
+    }
+
+    /* Review screen */
+    .cal-review {
+      padding: 0;
+    }
+
+    .cal-review .cal-result {
+      margin-bottom: 16px;
+    }
+
+    .cal-review .cal-field {
+      margin-bottom: 16px;
+    }
+
+    /* Completion */
+    .cal-complete {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .cal-complete-icon {
+      font-size: 56px;
+      color: var(--ok);
+      margin-bottom: 12px;
+    }
+
+    .cal-complete-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .cal-complete-profile {
+      color: var(--cyan);
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    .cal-complete-saved {
+      background: rgba(88, 211, 140, 0.12);
+      border: 1px solid rgba(88, 211, 140, 0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--ok);
+      margin-bottom: 16px;
+    }
+
+    .cal-complete-details {
+      text-align: left;
+      background: rgba(15, 18, 20, 0.5);
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 12px;
+      margin-bottom: 16px;
+    }
+
+    .cal-complete-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+    }
+
+    /* Error */
+    .cal-error {
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .cal-error-icon {
+      font-size: 48px;
+      color: var(--hot);
+      margin-bottom: 12px;
+    }
+
+    .cal-error-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .cal-error-message {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+
+    .cal-manual-confidence {
+      margin: 14px 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════
+       RESPONSIVE BREAKPOINTS
+       Must be AFTER all main layout rules to ensure correct cascade
+       ═══════════════════════════════════════════════════════════════════════ */
+
+    /* Auto-collapse sidebar at medium widths */
+    @media (max-width: 900px) {
+      .sidebar-container {
+        transform: translateX(calc(-100% - 20px));
+        pointer-events: none;
+      }
+      .visning {
+        margin-left: 0 !important;
+      }
+      .collapse-toggle {
+        left: 24px !important;
+      }
+    }
+
+    /* Compact mode for narrow screens */
+    @media (max-width: 700px) {
+      .wrap {
+        padding: 12px !important;
+      }
+      .sidebar-container {
+        top: 12px;
+        left: 12px;
+        bottom: 12px;
+      }
+      .meters {
+        gap: 8px;
+      }
+      .stack-left {
+        gap: 8px;
+      }
+    }
+
+    /* Container query: stack meters vertically when container is narrow */
+    @container visning-area (max-width: 550px) {
+      .meters {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 1fr 1fr;
+      }
+      .stack-left {
+        grid-template-rows: 1fr 1fr;
+      }
+    }
+  </style>
+  <!-- Sidebar state BEFORE render - prevents "flash" -->
+  <script>
+    (function() {
+      if (localStorage.getItem('tsg-sidebar-collapsed') === 'true') {
+        document.documentElement.classList.add('sidebar-start-collapsed');
+      }
+    })();
+  </script>
+</head>
+<body>
+<!-- Boot splash -->
+<div id="splash">
+  <div class="splash-logo"><span class="vero">VERO</span><span class="baambi">BAAMBI</span></div>
+  <div class="splash-spinner"></div>
+</div>
+
+<header>
+  <div class="hdr">
+    <div class="brand">
+      <!-- Vector logo: VEROBAAMBI without space, BAAMBI tighter -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 4000 200"
+     width="100%"
+     preserveAspectRatio="xMidYMid meet"
+     role="img"
+     aria-label="TSG Suite | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
+  <defs>
+    <linearGradient id="lock-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+
+  <text x="2%" y="50%" dominant-baseline="middle"
+        font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
+        font-size="100">
+
+    <!-- TSG Suite in matching cyan -->
+    <tspan fill="#93C5FD" font-weight="800" letter-spacing="0.75">TSG Suite</tspan>
+
+    <!-- separator -->
+    <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
+
+    <!-- VERO = extra bold -->
+    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="1.2em">VERO</tspan>
+    <!-- BAAMBI = very thin and tight -->
+    <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
+
+    <!-- separator -->
+    <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
+
+    <!-- Tagline: all letters share VEROBAAMBI's baseline via alphabetic + dy offset -->
+    <tspan fill="#4a5568" font-weight="600" letter-spacing="8" dx="1.2em" dy="35" dominant-baseline="alphabetic"><tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">ROADCAST</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">UDIO</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">LIGNMENT</tspan> <tspan font-size="48">&amp;</tspan> <tspan font-size="62" font-weight="500">M</tspan><tspan font-size="48">ETER</tspan> <tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">RIDGE</tspan> <tspan font-size="62" font-weight="500">I</tspan><tspan font-size="48">NTERFACE</tspan></tspan>
+  </text>
+</svg>
+    </div>
+    <!-- Calibration status indicator (only visible when calibrated) -->
+    <div id="headerCalIndicator" class="header-cal-indicator" style="display: none;">
+      <span class="header-cal-icon">✓</span>
+      <span class="header-cal-text">Calibrated</span>
+      <span class="header-cal-standard" id="headerCalStandard">–</span>
+    </div>
+    <!-- Session capture indicator (visible when session hotkey enabled) -->
+    <div id="headerSessionIndicator" class="header-session-indicator">
+      <span class="session-icon"></span>
+      <span class="session-text">Capture</span>
+      <span class="session-duration"></span>
+    </div>
+  </div>
+</header>
+
+<div id="wrap" class="wrap">
+  <div class="sidebar-container">
+    <div class="sidebar-content">
+      <section class="card collapsible" id="panelInputSources" data-panel="inputSources">
+        <h2>Measure Sources <span class="collapse-summary" id="inputSourceSummary">–</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <!-- Source Mode Selector (4 buttons) -->
+          <div class="row" style="margin-bottom:8px;gap:4px">
+            <button id="btnModeGenerator" class="btn-ghost source-btn" style="flex:1">
+              <svg class="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M2 12c0-3 2-6 4-6s4 6 4 6 2 6 4 6 4-3 4-6 2-6 4-6"/>
+              </svg>
+              <span>Internal<br>Generator</span>
+            </button>
+            <button id="btnModeBrowser" class="btn-active source-btn" style="flex:1">
+              <svg class="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <span>Browser<br>Tab</span>
+            </button>
+            <button id="btnModeExternal" class="btn-ghost source-btn" style="flex:1">
+              <svg class="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="4" y="2" width="16" height="20" rx="2"/>
+                <line x1="8" y1="6" x2="16" y2="6"/>
+                <line x1="8" y1="10" x2="16" y2="10"/>
+                <circle cx="12" cy="16" r="2"/>
+              </svg>
+              <span>External<br>Device</span>
+            </button>
+            <button id="btnModeRemote" class="btn-ghost source-btn" style="flex:1">
+              <svg class="source-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12.55a11 11 0 0 1 14.08 0"/>
+                <path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                <circle cx="12" cy="20" r="1" fill="currentColor"/>
+              </svg>
+              <span>Remote<br>Probe</span>
+            </button>
+          </div>
+
+          <!-- Unified Stop/Measure (transport order) -->
+          <div class="row" style="margin-bottom:10px">
+            <button id="btnStopCapture" class="btn-ghost capture-btn" style="flex:1" disabled>
+              <svg class="capture-icon" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="1"/>
+              </svg>
+              <span>Stop Measure</span>
+            </button>
+            <button id="btnStartCapture" class="btn-ghost capture-btn" style="flex:1">
+              <svg class="capture-icon" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="6"/>
+              </svg>
+              <span>Start Measure</span>
+            </button>
+          </div>
+
+          <!-- Calibration Status Badge -->
+          <div id="calibrationBadgeContainer" class="calibration-badge-container"></div>
+
+          <!-- Meter Verification Badge -->
+          <div id="verificationBadgeContainer" class="verification-badge-container" style="margin-bottom:10px"></div>
+
+          <!-- Source Panels Container (for collapse-swap-expand animation) -->
+          <div id="sourcePanelsContainer" class="source-panels-container">
+          <div class="source-panels-container-inner">
+          <!-- Browser Source Panel -->
+          <div id="browserSourcePanel" class="source-panel source-panel-active">
+            <div class="source-panel-content">
+            <p class="tiny">Captures via <code class="small">getDisplayMedia({audio:true})</code>.</p>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="sysMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="sysMonVal" class="inline-edit" value="20" />
+              <button id="btnSysMonMute" class="btn-muted btn-ctrl">Mute</button>
+            </div>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="sysTrimRange" min="-48" max="24" step="0.1" value="-12" style="flex:1;min-width:60px" />
+              <input type="text" id="sysTrimVal" class="inline-edit" value="-12" />
+              <button id="sysTrimReset" class="btn-ghost btn-ctrl">Reset</button>
+            </div>
+            <div class="kv" id="info">
+              <div><small>Source</small><span id="srcKind">–</span></div>
+              <div><small>Channels</small><span id="cc">–</span></div>
+              <div><small>Sample rate</small><span id="sr">–</span></div>
+              <div><small>Stereo OK?</small><span id="stOK">–</span></div>
+            </div>
+            <p class="tiny">Tip: avoid feedback. Do <i>not</i> share this tab if you enable the monitor.</p>
+            </div>
+          </div>
+
+          <!-- External Source Panel (hidden by default) -->
+          <div id="externalSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Device:</label>
+              <select id="extDeviceSelect" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <option value="">– Select audio input –</option>
+              </select>
+              <button id="btnExtRefresh" class="btn-ghost btn-ctrl" title="Refresh device list">↻</button>
+            </div>
+            <p class="tiny">External audio via <code class="small">getUserMedia</code>. USB, DVS, NDI etc.</p>
+            <div class="row" style="margin-top:6px;margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="extMonGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="extMonVal" class="inline-edit" value="20" />
+              <button id="btnExtMonMute" class="btn-muted btn-ctrl">Mute</button>
+            </div>
+            <div class="row" style="margin-bottom:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Line-up (dB):</label>
+              <input type="range" id="extTrimRange" min="-48" max="24" step="0.1" value="0" style="flex:1;min-width:60px" />
+              <input type="text" id="extTrimVal" class="inline-edit" value="0" />
+              <button id="extTrimReset" class="btn-ghost btn-ctrl">Reset</button>
+            </div>
+            <div class="kv" id="extInfo">
+              <div><small>Device</small><span id="extDevice">–</span></div>
+              <div><small>Channels</small><span id="extCc">–</span></div>
+              <div><small>Sample rate</small><span id="extSr">–</span></div>
+              <div><small>Status</small><span id="extStatus">–</span></div>
+            </div>
+            <p class="tiny" id="extWarning" style="color:var(--caution);display:none">⚠ External input unavailable.</p>
+            <p class="tiny">No AGC, no noise suppression, no echo cancellation.</p>
+            </div>
+          </div>
+
+          <!-- Generator Source Panel (hidden by default) -->
+          <div id="generatorSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:wrap">
+              <select id="genPreset" style="flex:1;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px">
+                <optgroup label="Line-Up Tones">
+                  <option value="ebu400" data-type="sine" data-freq="400" data-db="-18" data-routing="stereo" selected>400 Hz · EBU Broadcast Line-Up                      −18 dBFS</option>
+                  <option value="smpte1k" data-type="sine" data-freq="1000" data-db="-20" data-routing="stereo">1 kHz · SMPTE Broadcast Line-Up                       −20 dBFS</option>
+                  <option value="aes1k" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo">1 kHz · AES Digital Reference                         −18 dBFS</option>
+                  <option value="fft997" data-type="sine" data-freq="997" data-db="-18" data-routing="stereo">997 Hz · FFT-Optimised                                −18 dBFS</option>
+                  <option value="musical440" data-type="sine" data-freq="440" data-db="-18" data-routing="stereo">440 Hz · Musical A                                    −18 dBFS</option>
+                  <option value="lfe80" data-type="sine" data-freq="80" data-db="-18" data-routing="mono">80 Hz · LFE Reference                                 −18 dBFS</option>
+                </optgroup>
+                <optgroup label="EBU Stereo-ID (L Pulsed)">
+                  <option value="ebu400-pulsed" data-type="sine" data-freq="400" data-db="-18" data-routing="stereo" data-pulsed="true">400 Hz · EBU Line-Up + L Pulsed                       −18 dBFS</option>
+                  <option value="smpte1k-pulsed" data-type="sine" data-freq="1000" data-db="-20" data-routing="stereo" data-pulsed="true">1 kHz · SMPTE Line-Up + L Pulsed                      −20 dBFS</option>
+                  <option value="aes1k-pulsed" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo" data-pulsed="true">1 kHz · AES Reference + L Pulsed                      −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Reference Noise">
+                  <option value="ebu-pink-ref" data-type="pink" data-lo="500" data-hi="2000" data-db="-23" data-routing="mono">Pink Noise · EBU Reference (500–2k Hz)                −23 dBFS</option>
+                  <option value="pink-full-mono" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="mono">Pink Noise · Fullband Mono                            −18 dBFS</option>
+                  <option value="pink-full-stereo" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="stereo-uncorr">Pink Noise · Fullband Stereo (uncorr)                 −18 dBFS</option>
+                  <option value="white-full" data-type="white" data-lo="20" data-hi="20000" data-db="-20" data-routing="stereo-uncorr">White Noise · Fullband                                −20 dBFS</option>
+                  <option value="brown-lf" data-type="brown" data-lo="20" data-hi="200" data-db="-20" data-routing="mono">Brown Noise · LF (20–200 Hz)                          −20 dBFS</option>
+                  <option value="brown-full" data-type="brown" data-lo="20" data-hi="20000" data-db="-22" data-routing="mono">Brown Noise · Fullband                                −22 dBFS</option>
+                </optgroup>
+                <optgroup label="Test Sequences">
+                  <option value="glits" data-type="glits" data-db="-18">GLITS · Stereo Ident Sequence                         −18 dBFS</option>
+                  <option value="sweep-log" data-type="sweep" data-lo="20" data-hi="20000" data-db="-18" data-duration="20" data-routing="stereo">Sine Sweep · Log 20Hz–20kHz (20s)                     −18 dBFS</option>
+                  <option value="sweep-slow" data-type="sweep" data-lo="20" data-hi="20000" data-db="-18" data-duration="60" data-routing="stereo">Sine Sweep · Log 20Hz–20kHz (60s)                     −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Scale Calibration">
+                  <option value="full-scale-seq" data-type="full-scale-seq" data-routing="stereo">Full Scale Sequence · −60 → 0 dBFS (3s steps)</option>
+                  <option value="ppm-seq" data-type="ppm-seq" data-routing="stereo">Programme Peak Sequence · −40 → +12 PPM (3s steps)</option>
+                </optgroup>
+                <optgroup label="Intersample Peak Demo">
+                  <option value="isp-none" data-type="sine" data-freq="1000" data-db="0" data-routing="stereo">1 kHz @ 0 dBFS · No ISP (TP ≈ 0)                      0 dBFS</option>
+                  <option value="isp-mild" data-type="sine" data-freq="12000" data-db="0" data-routing="stereo">12 kHz @ 0 dBFS · Mild ISP (TP +0.3)                  0 dBFS</option>
+                  <option value="isp-moderate" data-type="sine" data-freq="18000" data-db="-0.5" data-routing="stereo">18 kHz @ −0.5 dBFS · Moderate ISP (TP +0.5)           −0.5 dBFS</option>
+                  <option value="isp-max" data-type="isp-max" data-db="0" data-routing="stereo">Alternating ±1 · Maximum ISP (TP +3.01)               0 dBFS</option>
+                </optgroup>
+                <optgroup label="Phase & Polarity Tests">
+                  <option value="phase-corr" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo">1 kHz · L=R (correlated)                              −18 dBFS</option>
+                  <option value="phase-anti" data-type="sine" data-freq="1000" data-db="-18" data-routing="anti-phase">1 kHz · L=−R (anti-phase)                             −18 dBFS</option>
+                  <option value="phase-left" data-type="sine" data-freq="1000" data-db="-18" data-routing="left-only">1 kHz · Left Only                                     −18 dBFS</option>
+                  <option value="phase-right" data-type="sine" data-freq="1000" data-db="-18" data-routing="right-only">1 kHz · Right Only                                    −18 dBFS</option>
+                  <option value="pink-corr" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="mono">Pink · Correlated (mono)                              −18 dBFS</option>
+                  <option value="pink-anti" data-type="pink" data-lo="20" data-hi="20000" data-db="-18" data-routing="anti-phase">Pink · Anti-phase                                     −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Goniometer Patterns">
+                  <option value="liss-mono" data-type="lissajous" data-freq="1000" data-phase="0" data-db="-18">Lissajous · Mono (0° phase)                           −18 dBFS</option>
+                  <option value="liss-circle" data-type="lissajous" data-freq="1000" data-phase="90" data-db="-18">Lissajous · Circle (90° phase)                        −18 dBFS</option>
+                  <option value="liss-anti" data-type="lissajous" data-freq="1000" data-phase="180" data-db="-18">Lissajous · Anti-phase (180°)                         −18 dBFS</option>
+                  <option value="liss-21" data-type="lissajous" data-freq="1000" data-ratio="2:1" data-db="-18">Lissajous · 2:1 Figure                                −18 dBFS</option>
+                  <option value="liss-32" data-type="lissajous" data-freq="1000" data-ratio="3:2" data-db="-18">Lissajous · 3:2 Figure                                −18 dBFS</option>
+                </optgroup>
+                <optgroup label="Vector Display">
+                  <option value="thast-vector" data-type="vector-text" data-db="-6">THÅST · Vector Text Display                           −6 dBFS</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="kv" id="genInfo">
+              <div><small>Gen Mode</small><span id="genModeVal">400 Hz −18 dBFS</span></div>
+              <div><small>Stereo ID</small><span id="genStereoIdVal">No</span></div>
+            </div>
+            <div class="row" style="margin-top:8px;align-items:center;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Monitor (%):</label>
+              <input type="range" id="monGain" min="0" max="100" step="1" value="20" style="flex:1;min-width:60px" />
+              <input type="text" id="monVal" class="inline-edit" value="20" />
+              <button id="btnMonMute" class="btn-ghost btn-ctrl">Mute</button>
+            </div>
+            </div>
+          </div>
+
+          <!-- Remote Source Panel (hidden by default) -->
+          <div id="remoteSourcePanel" class="source-panel">
+            <div class="source-panel-content">
+            <p class="tiny">Receive metering data from remote probes via WebSocket broker.</p>
+            <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
+              <label style="flex-shrink:0">Broker:</label>
+              <input type="url" id="remoteBrokerUrl" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px" placeholder="ws://localhost:8765" value="ws://localhost:8765" />
+              <button id="btnRemoteCheck" class="btn-ghost btn-ctrl" title="Check broker connection">Check</button>
+            </div>
+            <div class="kv" id="remoteInfo">
+              <div><small>Broker</small><span id="remoteBrokerStatus">–</span></div>
+              <div><small>Latency</small><span id="remoteLatency">–</span></div>
+            </div>
+            <p class="tiny" style="margin-top:8px;margin-bottom:4px">Available Probes:</p>
+            <div id="remoteProbeList" class="remote-probe-list" style="max-height:100px;overflow-y:auto;background:rgba(0,0,0,0.2);border-radius:4px;padding:4px">
+              <p class="tiny" style="color:var(--muted);text-align:center;margin:8px 0">No probes available</p>
+            </div>
+            <p class="tiny" id="remoteWarning" style="color:var(--caution);display:none;margin-top:6px">Broker unavailable. Check URL and ensure broker is running.</p>
+            </div>
+          </div>
+          </div><!-- /source-panels-container-inner -->
+          </div><!-- /sourcePanelsContainer -->
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelMeteringSettings" data-panel="meteringSettings">
+        <h2>Metering Settings <span class="collapse-summary">−23 LUFS / −1 dBTP</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <!-- LUFS Target -->
+          <div class="setting-row">
+            <label for="targetPreset">Loudness Target</label>
+            <select id="targetPreset">
+              <option value="-23">−23 LUFS (EBU R128)</option>
+              <option value="-24">−24 LUFS (ATSC A/85)</option>
+              <option value="-16">−16 LUFS (Streaming)</option>
+              <option value="-14">−14 LUFS (Podcast)</option>
+            </select>
+          </div>
+
+          <!-- TP Limit -->
+          <div class="setting-row">
+            <label for="tpLimit">True Peak Limit</label>
+            <select id="tpLimit">
+              <option value="-1">−1 dBTP (Broadcast)</option>
+              <option value="-2">−2 dBTP (Streaming)</option>
+              <option value="-3">−3 dBTP (Safe)</option>
+            </select>
+          </div>
+
+          <!-- Radar Sweep -->
+          <div class="setting-row">
+            <label for="radarSweep">Radar Sweep Time</label>
+            <select id="radarSweep">
+              <option value="30">30 seconds</option>
+              <option value="60" selected>60 seconds</option>
+              <option value="120">120 seconds</option>
+            </select>
+          </div>
+
+          <!-- History Graph -->
+          <div class="setting-row">
+            <label for="loudnessHistoryDuration">History Graph Time</label>
+            <select id="loudnessHistoryDuration">
+              <option value="60">1 minute</option>
+              <option value="180">3 minutes</option>
+              <option value="300" selected>5 minutes</option>
+              <option value="600">10 minutes</option>
+            </select>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelStatus" data-panel="status">
+        <h2>Status & Live Data <span class="collapse-summary" id="statusSummary">–</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <div class="kv">
+            <div class="wide"><small>Uptime</small><span id="uptime" style="font-family:monospace">00:00:00.0</span></div>
+            <div><small>AudioContext</small><span id="ctxState">–</span></div>
+            <div><small>Tab Capture</small><span id="dbgTab">–</span></div>
+            <div><small>External</small><span id="dbgExt">–</span></div>
+            <div><small>Generator</small><span id="dbgGen">–</span></div>
+            <div><small>Remote</small><span id="dbgRemote">–</span></div>
+            <div class="wide"><small>Monitor</small><span id="monitorStatus" class="tiny">Tab: <b>–</b> · Ext: <b>–</b> · Gen: <b>–</b></span></div>
+            <div class="wide cal-status-box" id="calStatusBox">
+              <small>Calibration</small>
+              <span id="calStatusContent" class="tiny">
+                <span class="cal-status-profile">Profile: <b id="calStatusProfile">–</b></span>
+                <span class="cal-status-standard">Standard: <b id="calStatusStandard">–</b></span>
+              </span>
+            </div>
+            <div><small>Stereo Phase Synchroniser</small><span id="stereoSyncMode">–</span></div>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelSessionCapture" data-panel="sessionCapture">
+        <h2>Session Capture <span class="collapse-summary" id="sessionCaptureSummary">Off</span></h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <p class="tiny" style="margin-bottom:10px">
+            Capture measurement sessions for EBU R128-compliant export.
+            Session duration is unlimited.
+          </p>
+          <div class="row" style="gap:8px;margin-bottom:8px">
+            <button id="btnSessionStart" class="btn-ghost" style="flex:1" disabled>Start Session</button>
+            <button id="btnSessionStop" class="btn-ghost" style="flex:1" disabled>Stop Session</button>
+          </div>
+          <div class="row" style="gap:8px;margin-bottom:12px">
+            <button id="btnExportJSON" class="btn-ghost" style="flex:1">Export JSON</button>
+            <button id="btnExportXML" class="btn-ghost" style="flex:1">Export XML</button>
+          </div>
+          <div class="setting-row">
+            <label for="sessionHotkeyToggle" style="flex:1">Enable capture</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="sessionHotkeyToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div></div>
+      </section>
+
+      <section class="card collapsible collapsed" id="panelKeyboard" data-panel="keyboard">
+        <h2>Keyboard Shortcuts</h2>
+        <div class="card-body-wrapper"><div class="card-body">
+          <div class="shortcuts-grid">
+            <div class="shortcut-row"><kbd>Space/P</kbd><span>Pause/Resume Loudness</span></div>
+            <div class="shortcut-row"><kbd>R</kbd><span>Reset Loudness</span></div>
+            <div class="shortcut-row"><kbd>C</kbd><span>Session Capture toggle</span></div>
+            <div class="shortcut-row"><kbd>Tab</kbd><span>Toggle Menu</span></div>
+            <div class="shortcut-row"><kbd>F</kbd><span>Fullscreen</span></div>
+            <div class="shortcut-row"><kbd>1</kbd><span>True Peak Bargraph</span></div>
+            <div class="shortcut-row"><kbd>2</kbd><span>RMS Bargraph</span></div>
+            <div class="shortcut-row"><kbd>3</kbd><span>Sample Peak Bargraph</span></div>
+            <div class="shortcut-row"><kbd>4</kbd><span>Nordic PPM Bargraph</span></div>
+            <div class="shortcut-row"><kbd>5</kbd><span>BBC PPM Bargraph</span></div>
+            <div class="shortcut-row"><kbd>S</kbd><span>Short-term history</span></div>
+            <div class="shortcut-row"><kbd>M</kbd><span>Momentary history</span></div>
+            <div class="shortcut-row"><kbd>I</kbd><span>Integrated history</span></div>
+            <div class="shortcut-row"><kbd>T</kbd><span>True Peak history</span></div>
+            <div class="shortcut-row"><kbd>K</kbd><span>K-weight curve</span></div>
+          </div>
+          <p class="shortcuts-hint">Hold Space or P for momentary pause</p>
+        </div></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Toggle outside sidebar-container so position:fixed works correctly -->
+  <div class="collapse-toggle" id="sidebarToggle" title="Toggle Menu (M)">
+    <svg viewBox="0 0 24 24">
+      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+    </svg>
+  </div>
+
+  <section class="card visning">
+    <div class="meters" id="meters">
+      <div class="stack-left">
+        <!-- NY: Goniometer + Correlation (tidigare vectorscope) -->
+        <div class="meter" data-meter-type="spatial" id="spatialMeter">
+          <header><label>Spatial Analysis</label><span class="badge">GONIOMETER & PHASE CORRELATION</span></header>
+          <div class="stereoContainer">
+            <!-- Left column: Goniometer + Phase Correlation -->
+            <div class="stereoLeftCol">
+              <div class="gonioSquare" id="xyWrap">
+                <div class="canvasPad"><canvas id="xy"></canvas></div>
+              </div>
+              <div class="phaseWidget corrWidget">
+                <div class="widgetLabel">Phase Correlation <span style="float:right">ρ = <b id="corrVal">+-.--</b></span></div>
+                <div class="corrWrap">
+                  <div class="canvasPad"><canvas id="corr"></canvas></div>
+                </div>
+              </div>
+            </div>
+            <!-- Right column: 2x2 grid + Spectrum (full width, double height) -->
+            <div class="stereoRightCol">
+              <!-- Row 1, Col 1: Balance Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Balance</div>
+                <div class="monoDevWrap">
+                  <div class="canvasPad"><canvas id="monoDev"></canvas></div>
+                </div>
+                <div class="balanceAxis">
+                  <span>L</span>
+                  <span id="monoDevVal">--.- dB</span>
+                  <span>R</span>
+                </div>
+              </div>
+              <!-- Row 1, Col 2: Width Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Width</div>
+                <canvas id="widthMeter"></canvas>
+                <div class="rotationAxis"><span>M</span><span></span><span>S</span></div>
+              </div>
+              <!-- Row 2, Col 1: Phase Axis Rotation Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">Phase Axis Rotation</div>
+                <div class="rotationWrap">
+                  <div class="canvasPad"><canvas id="rotationCanvas"></canvas></div>
+                </div>
+                <div class="rotationAxis"><span>L-Phase</span><span>Mono Axis</span><span>R-Phase</span></div>
+              </div>
+              <!-- Row 2, Col 2: M/S Meter -->
+              <div class="phaseWidget">
+                <div class="widgetLabel">M/S Meter</div>
+                <div class="msCompact">
+                  <div class="msBar">
+                    <span class="msLabel">M</span>
+                    <div class="msTrack"><div class="msFill msFillM" id="msFillM"></div></div>
+                    <span class="msValue" id="msValueM">--.- dB</span>
+                  </div>
+                  <div class="msBar">
+                    <span class="msLabel">S</span>
+                    <div class="msTrack"><div class="msFill msFillS" id="msFillS"></div></div>
+                    <span class="msValue" id="msValueS">--.- dB</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Row 3-4: Spectrum Analyser (full width, double height) -->
+              <div class="phaseWidget histogramWidget">
+                <div class="widgetLabel">
+                  Spectrum
+                  <button class="k-weight-toggle" id="kWeightToggle" title="Toggle K-weighting curve overlay">K</button>
+                </div>
+                <div class="spectrumWrap">
+                  <div class="canvasPad"><canvas id="spectrumAnalyser"></canvas></div>
+                </div>
+                <div class="histogramAxis">
+                  <span>Lo</span><span></span><span>Hi</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Bargraph meter: TP / RMS / SP / Nordic / BBC -->
+        <div class="meter" data-meter-type="bargraph" id="bargraphMeter">
+          <header>
+            <label>Bargraph Meters</label>
+            <span class="badge" id="bargraphBadge">TRUE PEAK (dBTP) ITU-R BS.1770-4</span>
+            <div class="bargraph-tabs" role="tablist" aria-label="Meter type">
+              <button class="bargraph-tab active" role="tab" aria-selected="true" tabindex="0" data-meter="tp" title="True Peak (1)">TP</button>
+              <button class="bargraph-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="rms" title="RMS Level (2)">RMS</button>
+              <button class="bargraph-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="sp" title="Sample Peak (3)">SP</button>
+              <button class="bargraph-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="nordic" title="Nordic PPM (4)">Nordic</button>
+              <button class="bargraph-tab" role="tab" aria-selected="false" tabindex="-1" data-meter="bbc" title="BBC PPM (5)">BBC</button>
+            </div>
+          </header>
+          <div class="bargraph-content">
+            <div class="bargraph-panels">
+              <div class="bargraph-cylinder" id="bargraphCylinder">
+                <div class="bargraph-panel facing" id="tpCard" data-meter="tp">
+                  <span class="hLabel" id="tpLabel">L: <b id="tpL">--.-</b> R: <b id="tpR">--.-</b> dBTP</span>
+                  <div class="hMeter">
+                    <canvas id="tp"></canvas>
+                    <div class="hScale" id="tpScale"></div>
+                  </div>
+                </div>
+                <div class="bargraph-panel" id="dbfsCard" data-meter="rms">
+                  <span class="hLabel" id="dbfsLabel">L: <b id="dbL">--.-</b> R: <b id="dbR">--.-</b> dBFS</span>
+                  <div class="hMeter">
+                    <canvas id="dbfs"></canvas>
+                    <div class="hScale" id="dbfsScale"></div>
+                  </div>
+                </div>
+                <div class="bargraph-panel" id="spCard" data-meter="sp">
+                  <span class="hLabel" id="spLabel">L: <b id="spLVal">--.-</b> R: <b id="spRVal">--.-</b> dBFS</span>
+                  <div class="hMeter">
+                    <canvas id="spCanvas"></canvas>
+                    <div class="hScale" id="spScale"></div>
+                  </div>
+                </div>
+                <div class="bargraph-panel" id="nordicCard" data-meter="nordic">
+                  <span class="hLabel" id="nordicLabel">L: <b id="nordicLVal">--.-</b> R: <b id="nordicRVal">--.-</b> PPM</span>
+                  <div class="hMeter">
+                    <canvas id="nordicCanvas"></canvas>
+                    <div class="hScale" id="nordicScale"></div>
+                  </div>
+                </div>
+                <div class="bargraph-panel" id="bbcCard" data-meter="bbc">
+                  <span class="hLabel" id="bbcLabel">L: <b id="bbcLVal">--.-</b> R: <b id="bbcRVal">--.-</b> PPM</span>
+                  <div class="hMeter">
+                    <canvas id="bbcCanvas"></canvas>
+                    <div class="hScale" id="bbcScale"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stack-right">
+        <!-- Loudness (radar on top, values below) -->
+        <div class="meter" data-meter-type="loudness" id="loudnessMeter">
+          <header>
+            <label>Loudness Metering</label>
+            <span class="badge">ITU-R BS.1770 / EBU R128</span>
+            <div class="header-btn-group">
+              <button class="radar-export-btn" id="radarExportJsonBtn" title="Export session as JSON (EBU R 128)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/>
+                  <path d="M16 3h1a2 2 0 0 1 2 2v5a2 2 0 0 0 2 2 2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/>
+                </svg>
+              </button>
+              <button class="radar-export-btn" id="radarExportBtn" title="Export radar as PNG">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="6"/>
+                  <circle cx="12" cy="12" r="2"/>
+                  <line x1="12" y1="2" x2="12" y2="6"/>
+                </svg>
+              </button>
+              <button class="radar-export-btn" id="btnMeasurePause" disabled title="Pause (P / Space)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect class="pause-bars" x="6" y="4" width="4" height="16" rx="1"/>
+                  <rect class="pause-bars" x="14" y="4" width="4" height="16" rx="1"/>
+                  <polygon class="play-triangle" points="6,4 20,12 6,20" style="display:none"/>
+                </svg>
+              </button>
+              <button class="radar-export-btn" id="r128Reset" disabled title="Reset (R)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+              </button>
+            </div>
+          </header>
+          <div class="loudnessModule">
+            <div class="radarWrap">
+              <canvas id="loudnessRadar"></canvas>
+              <div class="radar-lufs-value" id="radarLufsValue">—</div>
+              <div class="peak-led" id="peakLed"><span>Peak</span></div>
+              <div class="radar-tooltip" id="radarTooltip" style="display:none"></div>
+              <!-- Floating M/S/I overlay in radar centre: M (top) → S → I (bottom) -->
+              <div class="radar-values-overlay">
+                <div class="overlay-row overlay-m"><small>M</small><span class="lufs-value" id="lufsM">--.-</span></div>
+                <div class="overlay-row overlay-s"><small>S</small><span class="lufs-value" id="lufsS">--.-</span></div>
+                <div class="overlay-row overlay-i"><small>I</small><span class="lufs-value integrated" id="lufsI">--.-</span></div>
+                <div class="overlay-unit"><small>LUFS</small></div>
+              </div>
+            </div>
+            <!-- Secondary values: compact horizontal row -->
+            <div class="r128-secondary-row">
+              <div class="r128-item"><small>LRA</small><span id="lra">--.-</span></div>
+              <div class="r128-item"><small>TP</small><span id="r128TpMax">--.-</span></div>
+              <div class="r128-item"><small>Crest</small><span id="r128Crest">--.-</span></div>
+              <div class="r128-item"><small>Elapsed</small><span id="r128Time">--:--</span></div>
+            </div>
+            <!-- Loudness History Strip (outside r128-panel for full width) -->
+            <div class="loudness-history-container">
+              <div class="loudness-history-header">
+                <span class="loudness-history-label">History</span>
+                <button class="trace-toggle active" data-trace="s" title="Short-term (3s)">S</button>
+                <button class="trace-toggle active" data-trace="m" title="Momentary (400ms)">M</button>
+                <button class="trace-toggle active" data-trace="i" title="Integrated (programme)">I</button>
+                <button class="trace-toggle active" data-trace="tp" title="True Peak (dBTP)">T</button>
+              </div>
+              <canvas id="loudnessHistoryCanvas" class="loudness-history-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CALIBRATION WIZARD MODAL
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="calibrationWizardContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODULAR ESM BOOTSTRAP
+     ═══════════════════════════════════════════════════════════════════════════
+     Loads the modular version instead of inline JavaScript.
+     For legacy fallback, use audio-meters-grid.html
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script type="module" src="./src/app/bootstrap.js?v=20241209-1"></script>
+
+</body>
+</html>

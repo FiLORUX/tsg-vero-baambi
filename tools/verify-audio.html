@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VERO-BAAMBI Audio Verification</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --fg: #e0e0e0;
+      --accent: #00d4aa;
+      --pass: #00d4aa;
+      --fail: #ff6b6b;
+      --warn: #ffd93d;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+      padding: 2rem;
+      line-height: 1.6;
+    }
+
+    h1 {
+      color: var(--accent);
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+    }
+
+    h2 {
+      color: var(--fg);
+      font-weight: 400;
+      margin: 2rem 0 1rem;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.5rem;
+    }
+
+    .controls {
+      margin: 1.5rem 0;
+    }
+
+    button {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-family: inherit;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-right: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .test-result {
+      margin: 0.5rem 0;
+      padding: 0.5rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 3px solid #666;
+    }
+
+    .test-result.pass {
+      border-color: var(--pass);
+    }
+
+    .test-result.fail {
+      border-color: var(--fail);
+    }
+
+    .test-result.warn {
+      border-color: var(--warn);
+    }
+
+    .label {
+      display: inline-block;
+      width: 60px;
+      font-weight: bold;
+    }
+
+    .pass .label { color: var(--pass); }
+    .fail .label { color: var(--fail); }
+    .warn .label { color: var(--warn); }
+
+    #log {
+      background: #0d0d1a;
+      padding: 1rem;
+      margin-top: 1rem;
+      max-height: 400px;
+      overflow-y: auto;
+      font-size: 0.875rem;
+    }
+
+    .summary {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: rgba(0, 212, 170, 0.1);
+      border: 1px solid var(--accent);
+    }
+
+    .note {
+      font-size: 0.875rem;
+      opacity: 0.7;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>VERO-BAAMBI Audio Verification</h1>
+
+  <p>Interactive verification of metering accuracy using Web Audio API.</p>
+  <p class="note">Requires user interaction to start AudioContext.</p>
+
+  <div class="controls">
+    <button id="btnRunAll">Run All Tests</button>
+    <button id="btnStop">Stop Audio</button>
+  </div>
+
+  <h2>Test Results</h2>
+  <div id="results"></div>
+
+  <h2>Log</h2>
+  <div id="log"></div>
+
+  <div class="summary" id="summary" style="display: none;">
+    <strong>Summary:</strong>
+    <span id="summaryText"></span>
+  </div>
+
+  <script type="module">
+    const resultsEl = document.getElementById('results');
+    const logEl = document.getElementById('log');
+    const summaryEl = document.getElementById('summary');
+    const summaryTextEl = document.getElementById('summaryText');
+
+    let audioCtx = null;
+    let currentSource = null;
+    let passed = 0, failed = 0, warnings = 0;
+
+    function log(msg) {
+      const line = document.createElement('div');
+      line.textContent = `[${new Date().toISOString().slice(11, 23)}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function addResult(status, name, actual, expected) {
+      const div = document.createElement('div');
+      div.className = `test-result ${status}`;
+      div.innerHTML = `<span class="label">[${status.toUpperCase()}]</span> ${name}: ${actual} (expected: ${expected})`;
+      resultsEl.appendChild(div);
+
+      if (status === 'pass') passed++;
+      else if (status === 'fail') failed++;
+      else warnings++;
+    }
+
+    function assertClose(name, actual, expected, tolerance) {
+      const diff = Math.abs(actual - expected);
+      if (diff <= tolerance) {
+        addResult('pass', name, actual.toFixed(3), `${expected} ±${tolerance}`);
+        return true;
+      } else if (diff <= tolerance * 2) {
+        addResult('warn', name, actual.toFixed(3), `${expected} ±${tolerance}`);
+        return true;
+      } else {
+        addResult('fail', name, actual.toFixed(3), `${expected} ±${tolerance}`);
+        return false;
+      }
+    }
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        log(`AudioContext created: ${audioCtx.sampleRate} Hz`);
+      }
+      return audioCtx;
+    }
+
+    function stopAudio() {
+      if (currentSource) {
+        try { currentSource.stop(); } catch (e) {}
+        currentSource = null;
+      }
+    }
+
+    /**
+     * Generate a test tone and measure RMS.
+     */
+    async function testSineRMS() {
+      log('Testing: Sine wave RMS measurement');
+      const ctx = initAudio();
+
+      const duration = 0.5;
+      const frequency = 1000;
+      const amplitude = 0.5;
+
+      // Create offline context for precise measurement
+      const offline = new OfflineAudioContext(1, ctx.sampleRate * duration, ctx.sampleRate);
+      const osc = offline.createOscillator();
+      const gain = offline.createGain();
+
+      osc.frequency.value = frequency;
+      gain.gain.value = amplitude;
+
+      osc.connect(gain);
+      gain.connect(offline.destination);
+
+      osc.start();
+      osc.stop(duration);
+
+      const buffer = await offline.startRendering();
+      const data = buffer.getChannelData(0);
+
+      // Calculate RMS
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        sum += data[i] * data[i];
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const rmsDb = 20 * Math.log10(rms);
+
+      // Expected: peak/sqrt(2) = 0.5/1.414 ≈ 0.354
+      const expectedRms = amplitude / Math.sqrt(2);
+      assertClose('Sine RMS level', rms, expectedRms, 0.01);
+
+      // Expected dB: -6.02 (half amplitude) - 3.01 (RMS of sine) ≈ -9.03 dBFS
+      const expectedDb = 20 * Math.log10(expectedRms);
+      assertClose('Sine RMS (dBFS)', rmsDb, expectedDb, 0.5);
+    }
+
+    /**
+     * Test K-weighting filter response.
+     */
+    async function testKWeighting() {
+      log('Testing: K-weighting frequency response');
+      const ctx = initAudio();
+
+      // Test frequencies and expected gains
+      const testPoints = [
+        { freq: 100, expectedGain: 0, tolerance: 0.5 },
+        { freq: 1000, expectedGain: 0, tolerance: 0.2 },
+        { freq: 4000, expectedGain: 2, tolerance: 0.5 },
+        { freq: 10000, expectedGain: 4, tolerance: 0.5 },
+      ];
+
+      for (const { freq, expectedGain, tolerance } of testPoints) {
+        const duration = 0.2;
+        const offline = new OfflineAudioContext(1, ctx.sampleRate * duration, ctx.sampleRate);
+
+        // Create K-weighting filters
+        // Stage 1: High-pass (pre-filter)
+        const hp = offline.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 38;
+        hp.Q.value = 0.5;
+
+        // Stage 2: High-shelf
+        const hs = offline.createBiquadFilter();
+        hs.type = 'highshelf';
+        hs.frequency.value = 4000;
+        hs.gain.value = 4;
+
+        // Test oscillator
+        const osc = offline.createOscillator();
+        osc.frequency.value = freq;
+
+        osc.connect(hp);
+        hp.connect(hs);
+        hs.connect(offline.destination);
+
+        osc.start();
+        osc.stop(duration);
+
+        const buffer = await offline.startRendering();
+        const data = buffer.getChannelData(0);
+
+        // Measure RMS of filtered signal (skip first 10ms for filter settling)
+        const skipSamples = Math.floor(ctx.sampleRate * 0.01);
+        let sum = 0, count = 0;
+        for (let i = skipSamples; i < data.length; i++) {
+          sum += data[i] * data[i];
+          count++;
+        }
+        const rms = Math.sqrt(sum / count);
+        const rmsDb = 20 * Math.log10(rms);
+
+        // Reference: unfiltered sine at same amplitude has RMS = 1/sqrt(2)
+        const refRmsDb = 20 * Math.log10(1 / Math.sqrt(2));
+        const gain = rmsDb - refRmsDb;
+
+        assertClose(`K-weight @ ${freq} Hz`, gain, expectedGain, tolerance);
+      }
+    }
+
+    /**
+     * Test correlation calculation.
+     */
+    async function testCorrelation() {
+      log('Testing: Stereo correlation');
+      const ctx = initAudio();
+
+      const duration = 0.2;
+      const samples = ctx.sampleRate * duration;
+
+      // Test 1: Mono (L = R)
+      const monoBuffer = ctx.createBuffer(2, samples, ctx.sampleRate);
+      const monoL = monoBuffer.getChannelData(0);
+      const monoR = monoBuffer.getChannelData(1);
+      for (let i = 0; i < samples; i++) {
+        const s = Math.sin(2 * Math.PI * 1000 * i / ctx.sampleRate);
+        monoL[i] = s;
+        monoR[i] = s;
+      }
+      const monoCorr = calculateCorrelation(monoL, monoR);
+      assertClose('Correlation (mono)', monoCorr, 1.0, 0.01);
+
+      // Test 2: Inverted (L = -R)
+      const invertedBuffer = ctx.createBuffer(2, samples, ctx.sampleRate);
+      const invL = invertedBuffer.getChannelData(0);
+      const invR = invertedBuffer.getChannelData(1);
+      for (let i = 0; i < samples; i++) {
+        const s = Math.sin(2 * Math.PI * 1000 * i / ctx.sampleRate);
+        invL[i] = s;
+        invR[i] = -s;
+      }
+      const invCorr = calculateCorrelation(invL, invR);
+      assertClose('Correlation (inverted)', invCorr, -1.0, 0.01);
+    }
+
+    function calculateCorrelation(left, right) {
+      const n = left.length;
+      let sumL = 0, sumR = 0;
+      for (let i = 0; i < n; i++) {
+        sumL += left[i];
+        sumR += right[i];
+      }
+      const meanL = sumL / n;
+      const meanR = sumR / n;
+
+      let num = 0, denL = 0, denR = 0;
+      for (let i = 0; i < n; i++) {
+        const dL = left[i] - meanL;
+        const dR = right[i] - meanR;
+        num += dL * dR;
+        denL += dL * dL;
+        denR += dR * dR;
+      }
+
+      const den = Math.sqrt(denL * denR);
+      return den > 0 ? num / den : 0;
+    }
+
+    /**
+     * Run all tests.
+     */
+    async function runAllTests() {
+      resultsEl.innerHTML = '';
+      logEl.innerHTML = '';
+      passed = failed = warnings = 0;
+
+      log('Starting verification tests...');
+
+      try {
+        await testSineRMS();
+        await testKWeighting();
+        await testCorrelation();
+      } catch (err) {
+        log(`Error: ${err.message}`);
+        console.error(err);
+      }
+
+      // Show summary
+      summaryEl.style.display = 'block';
+      summaryTextEl.textContent = `${passed} passed, ${failed} failed, ${warnings} warnings`;
+      log('Verification complete.');
+    }
+
+    // Event listeners
+    document.getElementById('btnRunAll').addEventListener('click', runAllTests);
+    document.getElementById('btnStop').addEventListener('click', stopAudio);
+  </script>
+</body>
+</html>

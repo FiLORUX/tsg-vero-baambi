@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VERO-BAAMBI Control – TSG Suite</title>
+  <style>
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════════
+     * TSG Suite – broadcast tools for alignment, metering, and signal verification
+     * Maintained by David Thåst  ·  https://github.com/FiLORUX
+     *
+     * REMOTE CONTROL VIEW
+     * Settings control for headless probe operation
+     * ═══════════════════════════════════════════════════════════════════════════════
+     */
+
+    :root {
+      --bg: #0a0c0e;
+      --card-bg: #0f1214;
+      --panel: #0f1214;
+      --border: #1a1f24;
+      --text: #a9b2c7;
+      --text-dim: #6b7280;
+      --ok: #58d38c;
+      --warn: #ffde58;
+      --alert: #ef4444;
+      --cyan: #69bfff;
+      --btn: #2d6bff;
+      --btn-hover: #4080ff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Header - TSG Suite branding (consistent with wallboard.html, probe.html) */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #0f1214 0%, #0a0c0e 100%);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .header-logo {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header-logo .suite {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: #93C5FD;
+      text-transform: uppercase;
+    }
+
+    .header-logo .product {
+      display: flex;
+      align-items: baseline;
+      gap: 0;
+    }
+
+    .header-logo .product-vero {
+      font-size: 1.4rem;
+      font-weight: 950;
+      letter-spacing: 2px;
+      color: #e8eef9;
+    }
+
+    .header-logo .product-baambi {
+      font-size: 1.4rem;
+      font-weight: 200;
+      letter-spacing: -1px;
+      color: #e8eef9;
+    }
+
+    .header-logo .mode {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      color: #93C5FD;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+    }
+
+    .status-indicator.connected { background: var(--ok); }
+    .status-indicator.error { background: var(--alert); }
+    .status-indicator.connecting { background: var(--warn); animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Main content */
+    .main {
+      padding: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .connection-form {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .connection-form label {
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .connection-form input {
+      flex: 1;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .connection-form button {
+      padding: 8px 16px;
+      background: var(--btn);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .connection-form button:hover {
+      background: var(--btn-hover);
+    }
+
+    .probe-selector {
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .probe-selector h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .probe-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .probe-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .probe-item:hover {
+      border-color: var(--cyan);
+    }
+
+    .probe-item.selected {
+      border-color: var(--cyan);
+      background: rgba(105, 191, 255, 0.05);
+    }
+
+    .probe-item .name {
+      font-weight: 500;
+    }
+
+    .probe-item .status {
+      font-size: 12px;
+      color: var(--ok);
+    }
+
+    .probe-item .status.offline {
+      color: var(--alert);
+    }
+
+    .metrics-display {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      text-align: center;
+    }
+
+    .metric .label {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .metric .value {
+      font-size: 28px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+
+    .metric .value.ok { color: var(--ok); }
+    .metric .value.warn { color: var(--warn); }
+    .metric .value.alert { color: var(--alert); }
+
+    .controls {
+      padding: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .controls h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .control-group select,
+    .control-group input[type="text"],
+    .control-group input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .control-group select:focus,
+    .control-group input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      border-color: var(--cyan);
+      background: rgba(105, 191, 255, 0.05);
+    }
+
+    .btn.primary {
+      background: var(--btn);
+      border-color: var(--btn);
+      color: white;
+    }
+
+    .btn.primary:hover {
+      background: var(--btn-hover);
+      border-color: var(--btn-hover);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .log {
+      margin-top: 16px;
+      padding: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-entry.error { color: var(--alert); }
+    .log-entry.success { color: var(--ok); }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px;
+      color: var(--text-dim);
+    }
+
+    @media (max-width: 600px) {
+      .metrics-display {
+        grid-template-columns: 1fr;
+      }
+      .btn-row {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-brand">
+      <div class="header-logo">
+        <span class="suite">TSG Suite</span>
+        <div class="product">
+          <span class="product-vero">VERO</span><span class="product-baambi">-BAAMBI</span>
+        </div>
+        <span class="mode">Remote Control</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-item">
+        <span class="status-indicator" id="connDot"></span>
+        <span id="connText">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+  <section class="connection-form">
+    <label for="brokerUrl">Broker:</label>
+    <input type="text" id="brokerUrl" value="ws://localhost:8765" placeholder="ws://broker-ip:8765">
+    <button id="btnConnect">Connect</button>
+  </section>
+
+  <section class="probe-selector" id="probeSection" style="display: none;">
+    <h2>Select Probe</h2>
+    <div class="probe-list" id="probeList">
+      <div class="empty-state">No probes connected</div>
+    </div>
+  </section>
+
+  <section class="metrics-display" id="metricsSection" style="display: none;">
+    <div class="metric">
+      <div class="label">Integrated</div>
+      <div class="value" id="lufsI">--</div>
+    </div>
+    <div class="metric">
+      <div class="label">True Peak</div>
+      <div class="value" id="tpMax">--</div>
+    </div>
+  </section>
+
+  <section class="controls" id="controlsSection" style="display: none;">
+    <h2>Remote Control</h2>
+
+    <div class="btn-row">
+      <button class="btn primary" id="btnResetIntegration">Reset Integration</button>
+      <button class="btn" id="btnGetState">Get State</button>
+    </div>
+
+    <div class="log" id="logPanel">
+      <div class="empty-state">Command log will appear here</div>
+    </div>
+  </section>
+  </main>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────────────────
+    // STATE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    let ws = null;
+    let probes = new Map();
+    let selectedProbeId = null;
+    let requestCounter = 0;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DOM
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const $ = id => document.getElementById(id);
+
+    const dom = {
+      brokerUrl: $('brokerUrl'),
+      btnConnect: $('btnConnect'),
+      connDot: $('connDot'),
+      connText: $('connText'),
+      probeSection: $('probeSection'),
+      probeList: $('probeList'),
+      metricsSection: $('metricsSection'),
+      lufsI: $('lufsI'),
+      tpMax: $('tpMax'),
+      controlsSection: $('controlsSection'),
+      btnResetIntegration: $('btnResetIntegration'),
+      btnGetState: $('btnGetState'),
+      logPanel: $('logPanel')
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONNECTION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    dom.btnConnect.addEventListener('click', () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+        return;
+      }
+      connect();
+    });
+
+    function connect() {
+      const url = dom.brokerUrl.value.trim();
+      if (!url) return;
+
+      updateConnectionStatus('connecting', 'Connecting...');
+      dom.btnConnect.textContent = 'Cancel';
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        updateConnectionStatus('connected', 'Connected');
+        dom.btnConnect.textContent = 'Disconnect';
+        dom.probeSection.style.display = 'block';
+
+        // Request probe list
+        ws.send(JSON.stringify({ type: 'list' }));
+        log('Connected to broker', 'success');
+      };
+
+      ws.onmessage = (event) => {
+        if (event.data === '__pong__') return;
+
+        try {
+          const msg = JSON.parse(event.data);
+          handleMessage(msg);
+        } catch (e) {
+          console.warn('Failed to parse message:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        updateConnectionStatus('error', 'Disconnected');
+        dom.btnConnect.textContent = 'Connect';
+        dom.probeSection.style.display = 'none';
+        dom.metricsSection.style.display = 'none';
+        dom.controlsSection.style.display = 'none';
+        probes.clear();
+        selectedProbeId = null;
+        log('Disconnected from broker', 'error');
+      };
+
+      ws.onerror = () => {
+        updateConnectionStatus('error', 'Connection error');
+        dom.btnConnect.textContent = 'Connect';
+      };
+    }
+
+    function updateConnectionStatus(state, text) {
+      dom.connDot.className = 'status-indicator ' + state;
+      dom.connText.textContent = text;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MESSAGE HANDLING
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function handleMessage(msg) {
+      switch (msg.type) {
+        case 'probeList':
+          handleProbeList(msg.probes);
+          break;
+
+        case 'probeOnline':
+          probes.set(msg.probeId, {
+            id: msg.probeId,
+            name: msg.name,
+            location: msg.location,
+            online: true
+          });
+          renderProbeList();
+          log(`Probe online: ${msg.name}`, 'success');
+          break;
+
+        case 'probeOffline':
+          probes.delete(msg.probeId);
+          if (selectedProbeId === msg.probeId) {
+            selectedProbeId = null;
+            dom.metricsSection.style.display = 'none';
+            dom.controlsSection.style.display = 'none';
+          }
+          renderProbeList();
+          log(`Probe offline: ${msg.probeId}`, 'error');
+          break;
+
+        case 'metrics':
+          if (msg.probeId === selectedProbeId) {
+            updateMetrics(msg.payload);
+          }
+          break;
+
+        case 'controlAck':
+          handleControlAck(msg);
+          break;
+
+        case 'subscribed':
+          log(`Subscribed to ${msg.probeName}`, 'success');
+          break;
+
+        case 'error':
+          log(`Error: ${msg.message}`, 'error');
+          break;
+      }
+    }
+
+    function handleProbeList(probeArray) {
+      probes.clear();
+      for (const p of probeArray) {
+        probes.set(p.id, {
+          id: p.id,
+          name: p.name,
+          location: p.location,
+          online: true
+        });
+      }
+      renderProbeList();
+    }
+
+    function handleControlAck(msg) {
+      const status = msg.success ? 'success' : 'error';
+      const text = msg.success
+        ? `${msg.command}: OK`
+        : `${msg.command}: ${msg.error}`;
+      log(text, status);
+
+      if (msg.command === 'getState' && msg.success && msg.value) {
+        log(`  State: ${JSON.stringify(msg.value)}`, 'success');
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROBE SELECTION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function renderProbeList() {
+      if (probes.size === 0) {
+        dom.probeList.innerHTML = '<div class="empty-state">No probes connected</div>';
+        return;
+      }
+
+      let html = '';
+      for (const [id, probe] of probes) {
+        const selected = id === selectedProbeId ? 'selected' : '';
+        html += `
+          <div class="probe-item ${selected}" data-probe-id="${id}">
+            <span class="name">${probe.name}</span>
+            <span class="status">${probe.location || 'Online'}</span>
+          </div>
+        `;
+      }
+      dom.probeList.innerHTML = html;
+
+      // Add click handlers
+      dom.probeList.querySelectorAll('.probe-item').forEach(el => {
+        el.addEventListener('click', () => selectProbe(el.dataset.probeId));
+      });
+    }
+
+    function selectProbe(probeId) {
+      // Unsubscribe from previous
+      if (selectedProbeId && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'unsubscribe', probeId: selectedProbeId }));
+      }
+
+      selectedProbeId = probeId;
+      renderProbeList();
+
+      // Subscribe to new probe
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'subscribe', probeId }));
+      }
+
+      // Show controls
+      dom.metricsSection.style.display = 'grid';
+      dom.controlsSection.style.display = 'block';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // METRICS UPDATE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function updateMetrics(payload) {
+      // Handle both standard and rich payload formats
+      const metrics = payload.metrics || payload;
+
+      if (metrics.lufs) {
+        const lufsI = metrics.lufs.integrated;
+        if (lufsI !== null && isFinite(lufsI)) {
+          dom.lufsI.textContent = lufsI.toFixed(1);
+          dom.lufsI.className = 'value ' + getLufsClass(lufsI);
+        }
+      }
+
+      if (metrics.truePeak) {
+        const tpL = metrics.truePeak.left ?? -Infinity;
+        const tpR = metrics.truePeak.right ?? -Infinity;
+        const tpMax = Math.max(tpL, tpR);
+        if (isFinite(tpMax)) {
+          dom.tpMax.textContent = tpMax.toFixed(1);
+          dom.tpMax.className = 'value ' + getTpClass(tpMax);
+        }
+      }
+    }
+
+    function getLufsClass(lufs) {
+      if (lufs > -22) return 'alert';
+      if (lufs > -24) return 'ok';
+      return 'warn';
+    }
+
+    function getTpClass(tp) {
+      if (tp > -1) return 'alert';
+      if (tp > -3) return 'warn';
+      return 'ok';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CONTROL COMMANDS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    dom.btnResetIntegration.addEventListener('click', () => {
+      sendControl('resetIntegration');
+    });
+
+    dom.btnGetState.addEventListener('click', () => {
+      sendControl('getState');
+    });
+
+    function sendControl(command, value = null) {
+      if (!selectedProbeId || !ws || ws.readyState !== WebSocket.OPEN) {
+        log('Not connected or no probe selected', 'error');
+        return;
+      }
+
+      const requestId = `req-${++requestCounter}`;
+
+      ws.send(JSON.stringify({
+        type: 'control',
+        probeId: selectedProbeId,
+        command,
+        value,
+        requestId
+      }));
+
+      log(`Sent: ${command}`, 'success');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // LOGGING
+    // ─────────────────────────────────────────────────────────────────────────
+
+    let logEntries = [];
+
+    function log(text, type = '') {
+      const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+      logEntries.unshift({ time, text, type });
+
+      // Keep last 50 entries
+      if (logEntries.length > 50) {
+        logEntries = logEntries.slice(0, 50);
+      }
+
+      renderLog();
+    }
+
+    function renderLog() {
+      if (logEntries.length === 0) {
+        dom.logPanel.innerHTML = '<div class="empty-state">Command log will appear here</div>';
+        return;
+      }
+
+      let html = '';
+      for (const entry of logEntries) {
+        html += `<div class="log-entry ${entry.type}">[${entry.time}] ${entry.text}</div>`;
+      }
+      dom.logPanel.innerHTML = html;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // HEARTBEAT
+    // ─────────────────────────────────────────────────────────────────────────
+
+    setInterval(() => {
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send('__ping__');
+      }
+    }, 25000);
+
+  </script>
+</body>
+</html>

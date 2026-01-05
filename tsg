@@ -1,0 +1,824 @@
+#!/usr/bin/env node
+/**
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * TSG Suite – Master Control
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * Unified launcher and monitoring dashboard for TSG VERO-BAAMBI.
+ *
+ * USAGE
+ * ─────
+ *   ./tsg start       Start all services with live dashboard
+ *   ./tsg status      Show service status
+ *   ./tsg logs        Stream filtered logs
+ *   ./tsg stop        Stop all services
+ *
+ * ARCHITECTURE
+ * ────────────
+ *   This script orchestrates:
+ *   - Metrics Broker (WebSocket relay)
+ *   - REST API (HTTP endpoints)
+ *   - Static file server (Web GUI)
+ *
+ *   All output is multiplexed into a single TUI dashboard with:
+ *   - Service health indicators
+ *   - Real-time metrics sparklines
+ *   - Filtered log stream
+ *   - Network topology visualization
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ */
+
+import { spawn, execSync } from 'child_process';
+import { createServer } from 'http';
+import { createConnection } from 'net';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { WebSocket } from 'ws';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CONFIG = {
+  broker: {
+    name: 'Broker',
+    port: parseInt(process.env.BROKER_PORT || '8765', 10),
+    script: 'broker/server.js'
+  },
+  gui: {
+    name: 'Web GUI',
+    port: parseInt(process.env.GUI_PORT || '3000', 10),
+    static: '.'
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PORT UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Check if a port is in use by attempting a TCP connection
+ * @param {number} port - Port number to check
+ * @returns {Promise<boolean>} True if port is in use
+ */
+function isPortInUse(port) {
+  return new Promise(resolve => {
+    const socket = createConnection({ port, host: '127.0.0.1' });
+    socket.setTimeout(500);
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.on('error', () => {
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Kill any process listening on the specified port
+ * @param {number} port - Port to free up
+ * @returns {boolean} True if a process was killed
+ */
+function killProcessOnPort(port) {
+  try {
+    // macOS/Linux: find PID using lsof and kill it
+    const result = execSync(`lsof -ti :${port} 2>/dev/null`, { encoding: 'utf8' }).trim();
+    if (result) {
+      const pids = result.split('\n').filter(p => p);
+      for (const pid of pids) {
+        try {
+          execSync(`kill -9 ${pid} 2>/dev/null`);
+        } catch {
+          // Process may have already exited
+        }
+      }
+      return true;
+    }
+  } catch {
+    // No process found on port
+  }
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANSI HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const c = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
+  bgBlue: '\x1b[44m',
+  clear: '\x1b[2J\x1b[H',
+  hideCursor: '\x1b[?25l',
+  showCursor: '\x1b[?25h',
+  // Alternate screen buffer (like vim/htop - doesn't pollute scrollback)
+  altScreenOn: '\x1b[?1049h',
+  altScreenOff: '\x1b[?1049l'
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPARKLINE RENDERER
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SPARK_CHARS = '▁▂▃▄▅▆▇█';
+
+function sparkline(values, width = 20) {
+  if (!values || values.length === 0) return c.dim + '─'.repeat(width) + c.reset;
+
+  const data = values.slice(-width);
+  const min = Math.min(...data.filter(v => isFinite(v)));
+  const max = Math.max(...data.filter(v => isFinite(v)));
+  const range = max - min || 1;
+
+  return data.map(v => {
+    if (!isFinite(v)) return c.dim + '·' + c.reset;
+    const idx = Math.round(((v - min) / range) * (SPARK_CHARS.length - 1));
+    return c.cyan + SPARK_CHARS[idx] + c.reset;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOG FILTER & FORMATTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LOG_PATTERNS = {
+  ignore: [
+    /^\s*$/,
+    /node_modules/,
+    /ExperimentalWarning/,
+    /DeprecationWarning/,
+    /^Debugger/,
+    /listening on/i,  // We show this in status instead
+    /^[╔╗╚╝║╠╣═─]+/,  // Box drawing (startup banner)
+    /Press Ctrl\+C/,
+    /WebSocket:\s+ws:/,
+    /REST API:\s+http:/,
+    /VERO-BAAMBI/,
+    /TSG Suite/,
+    /Broadcast Audio/
+  ],
+  highlight: {
+    error: { pattern: /error|fail|exception/i, color: c.red },
+    warning: { pattern: /warn|caution/i, color: c.yellow },
+    success: { pattern: /success|complete|connected|online/i, color: c.green },
+    metric: { pattern: /lufs|dbtp|peak/i, color: c.cyan }
+  }
+};
+
+function shouldShowLog(line) {
+  return !LOG_PATTERNS.ignore.some(p => p.test(line));
+}
+
+function formatLog(source, line) {
+  if (!shouldShowLog(line)) return null;
+
+  const time = new Date().toLocaleTimeString('en-GB', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+
+  let coloredLine = line;
+  for (const [, { pattern, color }] of Object.entries(LOG_PATTERNS.highlight)) {
+    if (pattern.test(line)) {
+      coloredLine = color + line + c.reset;
+      break;
+    }
+  }
+
+  const sourceColor = source === 'broker' ? c.blue : c.magenta;
+  return `${c.dim}${time}${c.reset} ${sourceColor}[${source}]${c.reset} ${coloredLine}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVICE MANAGER
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ServiceManager {
+  constructor() {
+    this.services = new Map();
+    this.logs = [];
+    this.maxLogs = 100;
+    this.metrics = {
+      // Loudness
+      lufsI: [],
+      lufsM: [],
+      lufsS: [],
+      lra: [],
+      // True Peak
+      truePeak: [],
+      tpLeft: [],
+      tpRight: [],
+      // PPM
+      ppmLeft: [],
+      ppmRight: [],
+      // Stereo
+      correlation: [],
+      balance: [],
+      width: [],
+      // Status
+      connections: 0,
+      probes: 0,
+      isActive: false,
+      inputDevice: null
+    };
+    this.metricsWs = null;
+    this.probeList = [];           // Array of { id, name }
+    this.selectedProbeIndex = 0;   // Currently selected probe index
+    this.selectedProbeId = null;   // ID of selected probe for filtering
+  }
+
+  async startBroker() {
+    const { port, script } = CONFIG.broker;
+    const scriptPath = join(__dirname, script);
+
+    if (!existsSync(scriptPath)) {
+      this.addLog('system', `Broker script not found: ${script}`);
+      return false;
+    }
+
+    const proc = spawn('node', [scriptPath], {
+      cwd: __dirname,
+      env: { ...process.env, BROKER_PORT: port.toString() },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    proc.stdout.on('data', data => {
+      data.toString().split('\n').forEach(line => {
+        const formatted = formatLog('broker', line.trim());
+        if (formatted) this.addLog('broker', formatted);
+      });
+    });
+
+    proc.stderr.on('data', data => {
+      data.toString().split('\n').forEach(line => {
+        const formatted = formatLog('broker', line.trim());
+        if (formatted) this.addLog('broker', formatted);
+      });
+    });
+
+    proc.on('exit', code => {
+      this.services.delete('broker');
+      this.addLog('system', `Broker exited with code ${code}`);
+    });
+
+    this.services.set('broker', { proc, port, status: 'running' });
+
+    // Connect to broker for metrics
+    setTimeout(() => this.connectMetrics(), 1000);
+
+    return true;
+  }
+
+  async startGUI() {
+    const { port } = CONFIG.gui;
+
+    const server = createServer((req, res) => {
+      // Parse URL and strip query string for file path resolution
+      const urlPath = new URL(req.url, `http://localhost:${port}`).pathname;
+      let filePath = join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
+
+      // Security: prevent directory traversal
+      if (!filePath.startsWith(__dirname)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+
+      try {
+        const content = readFileSync(filePath);
+        const ext = filePath.split('.').pop();
+        const mimeTypes = {
+          'html': 'text/html',
+          'js': 'application/javascript',
+          'css': 'text/css',
+          'json': 'application/json',
+          'png': 'image/png',
+          'svg': 'image/svg+xml'
+        };
+        res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'text/plain' });
+        res.end(content);
+      } catch (e) {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+    });
+
+    server.listen(port);
+    this.services.set('gui', { server, port, status: 'running' });
+    return true;
+  }
+
+  connectMetrics() {
+    const { port } = CONFIG.broker;
+
+    try {
+      this.metricsWs = new WebSocket(`ws://localhost:${port}`);
+
+      this.metricsWs.on('open', () => {
+        this.metricsWs.send(JSON.stringify({ type: 'list' }));
+      });
+
+      this.metricsWs.on('message', data => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.type === 'probeList') {
+            // Store probe list with id and name
+            this.probeList = (msg.probes || []).map(p => ({ id: p.id, name: p.name || p.id.slice(0, 8) }));
+            this.metrics.probes = this.probeList.length;
+
+            // Auto-select first probe if none selected
+            if (!this.selectedProbeId && this.probeList.length > 0) {
+              this.selectedProbeIndex = 0;
+              this.selectedProbeId = this.probeList[0].id;
+            }
+
+            // Subscribe to all probes
+            this.probeList.forEach(probe => {
+              this.metricsWs.send(JSON.stringify({ type: 'subscribe', probeId: probe.id }));
+            });
+          } else if (msg.type === 'probeOnline') {
+            // New probe came online
+            const newProbe = { id: msg.probeId, name: msg.name || msg.probeId?.slice(0, 8) };
+            if (!this.probeList.find(p => p.id === newProbe.id)) {
+              this.probeList.push(newProbe);
+              this.metrics.probes = this.probeList.length;
+            }
+            // Auto-select if first probe
+            if (!this.selectedProbeId) {
+              this.selectedProbeIndex = 0;
+              this.selectedProbeId = newProbe.id;
+            }
+            // Subscribe to new probe
+            this.metricsWs.send(JSON.stringify({ type: 'subscribe', probeId: newProbe.id }));
+          } else if (msg.type === 'probeOffline') {
+            // Remove probe from list
+            this.probeList = this.probeList.filter(p => p.id !== msg.probeId);
+            this.metrics.probes = this.probeList.length;
+            // If selected probe went offline, select another
+            if (this.selectedProbeId === msg.probeId) {
+              this.selectedProbeIndex = Math.min(this.selectedProbeIndex, this.probeList.length - 1);
+              this.selectedProbeId = this.probeList[this.selectedProbeIndex]?.id || null;
+              // Clear metrics when switching
+              this.metrics.lufsI = [];
+              this.metrics.lufsM = [];
+              this.metrics.truePeak = [];
+            }
+          } else if (msg.type === 'metrics' && msg.payload) {
+            // ONLY process metrics from selected probe
+            if (msg.probeId !== this.selectedProbeId) return;
+
+            const p = msg.payload;
+            // Protocol-agnostic: support both flat (p.lufs) and nested (p.metrics.lufs) formats
+            const m = p.metrics || p;
+            const maxHistory = 60;
+
+            // Helper to push and trim (val must be a finite number, not null/undefined)
+            const push = (arr, val) => {
+              if (typeof val === 'number' && isFinite(val)) {
+                arr.push(val);
+                if (arr.length > maxHistory) arr.shift();
+              }
+            };
+
+            // LUFS
+            const lufs = m.lufs;
+            if (lufs) {
+              push(this.metrics.lufsI, lufs.integrated);
+              push(this.metrics.lufsM, lufs.momentary);
+              push(this.metrics.lufsS, lufs.shortTerm);
+              push(this.metrics.lra, lufs.range || lufs.lra);
+            }
+
+            // True Peak
+            const tp = m.truePeak;
+            if (tp) {
+              push(this.metrics.truePeak, tp.max ?? tp.dbtpMax);
+              push(this.metrics.tpLeft, tp.left ?? tp.dbtpLeft);
+              push(this.metrics.tpRight, tp.right ?? tp.dbtpRight);
+            }
+
+            // PPM
+            const ppm = m.ppm;
+            if (ppm) {
+              push(this.metrics.ppmLeft, ppm.left ?? ppm.dbfsLeft);
+              push(this.metrics.ppmRight, ppm.right ?? ppm.dbfsRight);
+            }
+
+            // Stereo
+            const stereo = m.stereo;
+            if (stereo) {
+              push(this.metrics.correlation, stereo.correlation);
+              push(this.metrics.balance, stereo.balance);
+              push(this.metrics.width, stereo.width);
+            }
+
+            // Status
+            this.metrics.isActive = p.isActive ?? false;
+            this.metrics.inputDevice = p.inputDevice || null;
+          }
+        } catch (e) { /* ignore parse errors */ }
+      });
+
+      this.metricsWs.on('close', () => {
+        setTimeout(() => this.connectMetrics(), 5000);
+      });
+
+      this.metricsWs.on('error', () => {
+        // Will retry on close
+      });
+    } catch (e) {
+      setTimeout(() => this.connectMetrics(), 5000);
+    }
+  }
+
+  selectNextProbe() {
+    if (this.probeList.length === 0) return;
+    this.selectedProbeIndex = (this.selectedProbeIndex + 1) % this.probeList.length;
+    this.selectedProbeId = this.probeList[this.selectedProbeIndex].id;
+    this._clearMetricsHistory();
+  }
+
+  selectPrevProbe() {
+    if (this.probeList.length === 0) return;
+    this.selectedProbeIndex = (this.selectedProbeIndex - 1 + this.probeList.length) % this.probeList.length;
+    this.selectedProbeId = this.probeList[this.selectedProbeIndex].id;
+    this._clearMetricsHistory();
+  }
+
+  _clearMetricsHistory() {
+    // Clear all metric arrays for fresh start
+    this.metrics.lufsI = [];
+    this.metrics.lufsM = [];
+    this.metrics.lufsS = [];
+    this.metrics.lra = [];
+    this.metrics.truePeak = [];
+    this.metrics.tpLeft = [];
+    this.metrics.tpRight = [];
+    this.metrics.ppmLeft = [];
+    this.metrics.ppmRight = [];
+    this.metrics.correlation = [];
+    this.metrics.balance = [];
+    this.metrics.width = [];
+    this.metrics.isActive = false;
+    this.metrics.inputDevice = null;
+  }
+
+  getSelectedProbeName() {
+    if (this.probeList.length === 0) return 'No probes';
+    const probe = this.probeList[this.selectedProbeIndex];
+    return probe?.name || 'Unknown';
+  }
+
+  addLog(source, message) {
+    this.logs.push({ source, message, time: Date.now() });
+    if (this.logs.length > this.maxLogs) this.logs.shift();
+  }
+
+  getStatus(name) {
+    const service = this.services.get(name);
+    const port = name === 'broker' ? CONFIG.broker.port : CONFIG.gui.port;
+    if (service) {
+      return { running: true, port, managed: true };
+    }
+    // Check if something else is using the port (orphaned process)
+    return { running: false, port, managed: false };
+  }
+
+  /**
+   * Check actual port status (async version for accurate detection)
+   * @param {string} name - Service name ('broker' or 'gui')
+   * @returns {Promise<{running: boolean, port: number, managed: boolean}>}
+   */
+  async getStatusAsync(name) {
+    const port = name === 'broker' ? CONFIG.broker.port : CONFIG.gui.port;
+    const service = this.services.get(name);
+    const inUse = await isPortInUse(port);
+    return {
+      running: inUse,
+      port,
+      managed: !!service
+    };
+  }
+
+  stopAll() {
+    for (const [name, service] of this.services) {
+      if (service.proc) {
+        service.proc.kill();
+      } else if (service.server) {
+        service.server.close();
+      }
+    }
+    if (this.metricsWs) {
+      this.metricsWs.close();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DASHBOARD RENDERER
+// ─────────────────────────────────────────────────────────────────────────────
+
+class Dashboard {
+  constructor(manager) {
+    this.manager = manager;
+    this.running = false;
+    this.width = process.stdout.columns || 80;
+    this.height = process.stdout.rows || 24;
+    this.startTime = Date.now();
+  }
+
+  formatUptime() {
+    const secs = Math.floor((Date.now() - this.startTime) / 1000);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  start() {
+    this.running = true;
+    process.stdout.write(c.altScreenOn + c.hideCursor);
+
+    process.on('SIGINT', () => this.stop());
+    process.on('SIGTERM', () => this.stop());
+
+    process.stdin.setRawMode?.(true);
+    process.stdin.resume();
+    process.stdin.on('data', key => {
+      const k = key.toString();
+      if (k === 'q' || k === '\x03') {
+        this.stop();
+      } else if (k === '\x1b[C' || k === 'l' || k === 'n') {
+        // Right arrow, 'l', or 'n' = next probe
+        this.manager.selectNextProbe();
+        this.render();
+      } else if (k === '\x1b[D' || k === 'h' || k === 'p') {
+        // Left arrow, 'h', or 'p' = previous probe
+        this.manager.selectPrevProbe();
+        this.render();
+      } else if (k === 'r') {
+        // Reset meters (clear history)
+        this.manager._clearMetricsHistory();
+        this.manager.addLog('system', 'Metrics history reset');
+        this.render();
+      }
+    });
+
+    this.render();
+    this.interval = setInterval(() => this.render(), 500);
+  }
+
+  stop() {
+    this.running = false;
+    clearInterval(this.interval);
+    process.stdout.write(c.showCursor + c.altScreenOff);
+    this.manager.stopAll();
+    console.log(c.dim + 'TSG Suite stopped.' + c.reset);
+    process.exit(0);
+  }
+
+  render() {
+    const w = this.width;
+    const now = new Date().toLocaleTimeString('en-GB', {
+      hour: '2-digit', minute: '2-digit'
+    });
+    const date = new Date().toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short'
+    });
+
+    const broker = this.manager.getStatus('broker');
+    const gui = this.manager.getStatus('gui');
+    const m = this.manager.metrics;
+
+    // Helper to get latest value
+    const latest = (arr, decimals = 1) =>
+      arr.length > 0 ? arr[arr.length - 1].toFixed(decimals) : '—';
+
+    const lines = [];
+
+    // Header
+    const uptime = this.formatUptime();
+    lines.push('');
+    lines.push(`  ${c.bold}${c.cyan}TSG SUITE${c.reset} ${c.dim}· VERO-BAAMBI${c.reset}` +
+               `${' '.repeat(Math.max(0, w - 55))}${c.dim}up ${uptime}  ${date} ${now}${c.reset}`);
+    lines.push(`  ${c.dim}${'─'.repeat(Math.min(w - 4, 76))}${c.reset}`);
+
+    // Services
+    lines.push('');
+    lines.push(`  ${c.bold}SERVICES${c.reset}`);
+    lines.push(`  ${broker.running ? c.green + '●' : c.red + '○'}${c.reset} Broker` +
+               `${c.dim}  :${broker.port || '—'}${c.reset}` +
+               `  ${c.dim}${m.probes} probe${m.probes !== 1 ? 's' : ''}${c.reset}`);
+    lines.push(`  ${gui.running ? c.green + '●' : c.red + '○'}${c.reset} Web GUI` +
+               `${c.dim} :${gui.port || '—'}${c.reset}`);
+
+    // Metrics colour functions
+    const colorLufs = (v) => {
+      if (v === '—') return c.dim + v + c.reset;
+      const n = parseFloat(v);
+      if (n > -14) return c.red + v + c.reset;      // Too loud
+      if (n > -23) return c.green + v + c.reset;    // Good range (-23 target)
+      if (n > -30) return c.yellow + v + c.reset;   // Quiet
+      return c.dim + v + c.reset;                   // Very quiet
+    };
+
+    const colorTP = (v) => {
+      if (v === '—') return c.dim + v + c.reset;
+      const n = parseFloat(v);
+      if (n > -1) return c.red + v + c.reset;       // Clipping risk
+      if (n > -3) return c.yellow + v + c.reset;    // Close to limit
+      return c.green + v + c.reset;                 // Safe
+    };
+
+    const colorCorr = (v) => {
+      if (v === '—') return c.dim + v + c.reset;
+      const n = parseFloat(v);
+      if (n < 0) return c.red + v + c.reset;        // Out of phase
+      if (n < 0.5) return c.yellow + v + c.reset;   // Wide/decorrelated
+      return c.green + v + c.reset;                 // Good mono compatibility
+    };
+
+    // Selected probe info
+    const probeName = this.manager.getSelectedProbeName();
+    const probeCount = this.manager.probeList.length;
+    const probeIdx = this.manager.selectedProbeIndex + 1;
+
+    // Probe status indicator
+    const activeIcon = m.isActive ? c.green + '●' : c.yellow + '○';
+    const deviceInfo = m.inputDevice ? c.dim + ` [${m.inputDevice}]` + c.reset : '';
+    const probeIndicator = probeCount > 0
+      ? `${activeIcon}${c.reset} ${c.bold}${probeName}${c.reset} ${c.dim}(${probeIdx}/${probeCount})${c.reset}${deviceInfo}`
+      : `${c.dim}No probes connected${c.reset}`;
+
+    // ─── LOUDNESS ───
+    lines.push('');
+    lines.push(`  ${c.bold}LOUDNESS${c.reset}  ${probeIndicator}`);
+    lines.push(`  LUFS-I  ${sparkline(m.lufsI, 20)} ${c.bold}${colorLufs(latest(m.lufsI)).padStart(7)}${c.reset} ${c.dim}LUFS${c.reset}`);
+    lines.push(`  LUFS-S  ${sparkline(m.lufsS, 20)} ${c.bold}${colorLufs(latest(m.lufsS)).padStart(7)}${c.reset} ${c.dim}LUFS${c.reset}`);
+    lines.push(`  LUFS-M  ${sparkline(m.lufsM, 20)} ${c.bold}${colorLufs(latest(m.lufsM)).padStart(7)}${c.reset} ${c.dim}LUFS${c.reset}`);
+    lines.push(`  LRA     ${sparkline(m.lra, 20)} ${c.bold}${latest(m.lra).padStart(7)}${c.reset} ${c.dim}LU${c.reset}`);
+
+    // ─── PEAKS ───
+    lines.push('');
+    lines.push(`  ${c.bold}TRUE PEAK${c.reset}`);
+    lines.push(`  Max     ${sparkline(m.truePeak, 20)} ${c.bold}${colorTP(latest(m.truePeak)).padStart(7)}${c.reset} ${c.dim}dBTP${c.reset}`);
+    lines.push(`  L / R   ${c.dim}${latest(m.tpLeft).padStart(7)} / ${latest(m.tpRight).padEnd(7)}${c.reset}`);
+
+    // ─── PPM ───
+    const ppmL = latest(m.ppmLeft);
+    const ppmR = latest(m.ppmRight);
+    lines.push('');
+    lines.push(`  ${c.bold}PPM${c.reset}`);
+    lines.push(`  L / R   ${c.dim}${ppmL.padStart(7)} / ${ppmR.padEnd(7)}${c.reset} ${c.dim}dBFS${c.reset}`);
+
+    // ─── STEREO ───
+    const corr = latest(m.correlation, 2);
+    const bal = latest(m.balance, 2);
+    const wid = latest(m.width, 2);
+    lines.push('');
+    lines.push(`  ${c.bold}STEREO${c.reset}`);
+    lines.push(`  Corr ρ  ${sparkline(m.correlation, 20)} ${c.bold}${colorCorr(corr).padStart(7)}${c.reset}`);
+    lines.push(`  Balance ${c.dim}${bal.padStart(7)}${c.reset}  ${c.dim}(L ← 0 → R)${c.reset}`);
+    lines.push(`  Width   ${c.dim}${wid.padStart(7)}${c.reset}  ${c.dim}(0=mono, 1=stereo)${c.reset}`);
+
+    // ─── LOGS ───
+    lines.push('');
+    lines.push(`  ${c.bold}LOGS${c.reset} ${c.dim}(filtered)${c.reset}`);
+    const recentLogs = this.manager.logs.slice(-4);
+    if (recentLogs.length === 0) {
+      lines.push(`  ${c.dim}No activity yet...${c.reset}`);
+    } else {
+      recentLogs.forEach(log => {
+        const truncated = log.message.length > w - 4
+          ? log.message.slice(0, w - 7) + '...'
+          : log.message;
+        lines.push(`  ${truncated}`);
+      });
+    }
+
+    // ─── FOOTER ───
+    lines.push('');
+    const controls = probeCount > 1
+      ? `${c.dim}[←/→] probe  [r]eset  [q]uit${c.reset}`
+      : `${c.dim}[r]eset  [q]uit${c.reset}`;
+    lines.push(`  ${controls}`);
+
+    // Render
+    process.stdout.write(c.clear);
+    console.log(lines.join('\n'));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function main() {
+  const args = process.argv.slice(2);
+  const command = args[0] || 'start';
+
+  const manager = new ServiceManager();
+
+  switch (command) {
+    case 'start':
+    case 'up': {  // 'up' kept as alias for muscle memory
+      console.log(`\n  ${c.cyan}Starting TSG Suite...${c.reset}\n`);
+
+      // Clean up any orphaned processes first
+      const brokerInUse = await isPortInUse(CONFIG.broker.port);
+      const guiInUse = await isPortInUse(CONFIG.gui.port);
+
+      if (brokerInUse || guiInUse) {
+        console.log(`  ${c.yellow}Cleaning up orphaned processes...${c.reset}`);
+        if (brokerInUse) killProcessOnPort(CONFIG.broker.port);
+        if (guiInUse) killProcessOnPort(CONFIG.gui.port);
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      await manager.startBroker();
+      await manager.startGUI();
+
+      // Give services time to start
+      await new Promise(r => setTimeout(r, 500));
+
+      const dashboard = new Dashboard(manager);
+      dashboard.start();
+      break;
+    }
+
+    case 'status': {
+      const broker = await manager.getStatusAsync('broker');
+      const gui = await manager.getStatusAsync('gui');
+      console.log(`\n  TSG Suite Status`);
+      console.log(`  ────────────────`);
+      const brokerLabel = broker.running
+        ? (broker.managed ? `${c.green}Running${c.reset}` : `${c.yellow}Running (orphaned)${c.reset}`)
+        : `${c.dim}Stopped${c.reset}`;
+      const guiLabel = gui.running
+        ? (gui.managed ? `${c.green}Running${c.reset}` : `${c.yellow}Running (orphaned)${c.reset}`)
+        : `${c.dim}Stopped${c.reset}`;
+      console.log(`  Broker  :${broker.port}  ${brokerLabel}`);
+      console.log(`  Web GUI :${gui.port}  ${guiLabel}\n`);
+      break;
+    }
+
+    case 'stop': {
+      console.log(`\n  ${c.yellow}Stopping TSG Suite...${c.reset}`);
+      // First stop any managed services
+      manager.stopAll();
+      // Then kill any orphaned processes on the ports
+      let killed = false;
+      if (killProcessOnPort(CONFIG.broker.port)) {
+        console.log(`  ${c.dim}Killed process on :${CONFIG.broker.port}${c.reset}`);
+        killed = true;
+      }
+      if (killProcessOnPort(CONFIG.gui.port)) {
+        console.log(`  ${c.dim}Killed process on :${CONFIG.gui.port}${c.reset}`);
+        killed = true;
+      }
+      if (!killed) {
+        console.log(`  ${c.dim}No processes found${c.reset}`);
+      }
+      console.log();
+      break;
+    }
+
+    default:
+      console.log(`
+  ${c.bold}TSG Suite${c.reset} – Master Control
+
+  ${c.bold}Usage:${c.reset}
+    ./tsg start     Start all services with live dashboard
+    ./tsg status    Show service status
+    ./tsg stop      Stop all services
+
+  ${c.bold}Environment:${c.reset}
+    BROKER_PORT     WebSocket broker port (default: 8765)
+    GUI_PORT        Web GUI port (default: 3000)
+`);
+  }
+}
+
+main().catch(err => {
+  console.error(c.red + 'Error:' + c.reset, err.message);
+  process.exit(1);
+});
