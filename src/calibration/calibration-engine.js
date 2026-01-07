@@ -1471,6 +1471,12 @@ export class CalibrationEngine {
     // Stop generator
     this._sourceController.stopGenerator();
 
+    // Restore previous input mode so UI components (e.g. calibration badge) see correct state
+    if (this._previousSourceMode && this._previousSourceMode !== 'generator') {
+      appState.set({ inputMode: this._previousSourceMode });
+    }
+    this._previousSourceMode = null;
+
     // Clear callbacks
     this._onProgress = null;
     this._onComplete = null;
