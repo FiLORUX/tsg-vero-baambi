@@ -70,6 +70,16 @@ Supports EBU R128 (−23 LUFS), ATSC A/85 (−24 LKFS), and streaming (−16 LUF
 
 ---
 
+## UI Screenshots
+
+### Fullscreen view
+![TSG VERO-BAAMBI fullscreen view](src/images/screenshot-tsg-vero-baambi-fullscreen.png)
+
+### Menu view
+![TSG VERO-BAAMBI menu view](src/images/screenshot-tsg-vero-baambi-menu.png)
+
+---
+
 ## Quick Start
 
 **HTTP server (recommended):**
