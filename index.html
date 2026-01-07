@@ -589,12 +589,15 @@
       min-height: 0;
     }
 
-    /* Radar wrapper – square, sized by CSS (no JS sizing needed) */
+    /* Radar wrapper – square, sized by CSS (no JS sizing needed)
+       height: 100% gives size from grid cell, aspect-ratio calculates width,
+       max-width constrains if cell is wider than tall */
     .radarWrap {
       grid-area: radar;
       position: relative;
       justify-self: center;
       align-self: center;
+      height: 100%;
       aspect-ratio: 1;
       max-width: 100%;
       max-height: 100%;
