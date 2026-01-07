@@ -587,20 +587,19 @@
       gap: 8px;
       height: 100%;
       min-height: 0;
+      container-type: size;
+      container-name: loudness-module;
     }
 
-    /* Radar wrapper – square, sized by CSS (no JS sizing needed)
-       height: 100% gives size from grid cell, aspect-ratio calculates width,
-       max-width constrains if cell is wider than tall */
+    /* Radar wrapper – square, sized via container queries
+       Uses min(width, height) of parent to ensure perfect circle */
     .radarWrap {
       grid-area: radar;
       position: relative;
       justify-self: center;
       align-self: center;
-      height: 100%;
-      aspect-ratio: 1;
-      max-width: 100%;
-      max-height: 100%;
+      width: min(100cqi, 100cqb);
+      height: min(100cqi, 100cqb);
       min-width: 100px;
       min-height: 100px;
     }
