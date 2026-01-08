@@ -32,9 +32,9 @@ Desktop.ini
 *.sublime-*
 
 # ═══════════════════════════════════════════════════════════════════
-# AI / LLM Tools (except .claude/ which is tracked for internal docs)
+# AI / LLM Tools
 # ═══════════════════════════════════════════════════════════════════
-.claude/settings.local.json
+.claude/
 .cursor/
 .aider/
 .continue/
@@ -46,6 +46,7 @@ Desktop.ini
 .windsurf/
 .bolt/
 .v0/
+llm-context/
 
 # ═══════════════════════════════════════════════════════════════════
 # Logs & Cache
