@@ -27,9 +27,93 @@
  * - Locale-independent decimal formatting (always uses ".")
  * - Sign handling appropriate for each measurement type
  *
+ * PERFORMANCE
+ * ───────────
+ * Frequently-called formatters use pre-computed lookup tables to eliminate
+ * toFixed()/padStart() calls and string allocations on every frame. Tables
+ * are lazily initialised on first use.
+ *
  * @module utils/format
  * ═══════════════════════════════════════════════════════════════════════════════
  */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRE-COMPUTED LOOKUP TABLES
+// ─────────────────────────────────────────────────────────────────────────────
+// Eliminates toFixed()/padStart() calls on hot paths. Tables are initialised
+// lazily on first use to avoid startup cost if not needed.
+
+/** @type {Map<number, string>|null} dB lookup: key = value * 10, value = formatted string */
+let dbLookup = null;
+
+/** @type {Map<number, string>|null} dBu lookup with sign: key = value * 10 */
+let dbuLookup = null;
+
+/** @type {Map<number, string>|null} Correlation lookup: key = value * 100 */
+let corrLookup = null;
+
+/** @type {Map<number, string>|null} LUFS lookup: key = value * 10 */
+let lufsLookup = null;
+
+/**
+ * Initialise dB lookup table (-99.9 to +30.0 dB, 0.1 resolution).
+ * @private
+ */
+function initDbLookup() {
+  if (dbLookup) return;
+  dbLookup = new Map();
+  // Range: -99.9 to +30.0 in 0.1 steps
+  for (let i = -999; i <= 300; i++) {
+    const value = i / 10;
+    dbLookup.set(i, value.toFixed(1).padStart(5));
+  }
+  // Special value for out-of-range/NaN
+  dbLookup.set(-Infinity, '--.-'.padStart(5));
+}
+
+/**
+ * Initialise dBu lookup table with explicit sign (-99.9 to +30.0 dB, 0.1 resolution).
+ * @private
+ */
+function initDbuLookup() {
+  if (dbuLookup) return;
+  dbuLookup = new Map();
+  for (let i = -999; i <= 300; i++) {
+    const value = i / 10;
+    const sign = value >= 0 ? '+' : '';
+    dbuLookup.set(i, (sign + value.toFixed(1)).padStart(5));
+  }
+  dbuLookup.set(-Infinity, '--.-'.padStart(5));
+}
+
+/**
+ * Initialise correlation lookup table (-1.00 to +1.00, 0.01 resolution).
+ * @private
+ */
+function initCorrLookup() {
+  if (corrLookup) return;
+  corrLookup = new Map();
+  for (let i = -100; i <= 100; i++) {
+    const value = i / 100;
+    const sign = value >= 0 ? '+' : '';
+    corrLookup.set(i, sign + value.toFixed(2));
+  }
+  corrLookup.set(-Infinity, '+-.--');
+}
+
+/**
+ * Initialise LUFS lookup table (-99.9 to +10.0, 0.1 resolution).
+ * @private
+ */
+function initLufsLookup() {
+  if (lufsLookup) return;
+  lufsLookup = new Map();
+  for (let i = -999; i <= 100; i++) {
+    const value = i / 10;
+    lufsLookup.set(i, value.toFixed(1).padStart(5) + ' LUFS');
+  }
+  lufsLookup.set(-Infinity, '--.- LUFS');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // dB FORMATTERS
@@ -38,6 +122,9 @@
 /**
  * Format dB value with fixed width.
  * Output like: "-23.4", " -3.4", "  0.0"
+ *
+ * Uses pre-computed lookup table for default parameters (decimals=1, width=5)
+ * to eliminate string allocations on hot render paths.
  *
  * @param {number} value - dB value to format
  * @param {number} [decimals=1] - Decimal places
@@ -51,6 +138,20 @@
  * formatDb(NaN)   // "--.-"
  */
 export function formatDb(value, decimals = 1, width = 5) {
+  // Fast path: use lookup table for default parameters
+  if (decimals === 1 && width === 5) {
+    if (!dbLookup) initDbLookup();
+    if (!isFinite(value) || value < -99) {
+      return dbLookup.get(-Infinity);
+    }
+    // Quantise to 0.1 resolution and clamp to table range
+    const key = Math.round(value * 10);
+    if (key >= -999 && key <= 300) {
+      return dbLookup.get(key);
+    }
+  }
+
+  // Fallback for non-default parameters
   if (!isFinite(value) || value < -99) {
     return '--.-'.padStart(width);
   }
@@ -60,6 +161,9 @@ export function formatDb(value, decimals = 1, width = 5) {
 /**
  * Format dBu value with snap-to-zero for PPM displays.
  * Always includes +/- sign. Values near zero snap to exactly 0.
+ *
+ * Uses pre-computed lookup table for default parameters to eliminate
+ * string allocations on hot render paths.
  *
  * @param {number} value - dBu value to format
  * @param {number} [decimals=1] - Decimal places
@@ -73,6 +177,21 @@ export function formatDb(value, decimals = 1, width = 5) {
  * formatDbu(0.1)   // "+0.0" (snapped to zero)
  */
 export function formatDbu(value, decimals = 1, snapWindow = 0.25, width = 5) {
+  // Fast path: use lookup table for default parameters
+  if (decimals === 1 && width === 5) {
+    if (!dbuLookup) initDbuLookup();
+    if (!isFinite(value) || value < -99) {
+      return dbuLookup.get(-Infinity);
+    }
+    // Apply snap-to-zero, then quantise
+    const snapped = (Math.abs(value) < snapWindow) ? 0 : value;
+    const key = Math.round(snapped * 10);
+    if (key >= -999 && key <= 300) {
+      return dbuLookup.get(key);
+    }
+  }
+
+  // Fallback for non-default parameters
   if (!isFinite(value) || value < -99) {
     return '--.-'.padStart(width);
   }
@@ -110,6 +229,9 @@ export function formatDbSigned(value, decimals = 1, width = 5) {
 /**
  * Format LUFS value for loudness displays.
  *
+ * Uses pre-computed lookup table for default parameters to eliminate
+ * string allocations on hot render paths.
+ *
  * @param {number} value - LUFS value
  * @param {number} [decimals=1] - Decimal places
  * @returns {string} Formatted string with " LUFS" suffix
@@ -119,6 +241,19 @@ export function formatDbSigned(value, decimals = 1, width = 5) {
  * formatLufs(-Infinity) // "--.- LUFS"
  */
 export function formatLufs(value, decimals = 1) {
+  // Fast path: use lookup table for default decimals
+  if (decimals === 1) {
+    if (!lufsLookup) initLufsLookup();
+    if (!isFinite(value) || value < -99) {
+      return lufsLookup.get(-Infinity);
+    }
+    const key = Math.round(value * 10);
+    if (key >= -999 && key <= 100) {
+      return lufsLookup.get(key);
+    }
+  }
+
+  // Fallback for non-default parameters
   if (!isFinite(value) || value < -99) {
     return '--.- LUFS';
   }
@@ -150,6 +285,9 @@ export function formatLRA(value, decimals = 1) {
 /**
  * Format correlation coefficient (-1.00 to +1.00).
  *
+ * Uses pre-computed lookup table to eliminate string allocations
+ * on hot render paths.
+ *
  * @param {number} value - Correlation value
  * @returns {string} Formatted string with sign
  *
@@ -158,12 +296,16 @@ export function formatLRA(value, decimals = 1) {
  * formatCorr(-0.42) // "-0.42"
  */
 export function formatCorr(value) {
+  if (!corrLookup) initCorrLookup();
+
   if (!isFinite(value)) {
-    return '+-.--';
+    return corrLookup.get(-Infinity);
   }
+
+  // Clamp to valid range and quantise to 0.01 resolution
   const clamped = Math.max(-1, Math.min(1, value));
-  const sign = clamped >= 0 ? '+' : '';
-  return sign + clamped.toFixed(2);
+  const key = Math.round(clamped * 100);
+  return corrLookup.get(key);
 }
 
 /**

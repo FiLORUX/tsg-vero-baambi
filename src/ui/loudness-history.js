@@ -42,6 +42,8 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
+import { pruneHistory, needsPruning } from '../utils/history-pruner.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -303,12 +305,12 @@ export class LoudnessHistoryStrip {
     // No ResizeObserver needed - render() handles dimension updates
   }
 
-  /** @private */
+  /** @private - Prune samples older than duration using efficient binary search */
   _pruneHistory() {
-    const now = Date.now();
-    const cutoff = now - (this._duration * 1000);
-    while (this._history.length > 0 && this._history[0].t < cutoff) {
-      this._history.shift();
+    const cutoff = Date.now() - (this._duration * 1000);
+    // Uses O(log n) binary search + single splice instead of O(n²) shift loop
+    if (needsPruning(this._history, cutoff, 't')) {
+      pruneHistory(this._history, cutoff, 't');
     }
   }
 

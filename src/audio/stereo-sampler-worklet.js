@@ -35,18 +35,45 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-const BUFFER_SIZE = 4096;
-const POST_INTERVAL_SAMPLES = 2048; // Post every ~46ms at 44.1kHz
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURABLE BUFFER PARAMETERS
+// ─────────────────────────────────────────────────────────────────────────────
+// Default: 4096 samples (85ms @ 48kHz) provides good goniometer trace history.
+// Can be configured via processorOptions.bufferSize at node creation.
+//
+// Latency trade-offs at 48kHz:
+//   4096 samples = 85ms trace history, 42ms update interval (default)
+//   2048 samples = 42ms trace history, 21ms update interval (lower latency)
+//   1024 samples = 21ms trace history, 10ms update interval (minimum recommended)
+//
+// Note: Buffer size must be power of 2. Minimum 128 for usable display.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_BUFFER_SIZE = 4096;
+const MIN_BUFFER_SIZE = 128;
+const MAX_BUFFER_SIZE = 8192;
 
 class StereoSamplerProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
 
-    /** @type {Float32Array} */
-    this._bufferL = new Float32Array(BUFFER_SIZE);
+    // Get buffer size from options, default to 4096
+    const requestedSize = options?.processorOptions?.bufferSize ?? DEFAULT_BUFFER_SIZE;
+
+    // Validate and clamp buffer size (must be power of 2)
+    let bufferSize = Math.max(MIN_BUFFER_SIZE, Math.min(MAX_BUFFER_SIZE, requestedSize));
+    // Round to nearest power of 2
+    bufferSize = Math.pow(2, Math.round(Math.log2(bufferSize)));
+
+    this._bufferSize = bufferSize;
+    // Post interval = half buffer size for 50% overlap
+    this._postInterval = Math.max(128, bufferSize / 2);
 
     /** @type {Float32Array} */
-    this._bufferR = new Float32Array(BUFFER_SIZE);
+    this._bufferL = new Float32Array(bufferSize);
+
+    /** @type {Float32Array} */
+    this._bufferR = new Float32Array(bufferSize);
 
     /** @type {number} */
     this._writeIndex = 0;
@@ -72,28 +99,29 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     const L = input[0];
     const R = input[1];
     const blockSize = L.length;
+    const bufferSize = this._bufferSize;
 
     // Copy samples to ring buffer
     // L and R are GUARANTEED from the same audio render quantum
     for (let i = 0; i < blockSize; i++) {
       this._bufferL[this._writeIndex] = L[i];
       this._bufferR[this._writeIndex] = R[i];
-      this._writeIndex = (this._writeIndex + 1) % BUFFER_SIZE;
+      this._writeIndex = (this._writeIndex + 1) % bufferSize;
     }
 
     this._samplesSincePost += blockSize;
 
     // Post to main thread at regular intervals
-    if (this._samplesSincePost >= POST_INTERVAL_SAMPLES) {
+    if (this._samplesSincePost >= this._postInterval) {
       this._samplesSincePost = 0;
 
       // Create snapshot of current buffer state
       // Rearrange so newest samples are at the end
-      const snapshotL = new Float32Array(BUFFER_SIZE);
-      const snapshotR = new Float32Array(BUFFER_SIZE);
+      const snapshotL = new Float32Array(bufferSize);
+      const snapshotR = new Float32Array(bufferSize);
 
-      for (let i = 0; i < BUFFER_SIZE; i++) {
-        const srcIdx = (this._writeIndex + i) % BUFFER_SIZE;
+      for (let i = 0; i < bufferSize; i++) {
+        const srcIdx = (this._writeIndex + i) % bufferSize;
         snapshotL[i] = this._bufferL[srcIdx];
         snapshotR[i] = this._bufferR[srcIdx];
       }

@@ -76,6 +76,7 @@ import { CalibrationWizard } from '../ui/calibration-wizard.js';
 import { CalibrationEngine, applyActiveProfilesOnStartup } from '../calibration/index.js';
 // Loudness history strip
 import { LoudnessHistoryStrip } from '../ui/loudness-history.js';
+import { pruneHistory, needsPruning } from '../utils/history-pruner.js';
 // Stereo sampler (dual-mode L/R sync) - loaded dynamically for file:// compatibility
 let stereoSamplerModule = null;
 // Meter verification
@@ -1560,10 +1561,10 @@ function handleRemoteMetrics(probeId, metrics) {
     const st = lufs.shortTerm;
     if (isFinite(st) && st > -100) {
       const now = Date.now();
-      const maxAge = radarMaxSeconds * 1000;
-      // Remove stale entries
-      while (meterState.radarHistory.length > 0 && now - meterState.radarHistory[0].t > maxAge) {
-        meterState.radarHistory.shift();
+      const cutoff = now - (radarMaxSeconds * 1000);
+      // Efficient pruning using binary search + splice (O(log n) instead of O(n²))
+      if (needsPruning(meterState.radarHistory, cutoff, 't')) {
+        pruneHistory(meterState.radarHistory, cutoff, 't');
       }
       // Add new entry
       meterState.radarHistory.push({ t: now, v: st });

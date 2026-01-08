@@ -106,6 +106,10 @@ export function resetSkewState() {
 
 /**
  * Goniometer renderer - EXACT extraction from audio-meters-grid.html drawXY()
+ *
+ * Performance optimisation: Uses batched Canvas 2D rendering to minimise
+ * GPU pipeline flushes. Coordinates are computed once, then drawn in
+ * separate passes for glow/main layers with single stroke() calls per layer.
  */
 export class Goniometer {
   /**
@@ -114,6 +118,10 @@ export class Goniometer {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas ? canvas.getContext('2d') : null;
+
+    // Pre-allocated coordinate buffer for batch rendering (avoids GC pressure)
+    this._coordBuf = null;
+    this._coordCount = 0;
   }
 
   /**
@@ -148,17 +156,30 @@ export class Goniometer {
     // Draw samples if TransitionGuard allows and buffers are synchronized
     if (shouldRender && bufL && bufR && !isSkewed) {
       const n = Math.min(bufL.length, bufR.length);
-
-      ctx.globalAlpha = 0.85;
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = 'rgba(105,191,255,.85)';
       const px = Math.max(1, Math.floor(dpr));
 
-      // Line settings - thicker with round caps
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      // ─────────────────────────────────────────────────────────────────────
+      // BATCH RENDERING OPTIMISATION
+      // ─────────────────────────────────────────────────────────────────────
+      // Pre-compute all coordinates in a single pass, then render each layer
+      // with a single stroke() call. This reduces GPU pipeline flushes from
+      // ~2N to 2 per frame (where N = number of sample points).
+      // ─────────────────────────────────────────────────────────────────────
 
-      let prevX = null, prevY = null;
+      // Ensure coordinate buffer is large enough (reused across frames)
+      const coordCount = Math.ceil(n / 2);
+      if (!this._coordBuf || this._coordBuf.length < coordCount * 2) {
+        this._coordBuf = new Float32Array(coordCount * 2);
+      }
+      const coords = this._coordBuf;
+
+      // Pre-compute all M/S transformed coordinates
+      const gainW = VECTORSCOPE_GAIN * w / 2;
+      const gainH = VECTORSCOPE_GAIN * h / 2;
+      const centreX = w / 2;
+      const centreY = h / 2;
+
+      let coordIdx = 0;
       for (let i = 0; i < n; i += 2) {
         const L = bufL[i];
         const R = bufR[i];
@@ -168,32 +189,45 @@ export class Goniometer {
         const S = 0.5 * (R - L);  // Side: +S = right, -S = left
 
         // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
-        const x = (S * VECTORSCOPE_GAIN * w / 2) + w / 2;
-        const y = h / 2 - (M * VECTORSCOPE_GAIN * h / 2);
-
-        if (prevX !== null) {
-          // Glow layer first (wider, more transparent)
-          ctx.globalAlpha = .15;
-          ctx.strokeStyle = 'rgba(105,191,255,.5)';
-          ctx.lineWidth = 3 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(prevX, prevY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-
-          // Main line (thicker than before)
-          ctx.globalAlpha = .35;
-          ctx.strokeStyle = 'rgba(105,191,255,.35)';
-          ctx.lineWidth = 1.5 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(prevX, prevY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = .85;
-        ctx.fillRect(x, y, px, px);
-        prevX = x; prevY = y;
+        coords[coordIdx++] = (S * gainW) + centreX;
+        coords[coordIdx++] = centreY - (M * gainH);
       }
+      this._coordCount = coordIdx;
+
+      // Set up rendering state
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Pass 1: Glow layer (single batched path)
+      ctx.globalAlpha = 0.15;
+      ctx.strokeStyle = 'rgba(105,191,255,.5)';
+      ctx.lineWidth = 3 * dpr;
+      ctx.beginPath();
+      for (let i = 2; i < coordIdx; i += 2) {
+        ctx.moveTo(coords[i - 2], coords[i - 1]);
+        ctx.lineTo(coords[i], coords[i + 1]);
+      }
+      ctx.stroke();
+
+      // Pass 2: Main line layer (single batched path)
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = 'rgba(105,191,255,.35)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      for (let i = 2; i < coordIdx; i += 2) {
+        ctx.moveTo(coords[i - 2], coords[i - 1]);
+        ctx.lineTo(coords[i], coords[i + 1]);
+      }
+      ctx.stroke();
+
+      // Pass 3: Sample dots
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = 'rgba(105,191,255,.85)';
+      for (let i = 0; i < coordIdx; i += 2) {
+        ctx.fillRect(coords[i], coords[i + 1], px, px);
+      }
+
       ctx.globalCompositeOperation = 'source-over';
     }
 
@@ -267,49 +301,69 @@ export class Goniometer {
     // Draw points if we have data and should render
     if (shouldRender && points && points.length >= 2) {
       const numPoints = Math.floor(points.length / 2);
-
-      ctx.globalAlpha = 0.85;
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = 'rgba(105,191,255,.85)';
       const px = Math.max(1, Math.floor(dpr));
 
-      // Line settings
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      // ─────────────────────────────────────────────────────────────────────
+      // BATCH RENDERING OPTIMISATION
+      // ─────────────────────────────────────────────────────────────────────
+      // Pre-compute canvas coordinates, then render each layer with a single
+      // stroke() call. Reduces GPU pipeline flushes from ~2N to 2 per frame.
+      // ─────────────────────────────────────────────────────────────────────
 
-      let prevX = null, prevY = null;
+      // Ensure coordinate buffer is large enough
+      if (!this._coordBuf || this._coordBuf.length < numPoints * 2) {
+        this._coordBuf = new Float32Array(numPoints * 2);
+      }
+      const coords = this._coordBuf;
+
+      // Pre-compute canvas coordinates (M/S already transformed in input)
+      const gainW = VECTORSCOPE_GAIN * w / 2;
+      const gainH = VECTORSCOPE_GAIN * h / 2;
+      const centreX = w / 2;
+      const centreY = h / 2;
+
       for (let i = 0; i < numPoints; i++) {
         const M = points[i * 2];      // Mid (normalised ±1)
         const S = points[i * 2 + 1];  // Side (normalised ±1)
-
-        // Map to canvas: X = Side (horizontal), Y = Mid (vertical, inverted)
-        // Points are already M/S transformed, just apply gain and position
-        const x = (S * VECTORSCOPE_GAIN * w / 2) + w / 2;
-        const y = h / 2 - (M * VECTORSCOPE_GAIN * h / 2);
-
-        if (prevX !== null) {
-          // Glow layer
-          ctx.globalAlpha = .15;
-          ctx.strokeStyle = 'rgba(105,191,255,.5)';
-          ctx.lineWidth = 3 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(prevX, prevY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-
-          // Main line
-          ctx.globalAlpha = .35;
-          ctx.strokeStyle = 'rgba(105,191,255,.35)';
-          ctx.lineWidth = 1.5 * dpr;
-          ctx.beginPath();
-          ctx.moveTo(prevX, prevY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = .85;
-        ctx.fillRect(x, y, px, px);
-        prevX = x; prevY = y;
+        coords[i * 2] = (S * gainW) + centreX;
+        coords[i * 2 + 1] = centreY - (M * gainH);
       }
+      this._coordCount = numPoints * 2;
+
+      // Set up rendering state
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      // Pass 1: Glow layer (single batched path)
+      ctx.globalAlpha = 0.15;
+      ctx.strokeStyle = 'rgba(105,191,255,.5)';
+      ctx.lineWidth = 3 * dpr;
+      ctx.beginPath();
+      for (let i = 1; i < numPoints; i++) {
+        ctx.moveTo(coords[(i - 1) * 2], coords[(i - 1) * 2 + 1]);
+        ctx.lineTo(coords[i * 2], coords[i * 2 + 1]);
+      }
+      ctx.stroke();
+
+      // Pass 2: Main line layer (single batched path)
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = 'rgba(105,191,255,.35)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      for (let i = 1; i < numPoints; i++) {
+        ctx.moveTo(coords[(i - 1) * 2], coords[(i - 1) * 2 + 1]);
+        ctx.lineTo(coords[i * 2], coords[i * 2 + 1]);
+      }
+      ctx.stroke();
+
+      // Pass 3: Sample dots
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = 'rgba(105,191,255,.85)';
+      for (let i = 0; i < numPoints; i++) {
+        ctx.fillRect(coords[i * 2], coords[i * 2 + 1], px, px);
+      }
+
       ctx.globalCompositeOperation = 'source-over';
     }
 

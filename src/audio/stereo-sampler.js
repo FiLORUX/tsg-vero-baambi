@@ -32,6 +32,23 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Default buffer size in samples.
+ *
+ * Trade-offs at 48kHz sample rate:
+ *   4096 samples = 85ms trace history, 42ms update interval (default)
+ *   2048 samples = 42ms trace history, 21ms update interval (lower latency)
+ *   1024 samples = 21ms trace history, 10ms update interval (minimum recommended)
+ *
+ * Smaller buffers reduce latency but show less goniometer trace history.
+ * @type {number}
+ */
+const DEFAULT_BUFFER_SIZE = 4096;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SAMPLER STATE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -44,11 +61,14 @@ let workletNode = null;
 /** @type {ScriptProcessorNode|null} ScriptProcessor sampler node (fallback) */
 let scriptProcessorNode = null;
 
+/** @type {number} Current buffer size */
+let currentBufferSize = DEFAULT_BUFFER_SIZE;
+
 /** @type {Float32Array} Buffer for left channel */
-let syncedBufL = new Float32Array(4096);
+let syncedBufL = new Float32Array(DEFAULT_BUFFER_SIZE);
 
 /** @type {Float32Array} Buffer for right channel */
-let syncedBufR = new Float32Array(4096);
+let syncedBufR = new Float32Array(DEFAULT_BUFFER_SIZE);
 
 /** @type {number} Timestamp of last update */
 let lastTimestamp = 0;
@@ -69,14 +89,26 @@ let dataReady = false;
  * @param {AudioContext} audioContext - Web Audio context
  * @param {AudioNode} sourceL - Left channel source node
  * @param {AudioNode} sourceR - Right channel source node
+ * @param {Object} [options] - Configuration options
+ * @param {number} [options.bufferSize=4096] - Buffer size in samples (power of 2, 128-8192)
  * @returns {Promise<'worklet'|'scriptprocessor'>} The selected sampling mode
  */
-export async function initStereoSampler(audioContext, sourceL, sourceR) {
+export async function initStereoSampler(audioContext, sourceL, sourceR, options = {}) {
+  // Configure buffer size
+  const bufferSize = options.bufferSize ?? DEFAULT_BUFFER_SIZE;
+  currentBufferSize = bufferSize;
+
+  // Reallocate buffers if size changed
+  if (syncedBufL.length !== bufferSize) {
+    syncedBufL = new Float32Array(bufferSize);
+    syncedBufR = new Float32Array(bufferSize);
+  }
+
   // Try AudioWorklet first (runs in audio thread, lower latency)
   try {
-    await initAudioWorkletSampler(audioContext, sourceL, sourceR);
+    await initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSize);
     samplingMode = 'worklet';
-    console.log('[StereoSampler] Using AudioWorklet mode (sample-accurate, audio thread)');
+    console.log(`[StereoSampler] Using AudioWorklet mode (buffer: ${bufferSize} samples)`);
     return 'worklet';
   } catch (e) {
     console.warn('[StereoSampler] AudioWorklet failed, using fallback:', e.message);
@@ -84,9 +116,9 @@ export async function initStereoSampler(audioContext, sourceL, sourceR) {
 
   // Fallback to ScriptProcessorNode (deprecated but functional)
   try {
-    initScriptProcessorSampler(audioContext, sourceL, sourceR);
+    initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize);
     samplingMode = 'scriptprocessor';
-    console.log('[StereoSampler] Using ScriptProcessorNode mode (fallback)');
+    console.log(`[StereoSampler] Using ScriptProcessorNode mode (buffer: ${bufferSize} samples)`);
     return 'scriptprocessor';
   } catch (e) {
     console.error('[StereoSampler] ScriptProcessorNode failed:', e.message);
@@ -100,9 +132,10 @@ export async function initStereoSampler(audioContext, sourceL, sourceR) {
  * @param {AudioContext} audioContext - Web Audio context
  * @param {AudioNode} sourceL - Left channel source node
  * @param {AudioNode} sourceR - Right channel source node
+ * @param {number} bufferSize - Buffer size in samples
  * @private
  */
-async function initAudioWorkletSampler(audioContext, sourceL, sourceR) {
+async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSize) {
   // Load worklet module
   await audioContext.audioWorklet.addModule('./src/audio/stereo-sampler-worklet.js');
 
@@ -111,12 +144,15 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR) {
   sourceL.connect(merger, 0, 0);
   sourceR.connect(merger, 0, 1);
 
-  // Create worklet node
+  // Create worklet node with configurable buffer size
   workletNode = new AudioWorkletNode(audioContext, 'stereo-sampler', {
     numberOfInputs: 1,
     numberOfOutputs: 0,
     channelCount: 2,
-    channelCountMode: 'explicit'
+    channelCountMode: 'explicit',
+    processorOptions: {
+      bufferSize: bufferSize
+    }
   });
 
   // Connect merged stereo to worklet
@@ -142,12 +178,14 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR) {
  * @param {AudioContext} audioContext - Web Audio context
  * @param {AudioNode} sourceL - Left channel source node
  * @param {AudioNode} sourceR - Right channel source node
+ * @param {number} bufferSize - Buffer size in samples (must be power of 2: 256-16384)
  * @private
  */
-function initScriptProcessorSampler(audioContext, sourceL, sourceR) {
-  // Buffer size 4096 matches our analysis buffer size
+function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) {
+  // Clamp buffer size to ScriptProcessor valid range (256-16384, power of 2)
+  const validSize = Math.max(256, Math.min(16384, bufferSize));
   // 2 input channels, 2 output channels (must have outputs to be connectable)
-  scriptProcessorNode = audioContext.createScriptProcessor(4096, 2, 2);
+  scriptProcessorNode = audioContext.createScriptProcessor(validSize, 2, 2);
 
   // Create merger to combine L/R into stereo
   const merger = audioContext.createChannelMerger(2);
@@ -225,10 +263,20 @@ export function getWorkletBuffers() {
 export function getSamplerStats() {
   return {
     mode: samplingMode,
+    bufferSize: currentBufferSize,
     workletActive: workletNode !== null,
     scriptProcessorActive: scriptProcessorNode !== null,
     lastTimestamp: lastTimestamp
   };
+}
+
+/**
+ * Get current buffer size.
+ *
+ * @returns {number} Buffer size in samples
+ */
+export function getBufferSize() {
+  return currentBufferSize;
 }
 
 /**

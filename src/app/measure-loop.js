@@ -37,6 +37,7 @@
 import { formatLUFS } from '../metering/lufs.js';
 import { meterState, MEASURE_INTERVAL_MS, getElapsedSeconds } from './meter-state.js';
 import { InputMode } from './state.js';
+import { pruneHistory, needsPruning } from '../utils/history-pruner.js';
 
 /** Format LUFS value without unit suffix (for overlay where LUFS is separate element) */
 function formatLUFSValue(lufs) {
@@ -391,12 +392,13 @@ function measureLoop() {
     const maxAge = config.getRadarMaxSeconds() * 1000;
     const cutoff = now - maxAge;
 
-    // Prune stale radar history
-    while (meterState.radarHistory.length > 0 && meterState.radarHistory[0].t < cutoff) {
-      meterState.radarHistory.shift();
+    // Efficient pruning using binary search + splice (O(log n) instead of O(n²))
+    if (needsPruning(meterState.radarHistory, cutoff, 't')) {
+      pruneHistory(meterState.radarHistory, cutoff, 't');
     }
 
-    // Prune stale pause breaks (no longer relevant for gap rendering)
+    // Prune stale pause breaks - these are plain timestamps, not objects
+    // Keep simple loop as pause breaks array is typically very small (<10 items)
     while (meterState.radarPauseBreaks.length > 0 && meterState.radarPauseBreaks[0] < cutoff) {
       meterState.radarPauseBreaks.shift();
     }
