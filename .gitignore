@@ -32,9 +32,9 @@ Desktop.ini
 *.sublime-*
 
 # ═══════════════════════════════════════════════════════════════════
-# AI / LLM Tools
+# AI / LLM Tools (except .claude/ which is tracked for internal docs)
 # ═══════════════════════════════════════════════════════════════════
-.claude/
+.claude/settings.local.json
 .cursor/
 .aider/
 .continue/
