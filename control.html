@@ -57,8 +57,8 @@
     }
 
     .header-brand .tsg-logo {
-      width: 52px;
-      height: 28px;
+      height: 42px;
+      width: auto;
       flex-shrink: 0;
     }
 
@@ -396,23 +396,7 @@
 <body>
   <header class="header">
     <div class="header-brand">
-      <!-- TSG Logo with static wave -->
-      <svg viewBox="0 0 200 100" class="tsg-logo" role="img" aria-label="TSG">
-        <defs>
-          <linearGradient id="ctrl-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#007eaa"/>
-            <stop offset="100%" stop-color="#6f9ed4"/>
-          </linearGradient>
-        </defs>
-        <text x="100" y="45" text-anchor="middle" dominant-baseline="middle"
-              font-family="Inter, 'Segoe UI', system-ui, sans-serif"
-              font-size="52" font-weight="900" letter-spacing="3"
-              fill="url(#ctrl-tsg-blue)">TSG</text>
-        <g transform="translate(100, 75)">
-          <path d="M-45,0 Q-34,-8 -22,0 T0,0 T22,0 T45,0"
-                fill="none" stroke="url(#ctrl-tsg-blue)" stroke-width="3" stroke-linecap="round"/>
-        </g>
-      </svg>
+      <img src="src/assets/tsg-logo.svg" class="tsg-logo" alt="TSG">
       <div class="header-logo">
         <div class="product">
           <span class="product-vero">VERO</span><span class="product-baambi">BAAMBI</span>

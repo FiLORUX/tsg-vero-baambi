@@ -15,7 +15,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TSG Suite | VERO-BAAMBI</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' fill='%230d0f11'/><g fill='%2369bfff'><rect x='6' y='10' width='28' height='6'/><rect x='18' y='16' width='6' height='38'/><rect x='38' y='10' width='20' height='6'/><rect x='38' y='10' width='6' height='22'/><rect x='38' y='26' width='20' height='6'/><rect x='52' y='26' width='6' height='22'/><rect x='38' y='48' width='20' height='6'/><rect x='6' y='36' width='28' height='6'/><rect x='6' y='36' width='6' height='22'/><rect x='18' y='52' width='16' height='6'/><animate attributeName='opacity' values='1;0.85;1' dur='6s' repeatCount='indefinite'/></g></svg>">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!--
   ═══════════════════════════════════════════════════════════════════════════════
   TSG SUITE | VERO BAAMBI | BROADCAST AUDIO ALIGNMENT  & METER BRIDGE INTERFACE
@@ -89,9 +89,8 @@
     /* Boot splash */
     #splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 0.3s ease-out}
     #splash.hide{opacity:0;pointer-events:none}
-    #splash .splash-tsg{display:flex;flex-direction:column;align-items:center}
-    #splash .splash-tsg-logo{width:140px;height:70px}
-    #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink);margin-top:-8px}
+    #splash .splash-tsg-logo{width:min(420px, 70vw);height:auto}
+    #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink);margin-top:12px}
     #splash .splash-logo .vero{font-weight:900;margin-right:0.15em}
     #splash .splash-logo .baambi{font-weight:200;letter-spacing:-1px}
     #splash .splash-spinner{width:120px;height:120px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,var(--cyan) 25%,transparent 50%,rgba(105,191,255,0.3) 75%,transparent 100%);animation:splash-spin 1s linear infinite}
@@ -1772,10 +1771,12 @@
 
     input[type="number"]{width:78px;background:#0f1214;border:1px solid #2a2f36;border-radius:8px;color:var(--ink);padding:6px}
     .hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 20px}
-    .brand{flex:1 1 60%;min-width:clamp(280px, 40vw, 480px)}
-    .brand svg{display:block;height:64px;width:100%}
-    .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
-    .brand svg{display:block;height:60px;width:auto}
+    .brand{display:flex;align-items:center;gap:16px}
+    .header-tsg-logo{height:56px;width:auto}
+    .header-sep{color:#4a5568;font-size:24px;font-weight:300}
+    .header-product{font-family:Inter,system-ui,sans-serif;font-size:24px}
+    .header-vero{font-weight:950;letter-spacing:2px;color:#e8eef9}
+    .header-baambi{font-weight:200;letter-spacing:-1px;color:#e8eef9}
     .status{color:var(--muted);font-weight:600;margin-left:8px;white-space:nowrap}
 
     /* Divider/linje under rubrik */
@@ -3008,35 +3009,7 @@
 <body>
 <!-- Boot splash -->
 <div id="splash">
-  <div class="splash-tsg">
-    <!-- TSG Logo with animated sine wave -->
-    <svg viewBox="0 0 200 100" class="splash-tsg-logo" role="img" aria-label="TSG - THÅST Signal Genesis">
-      <defs>
-        <linearGradient id="splash-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#007eaa"/>
-          <stop offset="100%" stop-color="#6f9ed4"/>
-        </linearGradient>
-      </defs>
-      <text x="100" y="52" text-anchor="middle" dominant-baseline="middle"
-            font-family="Inter, 'Segoe UI', system-ui, sans-serif"
-            font-size="48" font-weight="900" letter-spacing="4"
-            fill="url(#splash-tsg-blue)">TSG</text>
-      <g transform="translate(100, 75)">
-        <path d="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
-              fill="none" stroke="url(#splash-tsg-blue)" stroke-width="2.5" stroke-linecap="round">
-          <animate attributeName="d"
-                   values="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0;
-                           M-40,0 Q-30,8 -20,0 T0,0 T20,0 T40,0;
-                           M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
-                   dur="2s" repeatCount="indefinite"/>
-        </path>
-      </g>
-      <text x="100" y="92" text-anchor="middle"
-            font-family="Inter, 'Segoe UI', system-ui, sans-serif"
-            font-size="8" font-weight="600" letter-spacing="2"
-            fill="#6f9ed4" opacity="0.8">SIGNAL GENESIS</text>
-    </svg>
-  </div>
+  <img src="src/assets/tsg-logo.svg" class="splash-tsg-logo" alt="TSG - THÅST Signal Genesis">
   <div class="splash-logo"><span class="vero">VERO</span><span class="baambi">BAAMBI</span></div>
   <div class="splash-spinner"></div>
 </div>
@@ -3044,51 +3017,9 @@
 <header>
   <div class="hdr">
     <div class="brand">
-      <!-- TSG Logo + VEROBAAMBI branding -->
-<svg xmlns="http://www.w3.org/2000/svg"
-     viewBox="0 0 4000 200"
-     width="100%"
-     preserveAspectRatio="xMidYMid meet"
-     role="img"
-     aria-label="TSG | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
-  <defs>
-    <linearGradient id="hdr-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#007eaa"/>
-      <stop offset="100%" stop-color="#6f9ed4"/>
-    </linearGradient>
-  </defs>
-
-  <!-- TSG Logo with static wave -->
-  <g transform="translate(80, 100)">
-    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle"
-          font-family="Inter, 'Segoe UI', system-ui, sans-serif"
-          font-size="90" font-weight="900" letter-spacing="4"
-          fill="url(#hdr-tsg-blue)">TSG</text>
-    <g transform="translate(0, 50)">
-      <path d="M-80,0 Q-60,-12 -40,0 T0,0 T40,0 T80,0"
-            fill="none" stroke="url(#hdr-tsg-blue)" stroke-width="4" stroke-linecap="round"/>
-    </g>
-  </g>
-
-  <text x="260" y="50%" dominant-baseline="middle"
-        font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
-        font-size="100">
-
-    <!-- separator -->
-    <tspan fill="#4a5568" font-weight="300">|</tspan>
-
-    <!-- VERO = extra bold -->
-    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="0.8em">VERO</tspan>
-    <!-- BAAMBI = very thin and tight -->
-    <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
-
-    <!-- separator -->
-    <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
-
-    <!-- Tagline -->
-    <tspan fill="#4a5568" font-weight="600" letter-spacing="8" dx="1.2em" dy="35" dominant-baseline="alphabetic"><tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">ROADCAST</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">UDIO</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">LIGNMENT</tspan> <tspan font-size="48">&amp;</tspan> <tspan font-size="62" font-weight="500">M</tspan><tspan font-size="48">ETER</tspan> <tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">RIDGE</tspan> <tspan font-size="62" font-weight="500">I</tspan><tspan font-size="48">NTERFACE</tspan></tspan>
-  </text>
-</svg>
+      <img src="src/assets/tsg-logo.svg" class="header-tsg-logo" alt="TSG">
+      <span class="header-sep">|</span>
+      <span class="header-product"><span class="header-vero">VERO</span><span class="header-baambi">BAAMBI</span></span>
     </div>
     <!-- Calibration status indicator (only visible when calibrated) -->
     <div id="headerCalIndicator" class="header-cal-indicator" style="display: none;">
