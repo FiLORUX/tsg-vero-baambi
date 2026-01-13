@@ -89,7 +89,7 @@
     /* Boot splash */
     #splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 0.3s ease-out}
     #splash.hide{opacity:0;pointer-events:none}
-    #splash .splash-tsg-logo{width:min(420px, 70vw);height:auto}
+    #splash .splash-tsg-logo{width:min(280px, 50vw);height:auto}
     #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink);margin-top:12px}
     #splash .splash-logo .vero{font-weight:900;margin-right:0.15em}
     #splash .splash-logo .baambi{font-weight:200;letter-spacing:-1px}
@@ -3044,13 +3044,46 @@
 <header>
   <div class="hdr">
     <div class="brand">
-      <svg class="header-tsg-logo" xmlns="http://www.w3.org/2000/svg" viewBox="6478 7030 450 380">
-        <path stroke="#69bfff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M6488 7305h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28m0 90h-28c-14 0-21-45-27-45-7 0-14 45-28 45h-28c-14 0-20-45-27-45s-14 45-28 45h-28c-13 0-20-45-27-45s-14 45-28 45h-28"/>
-        <path stroke="#69bfff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M6654 7305h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 27 45s14-45 28-45h28m0 90h-28c-14 0-21-45-28-45s-13 45-27 45h-28c-14 0-21-45-27-45s-14 45-28 45h-28c-14 0-21-45-27-45-7 0-14 45-28 45h-28"/>
-        <path fill="#69bfff" d="M6538 7269v-199h-51v-31h144v31h-50v199h-43Zm235-164h-43v-7c0-7-2-14-7-19-5-6-12-9-23-9-6 0-11 1-15 3l-9 6-5 10-1 11 1 11c0 3 1 6 3 8l7 7 14 5 33 10c10 3 17 6 23 10 6 3 11 8 14 13 4 5 6 11 7 17l1 23-3 27c-3 8-7 15-13 21s-13 11-23 14a118 118 0 0 1-65 1c-9-3-17-7-23-12-7-5-12-10-16-17-3-6-5-14-5-21v-13h43v11c0 6 2 11 7 16s13 7 24 7l17-2c4-2 7-4 9-7 3-3 4-7 4-11l1-14-1-15c0-4-1-7-3-9-2-3-5-5-8-6l-13-5-31-10c-19-5-31-13-38-23-6-9-9-21-9-36 0-8 1-16 5-24 3-8 7-15 14-20 5-6 13-10 22-14a104 104 0 0 1 63 0c9 3 16 7 23 12 13 10 20 22 20 35v16Zm13-11c0-10 2-18 7-25 4-7 10-13 17-18a98 98 0 0 1 99 0c6 5 12 11 16 18s7 15 7 25v11h-44v-11c0-8-3-14-8-18-6-4-13-6-21-6s-15 2-21 6-8 10-8 18v121c0 8 2 14 8 18a46 46 0 0 0 42 0c5-4 8-10 8-18v-43h-34v-29h78v72c0 10-3 18-7 25s-10 12-16 17c-7 5-15 8-24 11a98 98 0 0 1-52 0c-9-3-17-6-23-11a46 46 0 0 1-23-42v-121Z"/>
-      </svg>
-      <span class="header-sep">|</span>
-      <span class="header-product"><span class="header-vero">VERO</span><span class="header-baambi">BAAMBI</span></span>
+      <!-- Vector logo: TSG symbol + VEROBAAMBI + tagline -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 4000 200"
+     width="100%"
+     preserveAspectRatio="xMidYMid meet"
+     role="img"
+     aria-label="TSG | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
+  <defs>
+    <linearGradient id="lock-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+
+  <!-- TSG Symbol (scaled and positioned) -->
+  <g transform="translate(30, 15) scale(0.42)">
+    <path stroke="#69bfff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M6488 7305h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28m0 90h-28c-14 0-21-45-27-45-7 0-14 45-28 45h-28c-14 0-20-45-27-45s-14 45-28 45h-28c-13 0-20-45-27-45s-14 45-28 45h-28" transform="translate(-6478, -7030)"/>
+    <path stroke="#69bfff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" d="M6654 7305h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 28 45s13-45 27-45h28c14 0 21 45 27 45s14-45 28-45h28m0 90h-28c-14 0-21-45-28-45s-13 45-27 45h-28c-14 0-21-45-27-45s-14 45-28 45h-28c-14 0-21-45-27-45-7 0-14 45-28 45h-28" transform="translate(-6478, -7030)"/>
+    <path fill="#69bfff" d="M6538 7269v-199h-51v-31h144v31h-50v199h-43Zm235-164h-43v-7c0-7-2-14-7-19-5-6-12-9-23-9-6 0-11 1-15 3l-9 6-5 10-1 11 1 11c0 3 1 6 3 8l7 7 14 5 33 10c10 3 17 6 23 10 6 3 11 8 14 13 4 5 6 11 7 17l1 23-3 27c-3 8-7 15-13 21s-13 11-23 14a118 118 0 0 1-65 1c-9-3-17-7-23-12-7-5-12-10-16-17-3-6-5-14-5-21v-13h43v11c0 6 2 11 7 16s13 7 24 7l17-2c4-2 7-4 9-7 3-3 4-7 4-11l1-14-1-15c0-4-1-7-3-9-2-3-5-5-8-6l-13-5-31-10c-19-5-31-13-38-23-6-9-9-21-9-36 0-8 1-16 5-24 3-8 7-15 14-20 5-6 13-10 22-14a104 104 0 0 1 63 0c9 3 16 7 23 12 13 10 20 22 20 35v16Zm13-11c0-10 2-18 7-25 4-7 10-13 17-18a98 98 0 0 1 99 0c6 5 12 11 16 18s7 15 7 25v11h-44v-11c0-8-3-14-8-18-6-4-13-6-21-6s-15 2-21 6-8 10-8 18v121c0 8 2 14 8 18a46 46 0 0 0 42 0c5-4 8-10 8-18v-43h-34v-29h78v72c0 10-3 18-7 25s-10 12-16 17c-7 5-15 8-24 11a98 98 0 0 1-52 0c-9-3-17-6-23-11a46 46 0 0 1-23-42v-121Z" transform="translate(-6478, -7030)"/>
+  </g>
+
+  <text x="300" y="50%" dominant-baseline="middle"
+        font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
+        font-size="100">
+
+    <!-- separator -->
+    <tspan fill="#4a5568" font-weight="300">|</tspan>
+
+    <!-- VERO = extra bold -->
+    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="0.8em">VERO</tspan>
+    <!-- BAAMBI = very thin and tight -->
+    <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
+
+    <!-- separator -->
+    <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
+
+    <!-- Tagline: all letters share VEROBAAMBI's baseline via alphabetic + dy offset -->
+    <tspan fill="#4a5568" font-weight="600" letter-spacing="8" dx="1.2em" dy="35" dominant-baseline="alphabetic"><tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">ROADCAST</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">UDIO</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">LIGNMENT</tspan> <tspan font-size="48">&amp;</tspan> <tspan font-size="62" font-weight="500">M</tspan><tspan font-size="48">ETER</tspan> <tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">RIDGE</tspan> <tspan font-size="62" font-weight="500">I</tspan><tspan font-size="48">NTERFACE</tspan></tspan>
+  </text>
+</svg>
     </div>
     <!-- Calibration status indicator (only visible when calibrated) -->
     <div id="headerCalIndicator" class="header-cal-indicator" style="display: none;">
