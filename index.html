@@ -87,9 +87,11 @@
     body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;overflow:hidden}
 
     /* Boot splash */
-    #splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px;transition:opacity 0.3s ease-out}
+    #splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity 0.3s ease-out}
     #splash.hide{opacity:0;pointer-events:none}
-    #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink)}
+    #splash .splash-tsg{display:flex;flex-direction:column;align-items:center}
+    #splash .splash-tsg-logo{width:140px;height:70px}
+    #splash .splash-logo{font-family:Inter,system-ui,sans-serif;font-size:42px;letter-spacing:2px;color:var(--ink);margin-top:-8px}
     #splash .splash-logo .vero{font-weight:900;margin-right:0.15em}
     #splash .splash-logo .baambi{font-weight:200;letter-spacing:-1px}
     #splash .splash-spinner{width:120px;height:120px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,var(--cyan) 25%,transparent 50%,rgba(105,191,255,0.3) 75%,transparent 100%);animation:splash-spin 1s linear infinite}
@@ -3006,6 +3008,35 @@
 <body>
 <!-- Boot splash -->
 <div id="splash">
+  <div class="splash-tsg">
+    <!-- TSG Logo with animated sine wave -->
+    <svg viewBox="0 0 200 100" class="splash-tsg-logo" role="img" aria-label="TSG - THÅST Signal Genesis">
+      <defs>
+        <linearGradient id="splash-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#007eaa"/>
+          <stop offset="100%" stop-color="#6f9ed4"/>
+        </linearGradient>
+      </defs>
+      <text x="100" y="52" text-anchor="middle" dominant-baseline="middle"
+            font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+            font-size="48" font-weight="900" letter-spacing="4"
+            fill="url(#splash-tsg-blue)">TSG</text>
+      <g transform="translate(100, 75)">
+        <path d="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
+              fill="none" stroke="url(#splash-tsg-blue)" stroke-width="2.5" stroke-linecap="round">
+          <animate attributeName="d"
+                   values="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0;
+                           M-40,0 Q-30,8 -20,0 T0,0 T20,0 T40,0;
+                           M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
+                   dur="2s" repeatCount="indefinite"/>
+        </path>
+      </g>
+      <text x="100" y="92" text-anchor="middle"
+            font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+            font-size="8" font-weight="600" letter-spacing="2"
+            fill="#6f9ed4" opacity="0.8">SIGNAL GENESIS</text>
+    </svg>
+  </div>
   <div class="splash-logo"><span class="vero">VERO</span><span class="baambi">BAAMBI</span></div>
   <div class="splash-spinner"></div>
 </div>
@@ -3013,39 +3044,48 @@
 <header>
   <div class="hdr">
     <div class="brand">
-      <!-- Vector logo: VEROBAAMBI without space, BAAMBI tighter -->
+      <!-- TSG Logo + VEROBAAMBI branding -->
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 4000 200"
      width="100%"
      preserveAspectRatio="xMidYMid meet"
      role="img"
-     aria-label="TSG Suite | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
+     aria-label="TSG | VEROBAAMBI | Broadcast Audio Alignment & Meter Bridge Interface">
   <defs>
-    <linearGradient id="lock-cyan" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#38BDF8"/>
-      <stop offset="1" stop-color="#22D3EE"/>
+    <linearGradient id="hdr-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#007eaa"/>
+      <stop offset="100%" stop-color="#6f9ed4"/>
     </linearGradient>
   </defs>
 
-  <text x="2%" y="50%" dominant-baseline="middle"
+  <!-- TSG Logo with static wave -->
+  <g transform="translate(80, 100)">
+    <text x="0" y="0" text-anchor="middle" dominant-baseline="middle"
+          font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+          font-size="90" font-weight="900" letter-spacing="4"
+          fill="url(#hdr-tsg-blue)">TSG</text>
+    <g transform="translate(0, 50)">
+      <path d="M-80,0 Q-60,-12 -40,0 T0,0 T40,0 T80,0"
+            fill="none" stroke="url(#hdr-tsg-blue)" stroke-width="4" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <text x="260" y="50%" dominant-baseline="middle"
         font-family="Inter, Segoe UI, system-ui, -apple-system, Roboto, sans-serif"
         font-size="100">
 
-    <!-- TSG Suite in matching cyan -->
-    <tspan fill="#93C5FD" font-weight="800" letter-spacing="0.75">TSG Suite</tspan>
-
     <!-- separator -->
-    <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
+    <tspan fill="#4a5568" font-weight="300">|</tspan>
 
     <!-- VERO = extra bold -->
-    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="1.2em">VERO</tspan>
+    <tspan fill="#E5E7EB" font-weight="950" letter-spacing="4" dx="0.8em">VERO</tspan>
     <!-- BAAMBI = very thin and tight -->
     <tspan fill="#E5E7EB" font-weight="200" letter-spacing="-3">BAAMBI</tspan>
 
     <!-- separator -->
     <tspan fill="#4a5568" font-weight="300" dx="1.2em">|</tspan>
 
-    <!-- Tagline: all letters share VEROBAAMBI's baseline via alphabetic + dy offset -->
+    <!-- Tagline -->
     <tspan fill="#4a5568" font-weight="600" letter-spacing="8" dx="1.2em" dy="35" dominant-baseline="alphabetic"><tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">ROADCAST</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">UDIO</tspan> <tspan font-size="62" font-weight="500">A</tspan><tspan font-size="48">LIGNMENT</tspan> <tspan font-size="48">&amp;</tspan> <tspan font-size="62" font-weight="500">M</tspan><tspan font-size="48">ETER</tspan> <tspan font-size="62" font-weight="500">B</tspan><tspan font-size="48">RIDGE</tspan> <tspan font-size="62" font-weight="500">I</tspan><tspan font-size="48">NTERFACE</tspan></tspan>
   </text>
 </svg>
@@ -3271,7 +3311,7 @@
             <p class="tiny">Receive metering data from remote probes via WebSocket broker.</p>
             <div class="row" style="margin-bottom:8px;align-items:center;gap:8px;flex-wrap:nowrap">
               <label style="flex-shrink:0">Broker:</label>
-              <input type="url" id="remoteBrokerUrl" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px" placeholder="ws://localhost:8765" value="ws://localhost:8765" />
+              <input type="url" id="remoteBrokerUrl" style="flex:1;min-width:0;padding:4px 8px;border-radius:6px;background:#0f1214;border:1px solid var(--outline);color:var(--ink);font-size:12px" placeholder="wss://broker.thåst.se" />
               <button id="btnRemoteCheck" class="btn-ghost btn-ctrl" title="Check broker connection">Check</button>
             </div>
             <div class="kv" id="remoteInfo">

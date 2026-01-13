@@ -88,6 +88,7 @@
 import { ProbeSender } from '../probe/index.js';
 import { MetricsReceiver } from '../client/index.js';
 import { STORAGE_KEYS, getItem, setItem } from '../../config/storage.js';
+import { getBrokerUrl, saveBrokerUrl, getDefaultBrokerUrl } from '../broker-url.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION CONSTANTS
@@ -95,10 +96,10 @@ import { STORAGE_KEYS, getItem, setItem } from '../../config/storage.js';
 
 /**
  * Default broker URL when none is configured.
- * Uses localhost for development; production deployments override via storage.
+ * Auto-detected based on hostname; see broker-url.js for mappings.
  * @type {string}
  */
-const DEFAULT_BROKER_URL = 'ws://localhost:8765';
+const DEFAULT_BROKER_URL = getDefaultBrokerUrl();
 
 /**
  * Timeout for availability check (milliseconds).
@@ -436,7 +437,7 @@ export class RemotePanel {
    * @private
    */
   #render() {
-    const brokerUrl = getItem(STORAGE_KEYS.BROKER_URL, DEFAULT_BROKER_URL);
+    const brokerUrl = getBrokerUrl();
     const probeName = getItem(STORAGE_KEY_PROBE_NAME, '');
 
     this.#container.innerHTML = `
@@ -651,7 +652,7 @@ export class RemotePanel {
       clearTimeout(urlTimer);
       urlTimer = setTimeout(() => {
         const value = e.target.value.trim();
-        setItem(STORAGE_KEYS.BROKER_URL, value);
+        saveBrokerUrl(value);
 
         // Update existing instances
         if (this.#probe) {

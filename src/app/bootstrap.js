@@ -67,6 +67,7 @@ import { initLayout, sizeWrap, layoutXY, layoutLoudness } from './layout.js';
 import { setupBargraphMeter, navigateTo as navigateToBargraph } from './bargraph-meter.js';
 // Remote metering client
 import { MetricsReceiver } from '../remote/client/index.js';
+import { getBrokerUrl, saveBrokerUrl } from '../remote/broker-url.js';
 // Calibration system
 import { CalibrationStatusBadge } from '../ui/calibration-badge.js';
 import { VerificationStatusBadge } from '../ui/verification-badge.js';
@@ -197,6 +198,7 @@ const inputSourceSummary = $('inputSourceSummary');
 
 // Remote source controls
 const remoteBrokerUrl = $('remoteBrokerUrl');
+if (remoteBrokerUrl) remoteBrokerUrl.value = getBrokerUrl();
 const btnRemoteCheck = $('btnRemoteCheck');
 const remoteBrokerStatus = $('remoteBrokerStatus');
 const remoteLatency = $('remoteLatency');
@@ -1176,7 +1178,7 @@ function stopGeneratorCapture() {
  * Called when user selects Remote Probe mode - shows available probes immediately.
  */
 async function connectRemoteBroker() {
-  const url = remoteBrokerUrl?.value?.trim() || 'ws://localhost:8765';
+  const url = remoteBrokerUrl?.value?.trim() || getBrokerUrl();
 
   if (remoteBrokerStatus) remoteBrokerStatus.textContent = 'Connecting…';
   if (remoteWarning) remoteWarning.style.display = 'none';
@@ -1828,6 +1830,8 @@ function bindEvents() {
     remoteBrokerUrl.addEventListener('input', () => {
       clearTimeout(remoteUrlTimer);
       remoteUrlTimer = setTimeout(() => {
+        const url = remoteBrokerUrl.value.trim();
+        saveBrokerUrl(url); // Persist for next session
         isRemoteAvailable = false; // Reset availability
         // Disconnect old connection and connect to new URL
         if (remoteReceiver) {

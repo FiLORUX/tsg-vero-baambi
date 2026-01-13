@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" role="img" aria-label="TSG - THÅST Signal Genesis">
+  <defs>
+    <linearGradient id="tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#007eaa"/>
+      <stop offset="100%" stop-color="#6f9ed4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- TSG Main Text -->
+  <text x="100" y="52" text-anchor="middle" dominant-baseline="middle"
+        font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+        font-size="48" font-weight="900" letter-spacing="4"
+        fill="url(#tsg-blue)">TSG</text>
+
+  <!-- Animated sine wave symbol under TSG -->
+  <g transform="translate(100, 75)">
+    <path d="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
+          fill="none" stroke="url(#tsg-blue)" stroke-width="2.5" stroke-linecap="round">
+      <animate attributeName="d"
+               values="M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0;
+                       M-40,0 Q-30,8 -20,0 T0,0 T20,0 T40,0;
+                       M-40,0 Q-30,-8 -20,0 T0,0 T20,0 T40,0"
+               dur="2s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- SIGNAL GENESIS byline -->
+  <text x="100" y="92" text-anchor="middle"
+        font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+        font-size="8" font-weight="600" letter-spacing="2"
+        fill="#6f9ed4" opacity="0.8">SIGNAL GENESIS</text>
+</svg>

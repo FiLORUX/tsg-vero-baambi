@@ -70,26 +70,34 @@ david@thast.se  ·  +46 700 30 30 60
        ───────────────────────────────────────────────────────────────────────── */
     .probe-header {
       background: linear-gradient(135deg, #1b1f23 0%, #141618 100%);
-      padding: 1.25rem 1.5rem;
+      padding: 1rem 1.5rem;
       border-bottom: 1px solid var(--outline);
-      text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .probe-header .brand {
-      font-size: 0.7rem;
-      font-weight: 600;
-      letter-spacing: 1px;
-      color: #93C5FD;
-      text-transform: uppercase;
-      margin-bottom: 0.5rem;
+    .probe-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .probe-header .tsg-logo {
+      width: 52px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .probe-header .logo-section {
+      display: flex;
+      flex-direction: column;
     }
 
     .probe-header .logo {
       display: flex;
       align-items: baseline;
-      justify-content: center;
       gap: 0;
-      margin-bottom: 0.35rem;
     }
 
     .probe-header .logo-vero {
@@ -107,12 +115,32 @@ david@thast.se  ·  +46 700 30 30 60
     }
 
     .probe-header .subtitle {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       color: #93C5FD;
       text-transform: uppercase;
       letter-spacing: 1.5px;
       font-weight: 600;
+      margin-top: 2px;
     }
+
+    .probe-header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .header-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .header-status-dot.connected { background: var(--ok); }
+    .header-status-dot.connecting { background: var(--warn); animation: pulse 1s infinite; }
+    .header-status-dot.error { background: var(--hot); }
 
     .probe-body { padding: 1.25rem; }
 
@@ -323,11 +351,35 @@ david@thast.se  ·  +46 700 30 30 60
 <body>
   <div class="probe-container">
     <header class="probe-header">
-      <div class="brand">TSG Suite</div>
-      <div class="logo">
-        <span class="logo-vero">VERO</span><span class="logo-baambi">BAAMBI</span>
+      <div class="probe-header-brand">
+        <!-- TSG Logo with static wave -->
+        <svg viewBox="0 0 200 100" class="tsg-logo" role="img" aria-label="TSG">
+          <defs>
+            <linearGradient id="probe-tsg-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#007eaa"/>
+              <stop offset="100%" stop-color="#6f9ed4"/>
+            </linearGradient>
+          </defs>
+          <text x="100" y="45" text-anchor="middle" dominant-baseline="middle"
+                font-family="Inter, 'Segoe UI', system-ui, sans-serif"
+                font-size="52" font-weight="900" letter-spacing="3"
+                fill="url(#probe-tsg-blue)">TSG</text>
+          <g transform="translate(100, 75)">
+            <path d="M-45,0 Q-34,-8 -22,0 T0,0 T22,0 T45,0"
+                  fill="none" stroke="url(#probe-tsg-blue)" stroke-width="3" stroke-linecap="round"/>
+          </g>
+        </svg>
+        <div class="logo-section">
+          <div class="logo">
+            <span class="logo-vero">VERO</span><span class="logo-baambi">BAAMBI</span>
+          </div>
+          <div class="subtitle">Remote Metering Transmitter</div>
+        </div>
       </div>
-      <div class="subtitle">Remote Metering Transmitter</div>
+      <div class="probe-header-status">
+        <span class="header-status-dot" id="headerStatusDot"></span>
+        <span id="headerStatusText">Offline</span>
+      </div>
     </header>
 
     <div class="probe-body">
@@ -335,7 +387,7 @@ david@thast.se  ·  +46 700 30 30 60
       <div class="section">
         <div class="section-label">Broker Connection</div>
         <div class="field-row">
-          <input type="url" id="brokerUrl" placeholder="ws://localhost:8765" value="ws://localhost:8765">
+          <input type="url" id="brokerUrl" placeholder="ws://broker:8765">
         </div>
         <div class="field-row">
           <input type="text" id="probeName" placeholder="Probe name (e.g. MCR Borås)" maxlength="32">
@@ -444,6 +496,7 @@ david@thast.se  ·  +46 700 30 30 60
     import { computeGoniometerPoints } from './src/ui/goniometer.js';
     import { computeSpectrumBands, SPECTRUM_NUM_BANDS } from './src/ui/spectrum.js';
     import { ThastVectorTextGenerator } from './src/generators/thast-vector-text.js';
+    import { getBrokerUrl, saveBrokerUrl } from './src/remote/broker-url.js';
 
     // ─────────────────────────────────────────────────────────────────────────
     // CONFIGURATION
@@ -510,8 +563,13 @@ david@thast.se  ·  +46 700 30 30 60
       metricCorr: $('metricCorr'),
       connDot: $('connDot'),
       connText: $('connText'),
-      connLatency: $('connLatency')
+      connLatency: $('connLatency'),
+      headerStatusDot: $('headerStatusDot'),
+      headerStatusText: $('headerStatusText')
     };
+
+    // Initialize broker URL from auto-detect/localStorage
+    dom.brokerUrl.value = getBrokerUrl();
 
     // ─────────────────────────────────────────────────────────────────────────
     // AUDIO CONTEXT & METERING
@@ -742,7 +800,11 @@ david@thast.se  ·  +46 700 30 30 60
     // ─────────────────────────────────────────────────────────────────────────
 
     function connectBroker() {
-      const url = dom.brokerUrl.value.trim() || 'ws://localhost:8765';
+      const url = dom.brokerUrl.value.trim();
+      if (!url) return;
+
+      // Save URL for next time
+      saveBrokerUrl(url);
 
       updateConnectionStatus('connecting', 'Connecting...');
 
@@ -889,6 +951,9 @@ david@thast.se  ·  +46 700 30 30 60
     function updateConnectionStatus(state, text) {
       dom.connDot.className = 'status-dot ' + state;
       dom.connText.textContent = text;
+      // Also update header status indicator
+      dom.headerStatusDot.className = 'header-status-dot ' + state;
+      dom.headerStatusText.textContent = state === 'connected' ? 'Online' : state === 'connecting' ? 'Connecting' : 'Offline';
     }
 
     // ─────────────────────────────────────────────────────────────────────────
