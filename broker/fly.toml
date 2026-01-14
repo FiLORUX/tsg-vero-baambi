@@ -29,19 +29,6 @@ primary_region = 'arn'
     hard_limit = 1000
     soft_limit = 500
 
-  [[services.tcp_checks]]
-    interval = '30s'
-    timeout = '2s'
-    grace_period = '5s'
-
-[[services]]
-  protocol = 'tcp'
-  internal_port = 8766
-
-  [[services.ports]]
-    port = 8766
-    handlers = ['tls', 'http']
-
   [[services.http_checks]]
     interval = '30s'
     timeout = '2s'
@@ -51,7 +38,7 @@ primary_region = 'arn'
 
 [checks]
   [checks.health]
-    port = 8766
+    port = 8765
     type = 'http'
     interval = '30s'
     timeout = '2s'

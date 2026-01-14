@@ -71,25 +71,25 @@ const startTime = Date.now();
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Create HTTP server for REST API.
+ * Initialise REST API state.
+ * Call this before using handleRequest.
  *
  * @param {Object} options - Configuration options
- * @param {number} options.port - HTTP port to listen on
  * @param {Map} options.probes - Reference to probes map
- * @returns {http.Server} HTTP server instance
  */
-export function createRestApi(options) {
-  const { port, probes } = options;
+export function initRestApi(options) {
+  const { probes } = options;
   probesRef = probes;
-
-  const server = http.createServer(handleRequest);
-
-  server.listen(port, () => {
-    console.log(`[REST API] Listening on http://localhost:${port}`);
-  });
-
-  return server;
 }
+
+/**
+ * Handle incoming HTTP request.
+ * Export for use with shared HTTP server.
+ *
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {http.ServerResponse} res - HTTP response
+ */
+export { handleRequest };
 
 /**
  * Update last metrics for a probe.

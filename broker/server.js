@@ -66,15 +66,15 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
+import http from 'http';
 import { WebSocketServer } from 'ws';
-import { createRestApi, updateMetrics } from './rest-api.js';
+import { initRestApi, handleRequest, updateMetrics } from './rest-api.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_PORT = 8765;
-const REST_API_PORT_OFFSET = 1; // REST API runs on WS port + 1
 const HEARTBEAT_INTERVAL = 30000;
 const CLIENT_TIMEOUT = 35000;
 
@@ -134,28 +134,31 @@ const rateLimitState = new Map();
 
 const port = parseInt(process.env.BROKER_PORT || process.argv[2] || DEFAULT_PORT, 10);
 
+// Shared HTTP server for REST API and WebSocket
+const httpServer = http.createServer(handleRequest);
+
+// WebSocket server attached to HTTP server
 const wss = new WebSocketServer({
-  port,
+  server: httpServer,
   perMessageDeflate: false // Disable compression for low-latency
 });
 
-// REST API server
-const restApiPort = port + REST_API_PORT_OFFSET;
-const restServer = createRestApi({
-  port: restApiPort,
-  probes
-});
+// Initialise REST API state
+initRestApi({ probes });
 
-console.log(`
+// Start listening
+httpServer.listen(port, () => {
+  console.log(`
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║  VERO-BAAMBI Metrics Broker                                                   ║
 ║  TSG Suite – Broadcast Audio Metering                                         ║
 ╠═══════════════════════════════════════════════════════════════════════════════╣
-║  WebSocket:  ws://localhost:${port.toString().padEnd(50)}║
-║  REST API:   http://localhost:${restApiPort.toString().padEnd(48)}║
+║  HTTP + WebSocket:  http://localhost:${port.toString().padEnd(41)}║
+║  Health check:      http://localhost:${port}/health`.padEnd(56) + `║
 ║  Press Ctrl+C to stop                                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 `);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONNECTION HANDLING
