@@ -245,10 +245,11 @@ function measureLoop() {
   if (!activeCapture) return;
 
   // ─────────────────────────────────────────────────────────────────────────
-  // REMOTE MODE: Skip local metering - handleRemoteMetrics updates displays
+  // REMOTE/TAURI MODE: Skip local metering - handler functions update displays
+  // Remote: handleRemoteMetrics; Tauri: handleTauriMeteringUpdate
   // ─────────────────────────────────────────────────────────────────────────
-  if (activeCapture === 'remote') {
-    // In remote mode, all LUFS/TP/radar updates come from handleRemoteMetrics
+  if (activeCapture === 'remote' || activeCapture === 'tauri') {
+    // In remote/tauri mode, all LUFS/TP/radar updates come from external sources
     // Only update elapsed time display here
     const elapsed = performance.now() - meterState.startTs;
     if (dom.r128Time) dom.r128Time.textContent = formatTime(elapsed);

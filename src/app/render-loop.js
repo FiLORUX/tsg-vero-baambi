@@ -201,8 +201,10 @@ function renderLoop() {
     meterState.holdBufR.set(meters.bufR);
   }
 
-  // Check if we're in remote capture mode (used throughout render loop)
-  const isRemoteCapture = captureState?.getActiveCapture?.() === 'remote';
+  // Check if we're in remote or Tauri capture mode (both receive pre-computed metering data)
+  // Remote: from network broker; Tauri: from native ASIO/JACK/CoreAudio backend
+  const activeCapture = captureState?.getActiveCapture?.();
+  const isRemoteCapture = activeCapture === 'remote' || activeCapture === 'tauri';
 
   // ─────────────────────────────────────────────────────────────────────────
   // Stereo Analysis Components

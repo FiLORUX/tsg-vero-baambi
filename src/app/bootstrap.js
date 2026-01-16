@@ -77,6 +77,8 @@ import { CalibrationEngine, applyActiveProfilesOnStartup } from '../calibration/
 // Loudness history strip
 import { LoudnessHistoryStrip } from '../ui/loudness-history.js';
 import { pruneHistory, needsPruning } from '../utils/history-pruner.js';
+// Tauri bridge for native audio backend (ASIO/JACK/CoreAudio)
+import * as tauriBridge from '../bridge/index.js';
 // Stereo sampler (dual-mode L/R sync) - loaded dynamically for file:// compatibility
 let stereoSamplerModule = null;
 // Meter verification
@@ -1474,6 +1476,160 @@ function renderRemoteProbeList(probes) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TAURI NATIVE AUDIO HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Handle metering data from Tauri native audio backend.
+ * Updates meterState and DOM displays with data from Rust DSP engine.
+ *
+ * @param {Object} data - Metering data from Rust backend
+ * @param {number} data.lufsM - Momentary LUFS
+ * @param {number} data.lufsS - Short-term LUFS
+ * @param {number} data.lufsI - Integrated LUFS
+ * @param {number} data.tpLeft - True Peak left (dBTP)
+ * @param {number} data.tpRight - True Peak right (dBTP)
+ * @param {number} data.ppmLeft - PPM left (dBFS)
+ * @param {number} data.ppmRight - PPM right (dBFS)
+ * @param {number} data.correlation - Stereo correlation (-1 to +1)
+ */
+function handleTauriMeteringUpdate(data) {
+  // Only process if Tauri capture is active
+  if (activeCapture !== 'tauri') return;
+
+  const now = performance.now() / 1000;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // LUFS DISPLAY
+  // ─────────────────────────────────────────────────────────────────────────
+  if (lufsM) {
+    const m = data.lufsM;
+    if (isFinite(m) && m > -100) {
+      lufsM.textContent = formatLUFS(m);
+      lufsM.style.color = loudnessColourBase(m);
+      lufsM.dataset.v = m;
+    } else {
+      lufsM.textContent = '--.- LUFS';
+      lufsM.style.color = '';
+    }
+  }
+
+  if (lufsS) {
+    const s = data.lufsS;
+    if (isFinite(s) && s > -100) {
+      lufsS.textContent = formatLUFS(s);
+      lufsS.style.color = loudnessColourBase(s);
+      meterState.shortTermLufs = s;
+    } else {
+      lufsS.textContent = '--.- LUFS';
+      lufsS.style.color = '';
+      meterState.shortTermLufs = -Infinity;
+    }
+  }
+
+  if (lufsI) {
+    const i = data.lufsI;
+    if (isFinite(i) && i > -100) {
+      lufsI.textContent = formatLUFS(i);
+      lufsI.style.color = loudnessColourBase(i);
+      meterState.integratedLufs = i;
+    } else {
+      lufsI.textContent = '--.- LUFS';
+      lufsI.style.color = '';
+      meterState.integratedLufs = -Infinity;
+    }
+  }
+
+  // Radar history (short-term LUFS over time)
+  const st = data.lufsS;
+  if (isFinite(st) && st > -100) {
+    const wallNow = Date.now();
+    const cutoff = wallNow - (radarMaxSeconds * 1000);
+    if (needsPruning(meterState.radarHistory, cutoff, 't')) {
+      pruneHistory(meterState.radarHistory, cutoff, 't');
+    }
+    meterState.radarHistory.push({ t: wallNow, v: st });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TRUE PEAK
+  // ─────────────────────────────────────────────────────────────────────────
+  const tpL = data.tpLeft ?? -60;
+  const tpR = data.tpRight ?? -60;
+  meterState.remoteTpL = tpL;
+  meterState.remoteTpR = tpR;
+
+  // Cumulative max for R128 TPmax display
+  if (tpL > meterState.tpMaxL) meterState.tpMaxL = tpL;
+  if (tpR > meterState.tpMaxR) meterState.tpMaxR = tpR;
+
+  // Update TPmax display
+  if (r128TpMax) {
+    const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
+    if (isFinite(tpMax) && tpMax > -100) {
+      r128TpMax.textContent = formatTruePeak(tpMax);
+      r128TpMax.style.color = tpMax > TP_LIMIT ? 'var(--hot)' : '';
+    }
+  }
+
+  // Peak hold for bar meters (3s hold)
+  if (tpL > meterState.tpPeakHoldL) {
+    meterState.tpPeakHoldL = tpL;
+    meterState.tpPeakTimeL = now;
+  } else if (now - meterState.tpPeakTimeL > TP_PEAK_HOLD_SEC) {
+    meterState.tpPeakHoldL = tpL;
+    meterState.tpPeakTimeL = now;
+  }
+  if (tpR > meterState.tpPeakHoldR) {
+    meterState.tpPeakHoldR = tpR;
+    meterState.tpPeakTimeR = now;
+  } else if (now - meterState.tpPeakTimeR > TP_PEAK_HOLD_SEC) {
+    meterState.tpPeakHoldR = tpR;
+    meterState.tpPeakTimeR = now;
+  }
+
+  // Peak indicator for radar
+  const currentTruePeak = Math.max(tpL, tpR);
+  if (currentTruePeak >= TP_LIMIT) {
+    meterState.peakIndicatorOn = true;
+    meterState.peakIndicatorLastTrigger = performance.now();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PPM (Nordic Type I)
+  // ─────────────────────────────────────────────────────────────────────────
+  const ppmL = data.ppmLeft ?? -60;
+  const ppmR = data.ppmRight ?? -60;
+  meterState.remoteNordicPpmL = ppmL;
+  meterState.remoteNordicPpmR = ppmR;
+
+  // Peak hold for bar meters (3s hold)
+  if (ppmL > meterState.nordicPeakHoldL) {
+    meterState.nordicPeakHoldL = ppmL;
+    meterState.nordicPeakTimeL = now;
+  } else if (now - meterState.nordicPeakTimeL > NORDIC_PPM_PEAK_HOLD_SEC) {
+    meterState.nordicPeakHoldL = ppmL;
+    meterState.nordicPeakTimeL = now;
+  }
+  if (ppmR > meterState.nordicPeakHoldR) {
+    meterState.nordicPeakHoldR = ppmR;
+    meterState.nordicPeakTimeR = now;
+  } else if (now - meterState.nordicPeakTimeR > NORDIC_PPM_PEAK_HOLD_SEC) {
+    meterState.nordicPeakHoldR = ppmR;
+    meterState.nordicPeakTimeR = now;
+  }
+
+  // BBC PPM uses True Peak as approximation (no raw audio in Tauri events)
+  meterState.remoteBbcPpmL = tpL;
+  meterState.remoteBbcPpmR = tpR;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CORRELATION
+  // ─────────────────────────────────────────────────────────────────────────
+  meterState.remoteCorrelation = data.correlation ?? 0;
+}
+
 /**
  * Handle received remote metrics.
  * Updates all meter displays with data from remote probe.
@@ -2394,12 +2550,169 @@ function setupObservers() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TAURI MODE INITIALIZATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Initialise VERO-BAAMBI in Tauri mode with native audio backend.
+ * This bypasses Web Audio API entirely, using ASIO/JACK/CoreAudio via Rust.
+ */
+async function initTauriMode() {
+  const initStart = performance.now();
+  console.log('[Bootstrap] Initializing Tauri mode');
+
+  // Initialise UI components (same as browser mode)
+  initUIComponents();
+
+  // Initialise layout
+  initLayout({
+    dom: {
+      wrap,
+      spatialMeter,
+      xy,
+      corr,
+      monoDev,
+      loudnessModule,
+      radarWrap,
+      loudnessRadar
+    },
+    uiComponents: { goniometer },
+    getLayoutFrozen: () => false
+  });
+
+  sizeWrap();
+  window.addEventListener('resize', sizeWrap);
+
+  // Bind events (limited set for Tauri - no source mode buttons)
+  bindTauriEvents();
+
+  // Setup observers
+  setupObservers();
+
+  // Initialise measure loop (used for render timing)
+  initMeasureLoop({
+    lufsMeter,
+    truePeakMeter,
+    ppmMeter,
+    samplePeakMeter,
+    radar,
+    getActiveCapture: () => activeCapture,
+    getTrim: () => 0,
+    getTargetLufs: () => LOUDNESS_TARGET,
+    getTpLimit: () => TP_LIMIT
+  });
+
+  // Initialise render loop
+  initRenderLoop({
+    dom: {
+      dbfs, dbfsScale, dbL, dbR,
+      tp, tpScale, tpL, tpR,
+      nordicCanvas, nordicScale, nordicLVal, nordicRVal,
+      bbcCanvas, bbcScale, bbcLVal, bbcRVal,
+      spCanvas, spScale, spLVal, spRVal,
+      corr, corrVal,
+      widthMeter, rotationCanvas, msFillM, msFillS, msValueM, msValueS,
+      peakLed, r128Crest, r128Time, uptimeEl
+    },
+    uiComponents: {
+      goniometer,
+      spectrumAnalyser: spectrumAnalyserInstance,
+      widthMeterInstance,
+      rotationMeterInstance,
+      msMeterInstance,
+      balanceMeterInstance,
+      historyStrip: loudnessHistoryStrip
+    },
+    meters: { lufsMeter, truePeakMeter, ppmMeter, samplePeakMeter },
+    getActiveCapture: () => activeCapture,
+    getTargetLufs: () => LOUDNESS_TARGET,
+    getTpLimit: () => TP_LIMIT,
+    getDbfsBufs: () => ({ bufL: null, bufR: null }),
+    getKBufs: () => ({ kBufL: null, kBufR: null })
+  });
+
+  // Initialise Tauri bridge with metering callback
+  const bridgeInitialised = await tauriBridge.initTauriBridge({
+    onMeteringUpdate: handleTauriMeteringUpdate
+  });
+
+  if (!bridgeInitialised) {
+    console.error('[Bootstrap] Failed to initialise Tauri bridge');
+    return;
+  }
+
+  // Start native audio capture
+  try {
+    const backend = await tauriBridge.startCapture({ bufferSize: 128 });
+    activeCapture = 'tauri';
+    console.log(`[Bootstrap] Started native audio capture with ${backend} backend`);
+
+    // Update status display
+    if (ctxState) ctxState.textContent = `Tauri: ${backend}`;
+    if (statusSummary) statusSummary.textContent = `Native ${backend} audio`;
+
+    // Start render loop (measure loop not needed - Tauri sends data)
+    startRenderLoop();
+
+  } catch (e) {
+    console.error('[Bootstrap] Failed to start native audio capture:', e);
+    if (ctxState) ctxState.textContent = 'Tauri: Error';
+  }
+
+  const initTime = performance.now() - initStart;
+  console.log(`[Bootstrap] Tauri mode initialised in ${initTime.toFixed(1)}ms`);
+}
+
+/**
+ * Bind events for Tauri mode (subset of browser mode events).
+ * Source mode buttons are hidden in Tauri since audio is fixed to native backend.
+ */
+function bindTauriEvents() {
+  // R128 reset button
+  if (r128Reset) {
+    r128Reset.addEventListener('click', () => {
+      lufsMeter?.reset();
+      truePeakMeter?.reset();
+      ppmMeter?.reset();
+      resetMeterState();
+      radar?.clear();
+      console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
+    });
+  }
+
+  // Pause/resume measurement
+  if (btnMeasurePause) {
+    btnMeasurePause.addEventListener('click', () => {
+      toggleMeasurementPause(lufsMeter, radar);
+      updateMeasurePauseButton();
+    });
+  }
+
+  // Hide source mode buttons (not applicable in Tauri)
+  const sourcePanel = document.getElementById('sourcePanelsContainer');
+  if (sourcePanel) sourcePanel.style.display = 'none';
+
+  const modeButtons = document.querySelectorAll('.source-mode-btn');
+  modeButtons.forEach(btn => btn.style.display = 'none');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // INITIALIZATION
 // ─────────────────────────────────────────────────────────────────────────────
 
 function init() {
   const initStart = performance.now();
   console.log('[Bootstrap] Initializing VERO-BAAMBI modular version');
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // TAURI NATIVE AUDIO DETECTION
+  // When running in Tauri, use native ASIO/JACK/CoreAudio instead of Web Audio
+  // ───────────────────────────────────────────────────────────────────────────
+  if (tauriBridge.isTauri()) {
+    console.log('[Bootstrap] Tauri environment detected, using native audio backend');
+    initTauriMode();
+    return; // Skip Web Audio initialization
+  }
 
   // Initialise UI components first (creates goniometer etc.)
   initUIComponents();

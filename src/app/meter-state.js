@@ -127,8 +127,9 @@ export const meterState = {
   holdBufR: null,
 
   // ─────────────────────────────────────────────────────────────────────────
-  // REMOTE METERING STATE
-  // When activeCapture === 'remote', these values are used instead of local
+  // REMOTE/TAURI METERING STATE
+  // When activeCapture === 'remote' or 'tauri', these values are used instead
+  // of local audio processing (data comes from external sources)
   // ─────────────────────────────────────────────────────────────────────────
 
   // True Peak (instantaneous, from remote)
