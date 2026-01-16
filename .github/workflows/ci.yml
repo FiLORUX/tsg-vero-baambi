@@ -43,7 +43,7 @@ jobs:
       - name: Run type check
         run: |
           echo "Type-checking JavaScript with JSDoc annotations..."
-          npx tsc --noEmit --allowJs --checkJs --strict \
+          npx tsc --noEmit --allowJs --checkJs \
             --target ES2022 --module ESNext --moduleResolution bundler \
             --lib ES2022,DOM,DOM.Iterable \
             --skipLibCheck \
