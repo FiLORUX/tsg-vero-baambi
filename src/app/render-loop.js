@@ -80,6 +80,24 @@ let animationFrameId = null;
 const PEAK_INDICATOR_HOLD_MS = 500;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EVENT-DRIVEN RENDERING (low-latency mode)
+// ─────────────────────────────────────────────────────────────────────────────
+// Instead of waiting for requestAnimationFrame (0-16.7ms delay), external events
+// can trigger immediate rendering. This reduces glass-to-glass latency.
+//
+// Throttled to 120 Hz to match typical emit rates and prevent over-rendering.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Minimum interval between immediate renders (ms) — 120 Hz cap */
+const MIN_RENDER_INTERVAL_MS = 8;
+
+/** Timestamp of last immediate render */
+let lastImmediateRenderTime = 0;
+
+/** Whether a deferred render is pending via rAF */
+let pendingDeferredRender = false;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // INITIALISATION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -120,6 +138,41 @@ export function stopRenderLoop() {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
   }
+}
+
+/**
+ * Trigger immediate render for low-latency mode.
+ *
+ * Instead of waiting for the next requestAnimationFrame (0-16.7ms delay),
+ * this renders immediately when called from an external event source.
+ *
+ * Throttled to 120 Hz to match typical emit rates and prevent over-rendering.
+ * If called too frequently, defers to next rAF to avoid blocking.
+ *
+ * @returns {boolean} True if immediate render was performed, false if deferred
+ */
+export function triggerImmediateRender() {
+  const now = performance.now();
+  const elapsed = now - lastImmediateRenderTime;
+
+  // If enough time has passed, render immediately (synchronously)
+  if (elapsed >= MIN_RENDER_INTERVAL_MS) {
+    lastImmediateRenderTime = now;
+    renderLoopInternal();
+    return true;
+  }
+
+  // Otherwise, defer to next rAF (but only schedule once)
+  if (!pendingDeferredRender) {
+    pendingDeferredRender = true;
+    requestAnimationFrame(() => {
+      pendingDeferredRender = false;
+      lastImmediateRenderTime = performance.now();
+      renderLoopInternal();
+    });
+  }
+
+  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,10 +225,11 @@ function formatDbu(ppm) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Main render loop function.
- * Called via requestAnimationFrame (~60 Hz).
+ * Internal render function containing all meter rendering logic.
+ * Called by renderLoop() (via rAF) or triggerImmediateRender() (direct).
+ * Separated to enable event-driven rendering for low-latency mode.
  */
-function renderLoop() {
+function renderLoopInternal() {
   const now = performance.now();
   const frameDelta = now - meterState.lastRenderTime;
   meterState.lastRenderTime = now;
@@ -184,8 +238,14 @@ function renderLoop() {
   helpers.layoutXY();
   helpers.layoutLoudness();
 
-  // Sample analysers ONCE (always get fresh data for debugging)
-  helpers.sampleAnalysers();
+  // Check capture mode early (needed for sampleAnalysers decision)
+  const activeCapture = captureState?.getActiveCapture?.();
+  const isTauriCapture = activeCapture === 'tauri';
+
+  // Sample analysers ONCE (skip in Tauri mode - buffers are filled by event handler)
+  if (!isTauriCapture) {
+    helpers.sampleAnalysers();
+  }
 
   // On long frames, AnalyserNode buffers may have timing skew between L/R reads.
   // Use held (last known-good) buffers for display to prevent visual artifacts.
@@ -201,10 +261,8 @@ function renderLoop() {
     meterState.holdBufR.set(meters.bufR);
   }
 
-  // Check if we're in remote or Tauri capture mode (both receive pre-computed metering data)
-  // Remote: from network broker; Tauri: from native ASIO/JACK/CoreAudio backend
-  const activeCapture = captureState?.getActiveCapture?.();
-  const isRemoteCapture = activeCapture === 'remote' || activeCapture === 'tauri';
+  // Remote mode check (Tauri uses buffers like local, not pre-computed values like remote)
+  const isRemoteCapture = activeCapture === 'remote';
 
   // ─────────────────────────────────────────────────────────────────────────
   // Stereo Analysis Components
@@ -645,7 +703,13 @@ function renderLoop() {
 
   if (dom.uptimeEl) dom.uptimeEl.textContent = `${timeStr}.${ms}`;
   if (dom.statusSummary) dom.statusSummary.textContent = timeStr;
+}
 
-  // Schedule next frame
+/**
+ * Main render loop function (rAF-scheduled wrapper).
+ * Calls renderLoopInternal() and schedules the next frame.
+ */
+function renderLoop() {
+  renderLoopInternal();
   animationFrameId = requestAnimationFrame(renderLoop);
 }

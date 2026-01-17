@@ -52,7 +52,7 @@ import { getPresetConfig as getPresetConfigFromModule } from '../generators/inde
 // Measure loop (20 Hz) - extracted from bootstrap
 import { initMeasureLoop, startMeasureLoop, stopMeasureLoop, pauseMeasurement, resumeMeasurement, toggleMeasurementPause, isMeasurementPaused } from './measure-loop.js';
 // Render loop (60 Hz) - extracted from bootstrap
-import { initRenderLoop, startRenderLoop, stopRenderLoop } from './render-loop.js';
+import { initRenderLoop, startRenderLoop, stopRenderLoop, triggerImmediateRender } from './render-loop.js';
 // Shared meter state between measureLoop and renderLoop
 import { meterState, resetMeterState, resetRemoteMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, NORDIC_PPM_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
 // Drag-and-drop system removed (see docs/PROJECT-A-DRAG-DROP-REMOVAL.md)
@@ -1628,6 +1628,43 @@ function handleTauriMeteringUpdate(data) {
   // CORRELATION
   // ─────────────────────────────────────────────────────────────────────────
   meterState.remoteCorrelation = data.correlation ?? 0;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // VISUALISATION SAMPLES (for goniometer, spectrum, stereo analysis)
+  // Ring buffer approach: shift old samples left, append new at end
+  // This maintains a continuous waveform for proper phase visualisation
+  // ─────────────────────────────────────────────────────────────────────────
+  if (data.samplesLeft && data.samplesRight) {
+    const srcLen = data.samplesLeft.length;
+    const dstLen = bufL.length;
+    const copyLen = Math.min(srcLen, dstLen);
+
+    if (copyLen < dstLen) {
+      // Shift old samples left to make room for new samples
+      bufL.copyWithin(0, copyLen);
+      bufR.copyWithin(0, copyLen);
+
+      // Append new samples at end (most recent at the end)
+      const dstOffset = dstLen - copyLen;
+      for (let i = 0; i < copyLen; i++) {
+        bufL[dstOffset + i] = data.samplesLeft[i];
+        bufR[dstOffset + i] = data.samplesRight[i];
+      }
+    } else {
+      // New samples fill entire buffer
+      for (let i = 0; i < dstLen; i++) {
+        bufL[i] = data.samplesLeft[i];
+        bufR[i] = data.samplesRight[i];
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // IMMEDIATE RENDER (low-latency mode)
+  // ─────────────────────────────────────────────────────────────────────────
+  // Trigger render immediately instead of waiting for next rAF.
+  // This eliminates 0-16.7ms of latency per frame.
+  triggerImmediateRender();
 }
 
 /**
