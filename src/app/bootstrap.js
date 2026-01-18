@@ -2675,6 +2675,12 @@ async function initTauriMode() {
 
   if (!bridgeInitialised) {
     console.error('[Bootstrap] Failed to initialise Tauri bridge');
+    // Hide splash even on failure so user can see error
+    const splash = document.getElementById('splash');
+    if (splash) {
+      splash.classList.add('hide');
+      setTimeout(() => splash.remove(), 350);
+    }
     return;
   }
 
@@ -2695,6 +2701,21 @@ async function initTauriMode() {
     console.error('[Bootstrap] Failed to start native audio capture:', e);
     if (ctxState) ctxState.textContent = 'Tauri: Error';
   }
+
+  // Hide boot splash (minimum 777ms visible)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const elapsed = performance.now() - initStart;
+      const remaining = Math.max(0, 777 - elapsed);
+      setTimeout(() => {
+        const splash = document.getElementById('splash');
+        if (splash) {
+          splash.classList.add('hide');
+          setTimeout(() => splash.remove(), 350);
+        }
+      }, remaining);
+    });
+  });
 
   const initTime = performance.now() - initStart;
   console.log(`[Bootstrap] Tauri mode initialised in ${initTime.toFixed(1)}ms`);
