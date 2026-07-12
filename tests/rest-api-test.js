@@ -4,7 +4,7 @@
  */
 
 import http from 'http';
-import { createRestApi, updateMetrics } from '../broker/rest-api.js';
+import { initRestApi, handleRequest, updateMetrics } from '../broker/rest-api.js';
 
 const PORT = 18766; // Use high port to avoid conflicts
 
@@ -75,9 +75,10 @@ async function runTests() {
     ppm: { left: -12.0, right: -14.0 }
   });
 
-  // Start server
-  server = createRestApi({ port: PORT, probes });
-  await new Promise(resolve => setTimeout(resolve, 100)); // Wait for server to start
+  // Start server (mirrors broker/server.js: shared request handler + state)
+  initRestApi({ probes });
+  server = http.createServer(handleRequest);
+  await new Promise(resolve => server.listen(PORT, resolve));
 
   try {
     // --- Test: Health endpoint ---
