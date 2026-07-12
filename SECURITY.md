@@ -46,6 +46,14 @@ The probe/broker/client architecture for distributed metering:
 - Transmits numerical metrics only — no audio content
 - Local-network by default; configurable for WAN with appropriate security
 - Broker binds to `0.0.0.0`; deploy behind firewall for untrusted networks
-- Optional token authentication via `VERO_CONTROL_TOKEN` environment variable
+- Optional access control, enforced only when configured (unset = trusted-network mode):
+  - `VERO_CONTROL_TOKEN` — required token; clients supply it as a `?token=…` query
+    parameter on the WebSocket URL, or an `Authorization: Bearer …` header
+  - `VERO_ALLOWED_ORIGINS` — comma-separated `Origin` allow-list, mitigating
+    cross-site WebSocket hijacking from an unrelated browser tab
+- Per-message payload size is capped (512 KB) to bound abuse
+
+When exposing the broker beyond a trusted LAN (e.g. the Fly.io deployment), set
+both `VERO_CONTROL_TOKEN` and `VERO_ALLOWED_ORIGINS`.
 
 See `broker/server.js` and `docs/deployment.md` for configuration.

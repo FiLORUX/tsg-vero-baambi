@@ -67,6 +67,7 @@
  */
 
 import http from 'http';
+import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { initRestApi, handleRequest, updateMetrics } from './rest-api.js';
 
@@ -81,6 +82,15 @@ const CLIENT_TIMEOUT = 35000;
 // Rate limiting: max messages per second per socket
 const RATE_LIMIT_WINDOW_MS = 1000;
 const RATE_LIMIT_MAX_MESSAGES = 100;  // 100 msgs/sec (probe at 20Hz = 20 msgs/sec)
+
+// Optional access control. Each guard is enforced only when its env var is set,
+// so existing trusted-network deployments are unaffected. See SECURITY.md.
+const CONTROL_TOKEN = process.env.VERO_CONTROL_TOKEN || '';
+const ALLOWED_ORIGINS = (process.env.VERO_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const MAX_PAYLOAD_BYTES = 512 * 1024;  // Bound per-message size (metrics are ~4 KB)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE
@@ -137,10 +147,62 @@ const port = parseInt(process.env.BROKER_PORT || process.argv[2] || DEFAULT_PORT
 // Shared HTTP server for REST API and WebSocket
 const httpServer = http.createServer(handleRequest);
 
+/**
+ * Constant-time string comparison so token checks do not leak length/content
+ * through response timing.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function timingSafeEqualStr(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+/**
+ * Gate WebSocket upgrades on the optional origin allow-list and access token.
+ * With neither configured, every connection is accepted (unchanged behaviour).
+ *
+ * @param {{ origin?: string, req: http.IncomingMessage }} info
+ * @returns {boolean}
+ */
+function verifyClient(info) {
+  const { origin, req } = info;
+
+  if (ALLOWED_ORIGINS.length > 0 && (!origin || !ALLOWED_ORIGINS.includes(origin))) {
+    console.warn(`[Broker] Rejected upgrade: origin ${origin || '(none)'} not in allow-list`);
+    return false;
+  }
+
+  if (CONTROL_TOKEN) {
+    let provided = '';
+    try {
+      provided = new URL(req.url, 'http://localhost').searchParams.get('token') || '';
+    } catch {
+      provided = '';
+    }
+    if (!provided) {
+      const auth = req.headers['authorization'] || '';
+      if (auth.startsWith('Bearer ')) provided = auth.slice(7);
+    }
+    if (!provided || !timingSafeEqualStr(provided, CONTROL_TOKEN)) {
+      console.warn('[Broker] Rejected upgrade: missing or invalid access token');
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // WebSocket server attached to HTTP server
 const wss = new WebSocketServer({
   server: httpServer,
-  perMessageDeflate: false // Disable compression for low-latency
+  perMessageDeflate: false, // Disable compression for low-latency
+  maxPayload: MAX_PAYLOAD_BYTES, // Reject oversized frames (DoS guard)
+  verifyClient
 });
 
 // Initialise REST API state
@@ -158,6 +220,11 @@ httpServer.listen(port, () => {
 ║  Press Ctrl+C to stop                                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 `);
+  if (CONTROL_TOKEN) console.log('[Broker] Access-token authentication: ENABLED');
+  if (ALLOWED_ORIGINS.length) console.log(`[Broker] Origin allow-list: ${ALLOWED_ORIGINS.join(', ')}`);
+  if (!CONTROL_TOKEN && !ALLOWED_ORIGINS.length) {
+    console.warn('[Broker] WARNING: no access token or origin allow-list configured — expose only on a trusted network.');
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
