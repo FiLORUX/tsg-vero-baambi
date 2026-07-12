@@ -93,7 +93,17 @@ export default [
         // Media
         MediaStream: 'readonly',
         MediaStreamTrack: 'readonly',
-        MediaDevices: 'readonly'
+        MediaDevices: 'readonly',
+        // Additional browser globals used across the app
+        alert: 'readonly',
+        confirm: 'readonly',
+        getComputedStyle: 'readonly',
+        crypto: 'readonly',
+        WebSocket: 'readonly',
+        AudioWorkletNode: 'readonly',
+        Node: 'readonly',
+        requestIdleCallback: 'readonly',
+        cancelIdleCallback: 'readonly'
       }
     },
     rules: {
@@ -244,7 +254,8 @@ export default [
         __filename: 'readonly',
         module: 'readonly',
         require: 'readonly',
-        exports: 'readonly'
+        exports: 'readonly',
+        global: 'readonly'
       }
     }
   }

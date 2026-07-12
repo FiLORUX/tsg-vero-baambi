@@ -492,7 +492,7 @@ export class AudioEngine {
    * Alias for backwards compatibility.
    * @deprecated Use initialise() instead
    */
-  async initialise() {
+  async init() {
     return this.initialise();
   }
 }

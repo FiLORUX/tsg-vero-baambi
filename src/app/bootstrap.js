@@ -243,6 +243,7 @@ const extMonVal = $('extMonVal');
 const btnExtMonMute = $('btnExtMonMute');
 const extTrimRange = $('extTrimRange');
 const extTrimVal = $('extTrimVal');
+const extTrimReset = $('extTrimReset');
 const extDevice = $('extDevice');
 const extCc = $('extCc');
 const extSr = $('extSr');
@@ -2653,12 +2654,12 @@ async function initTauriMode() {
     },
     uiComponents: {
       goniometer,
-      spectrumAnalyser: spectrumAnalyserInstance,
-      widthMeterInstance,
-      rotationMeterInstance,
-      msMeterInstance,
-      balanceMeterInstance,
-      historyStrip: loudnessHistoryStrip
+      spectrumAnalyserUI,
+      widthMeterUI,
+      rotationMeterUI,
+      msMeterUI,
+      balanceMeterUI,
+      loudnessHistoryStrip
     },
     meters: { lufsMeter, truePeakMeter, ppmMeter, samplePeakMeter },
     getActiveCapture: () => activeCapture,
@@ -2741,8 +2742,8 @@ function bindTauriEvents() {
   // Pause/resume measurement
   if (btnMeasurePause) {
     btnMeasurePause.addEventListener('click', () => {
-      toggleMeasurementPause(lufsMeter, radar);
-      updateMeasurePauseButton();
+      const paused = toggleMeasurementPause();
+      updatePauseButtonState(paused);
     });
   }
 
