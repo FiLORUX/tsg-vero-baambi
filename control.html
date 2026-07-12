@@ -643,6 +643,16 @@
     // PROBE SELECTION
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Escape untrusted broker-supplied fields before they reach innerHTML.
+    // Probe names, locations, ids and log text originate from WebSocket peers
+    // and must never be interpolated into markup unescaped.
+    function escapeHtml(str) {
+      if (str === undefined || str === null) return '';
+      return String(str).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
     function renderProbeList() {
       if (probes.size === 0) {
         dom.probeList.innerHTML = '<div class="empty-state">No probes connected</div>';
@@ -653,9 +663,9 @@
       for (const [id, probe] of probes) {
         const selected = id === selectedProbeId ? 'selected' : '';
         html += `
-          <div class="probe-item ${selected}" data-probe-id="${id}">
-            <span class="name">${probe.name}</span>
-            <span class="status">${probe.location || 'Online'}</span>
+          <div class="probe-item ${selected}" data-probe-id="${escapeHtml(id)}">
+            <span class="name">${escapeHtml(probe.name)}</span>
+            <span class="status">${escapeHtml(probe.location || 'Online')}</span>
           </div>
         `;
       }
@@ -782,7 +792,7 @@
 
       let html = '';
       for (const entry of logEntries) {
-        html += `<div class="log-entry ${entry.type}">[${entry.time}] ${entry.text}</div>`;
+        html += `<div class="log-entry ${escapeHtml(entry.type)}">[${escapeHtml(entry.time)}] ${escapeHtml(entry.text)}</div>`;
       }
       dom.logPanel.innerHTML = html;
     }
