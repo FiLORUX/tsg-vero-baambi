@@ -62,6 +62,10 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Dependencies initialised via initRenderLoop()
+// Reused silence spectrum for remote mode when a probe has sent no bands yet.
+// Hoisted out of the 60 Hz render path to avoid a per-frame allocation.
+const SILENT_BANDS = new Float32Array(31).fill(-100);
+
 let dom = null;
 let meters = null;
 let uiComponents = null;
@@ -313,12 +317,9 @@ function renderLoopInternal() {
   if (uiComponents.spectrumAnalyserUI) {
     if (isRemoteCapture) {
       // Remote mode: use pre-computed bands, or draw silence if probe offline
-      let bands = meterState.remoteSpectrumBands;
-      if (!bands) {
-        // Create silence array (-100 dB per band)
-        // Low enough to force ballistics to fall off screen, but finite to avoid NaN
-        bands = new Float32Array(31).fill(-100);
-      }
+      // Reuse the shared silence array instead of allocating a fresh 31-band
+      // typed array every frame while the probe has sent no spectrum yet.
+      const bands = meterState.remoteSpectrumBands || SILENT_BANDS;
       uiComponents.spectrumAnalyserUI.drawFromBands(bands, dom.spatialMeter);
     } else {
       // Local: compute FFT→1/3-octave from analysers

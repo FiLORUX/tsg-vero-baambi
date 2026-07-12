@@ -9,10 +9,16 @@
   "scripts": {
     "start": "./tsg start",
     "broker": "node broker/server.js",
-    "dev": "node --watch broker/server.js"
+    "dev": "node --watch broker/server.js",
+    "test": "node tests/metering-verification.js && node tests/k-weighting-test.js && node tests/storage-migration-test.js && node tests/calibration-profiles-test.js",
+    "test:rest": "node tests/rest-api-test.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0"

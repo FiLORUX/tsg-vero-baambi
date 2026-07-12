@@ -62,8 +62,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run metering verification
-        run: node tests/metering-verification.js
+      - name: Run verification suites
+        run: npm test
 
   # Static file serving test (ensures app loads without errors)
   serve-test:
@@ -91,3 +91,24 @@ jobs:
 
       - name: Check ES module loads
         run: curl -f http://localhost:8080/src/main.js || exit 1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    # Introduced against a previously unlinted codebase. Non-blocking until the
+    # backlog of existing violations is cleared, then drop continue-on-error.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run ESLint
+        run: npm run lint
