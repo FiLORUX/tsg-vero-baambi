@@ -421,8 +421,7 @@ services:
   broker:
     build: ./broker
     ports:
-      - "8765:8765"   # WebSocket
-      - "8766:8766"   # REST API
+      - "8765:8765"   # WebSocket + REST API (shared port)
     restart: unless-stopped
 
   web:
