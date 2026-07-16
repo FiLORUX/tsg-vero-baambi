@@ -1,3 +1,4 @@
+# DEPRECATED: Fly.io retired — broker now runs on the OCI Ampere A1 box behind the shared Cloudflare Tunnel (see broker/DEPLOY-OCI.md); retained for rollback only.
 # fly.toml app configuration file generated for vero-baambi-broker on 2026-01-13T03:31:02+01:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.

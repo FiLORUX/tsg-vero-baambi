@@ -1,0 +1,73 @@
+# File: broker/docker-compose.oci.yml
+#
+# VERO-BAAMBI metrics broker — Oracle Cloud (OCI) Always-Free Ampere A1 host.
+#
+# This box already runs the UniFi controller behind a Cloudflare Tunnel, so the
+# broker reuses the same tunnel rather than opening any inbound port. The service
+# binds to 127.0.0.1 only; the host's cloudflared systemd service dials in over
+# localhost — identical to the UniFi model (no public port). Cloudflare terminates
+# TLS at the edge (wss://broker.thast.se) and carries the WebSocket down the tunnel
+# to the plain-HTTP broker on 8765.
+#
+# Resource caps isolate the broker from the co-tenant UniFi controller, which is
+# the higher-criticality tenant on this shared box.
+#
+# Deploy:  docker compose -f docker-compose.oci.yml up -d
+# See:     broker/DEPLOY-OCI.md
+
+services:
+  broker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # node:20-alpine is multi-arch (linux/arm64 included), so the same Dockerfile
+    # builds natively on the Ampere A1 ARM64 host — no platform override needed.
+    image: vero-baambi-broker:local
+    container_name: vero-baambi-broker
+    restart: unless-stopped
+
+    # Drop root. The node:20-alpine base image ships a built-in 'node' user
+    # (UID 1000); the broker only needs to read /app and bind a high port (8765),
+    # so no elevated privileges are required.
+    user: "node"
+
+    # Host-local only. cloudflared reaches the broker over localhost; nothing is
+    # published on the public interface (mirrors the UniFi tunnel model).
+    ports:
+      - "127.0.0.1:8765:8765"
+
+    environment:
+      # Single shared port for the REST API + WebSocket (see broker/server.js).
+      - BROKER_PORT=8765
+      # Optional access control. Populate these in broker/.env on the host; each
+      # guard in server.js is enforced only when its variable is non-empty, so an
+      # empty value preserves the current trusted-network behaviour.
+      #   VERO_CONTROL_TOKEN     - bearer/query access token (constant-time check)
+      #   VERO_ALLOWED_ORIGINS   - comma-separated WebSocket Origin allow-list
+      - VERO_CONTROL_TOKEN=${VERO_CONTROL_TOKEN:-}
+      - VERO_ALLOWED_ORIGINS=${VERO_ALLOWED_ORIGINS:-}
+      # NOTE: the per-message payload cap (MAX_PAYLOAD_BYTES = 512 KiB) is a
+      # compile-time constant in server.js, not an environment variable — there
+      # is nothing to pass through here. Change it in source if it must differ.
+
+    # Resource isolation from the UniFi controller. 256 MB mirrors the Fly VM the
+    # broker previously ran on; the relay is tiny (metrics only, no audio) so half
+    # an Ampere vCPU is ample. The legacy `mem_limit`/`cpus` keys are the caps
+    # `docker compose up` enforces on a single host; the `deploy.resources` block
+    # documents the same limits for swarm/portability.
+    mem_limit: 256m
+    cpus: 0.5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+    # Confirms the broker answers HTTP on the shared port before traffic is routed.
+    # Uses wget from BusyBox (present in alpine), matching the Dockerfile HEALTHCHECK.
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
