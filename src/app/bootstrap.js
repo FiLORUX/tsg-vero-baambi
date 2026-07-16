@@ -453,7 +453,7 @@ function sampleKWeightedAnalysers() {
 
 const lufsMeter = new LUFSMeter({ sampleRate: ac.sampleRate, blockSize: FFT_SIZE });
 const truePeakMeter = new TruePeakMeter({
-  mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.HERMITE
+  mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE
 });
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
 const samplePeakMeter = new SamplePeakMeter();
@@ -2925,14 +2925,14 @@ function init() {
       // Restore source levels after verification
       sourceController.unmuteAllSources();
       // Restore True Peak mode to user preference
-      truePeakMeter.setMode(appState.get('truePeakMode') || TRUE_PEAK_MODE.HERMITE);
+      truePeakMeter.setMode(appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE);
     },
     onAbort: () => {
       console.log('[Bootstrap] Meter verification aborted');
       // Restore source levels after abort
       sourceController.unmuteAllSources();
       // Restore True Peak mode to user preference
-      truePeakMeter.setMode(appState.get('truePeakMode') || TRUE_PEAK_MODE.HERMITE);
+      truePeakMeter.setMode(appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE);
     }
   });
 

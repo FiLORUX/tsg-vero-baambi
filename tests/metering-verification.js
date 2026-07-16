@@ -15,6 +15,13 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
+// Production true-peak functions — tested directly so a defect in the shipping
+// code cannot hide behind a local reimplementation (as it did historically).
+import {
+  calculateTruePeak as prodHermite,
+  calculateTruePeakPolyphase as prodPolyphase
+} from '../src/metering/true-peak.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,6 +442,45 @@ function testTruePeakPolyphase() {
 }
 
 /**
+ * Regression test against the SHIPPING true-peak code (not a local copy).
+ *
+ * The canonical BS.1770 worst case — a full-scale sine at Fs/4 sampled at 45° —
+ * has a true peak of 0.0 dBTP but a sample peak of only −3.01 dBTP. A correct 4×
+ * meter must recover it; a half-band filter silently degrades to sample-peak.
+ * The earlier polyphase filter did exactly that (read −3.01), and it shipped
+ * because the tests only exercised local reimplementations. This guards the
+ * production `calculateTruePeakPolyphase` directly so that cannot recur.
+ */
+function testTruePeakProduction() {
+  console.log('\n--- True Peak (production code, BS.1770 worst case) ---');
+  const fs = 48000;
+  const N = 8192;
+
+  // Full-scale sine at Fs/4, 45° phase → samples land at ±0.707, peak between.
+  const worst = new Float32Array(N);
+  for (let n = 0; n < N; n++) {
+    worst[n] = Math.sin((2 * Math.PI * (fs / 4) * n) / fs + Math.PI / 4);
+  }
+  const poly = prodPolyphase(worst);
+  const herm = prodHermite(worst);
+  console.log(
+    `  Fs/4 @45°: sample-peak=-3.01, Hermite=${herm.toFixed(2)}, Polyphase=${poly.toFixed(2)} dBTP (truth 0.0)`
+  );
+
+  if (poly >= -0.5) {
+    pass('Production polyphase recovers Fs/4 ISP', `${poly.toFixed(2)} dBTP`, '>= -0.5 dBTP');
+  } else {
+    fail('Production polyphase recovers Fs/4 ISP', `${poly.toFixed(2)} dBTP`, '>= -0.5 dBTP');
+  }
+  assertClose('Production polyphase: Fs/4 accuracy', poly, 0.0, 0.3, ' dBTP');
+
+  // Low-frequency sanity on the shipping code.
+  const oneK = new Float32Array(N);
+  for (let n = 0; n < N; n++) oneK[n] = Math.sin((2 * Math.PI * 1000 * n) / fs);
+  assertClose('Production polyphase: 1 kHz full-scale', prodPolyphase(oneK), 0.0, 0.1, ' dBTP');
+}
+
+/**
  * Polyphase FIR coefficients (ITU-R BS.1770-4 Annex 2).
  * 4 phases × 12 taps = 48-tap prototype filter.
  * Normalised to unity DC gain per phase for amplitude-preserving interpolation.
@@ -718,6 +764,7 @@ testPpmDecay();
 testKWeightingResponse();
 testTruePeakIntersample();
 testTruePeakPolyphase();
+testTruePeakProduction();
 testLufsIntegration();
 testPpmBallistics();
 testStereoWidthBalance();

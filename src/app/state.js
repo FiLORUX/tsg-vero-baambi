@@ -68,9 +68,11 @@ export const DEFAULT_STATE = Object.freeze({
   truePeakLimit: -1.0,
 
   // True Peak algorithm mode
-  // 'hermite': Fast Catmull-Rom interpolation (suitable for real-time monitoring)
-  // 'polyphase': ITU-R BS.1770-4 Annex 2 compliant FIR filter (laboratory-grade)
-  truePeakMode: 'hermite',
+  // 'polyphase': ITU-R BS.1770-4 Annex 2 compliant FIR filter (laboratory-grade).
+  //   Default — a compliance meter must not under-read against the −1 dBTP limit.
+  // 'hermite': Fast Catmull-Rom interpolation; ~1 dB low on Nyquist-region
+  //   inter-sample peaks, so opt-in only where CPU is scarce and exactness isn't.
+  truePeakMode: 'polyphase',
 
   // Monitor settings
   browserMonitorLevel: 20,
