@@ -6,8 +6,8 @@
 # broker reuses the same tunnel rather than opening any inbound port. The service
 # binds to 127.0.0.1 only; the host's cloudflared systemd service dials in over
 # localhost — identical to the UniFi model (no public port). Cloudflare terminates
-# TLS at the edge (wss://broker.thast.se) and carries the WebSocket down the tunnel
-# to the plain-HTTP broker on 8765.
+# TLS at the edge (wss://broker.thast.live) and carries the WebSocket down the
+# tunnel to the plain-HTTP broker on 8765.
 #
 # Resource caps isolate the broker from the co-tenant UniFi controller, which is
 # the higher-criticality tenant on this shared box.

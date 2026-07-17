@@ -21,12 +21,17 @@ const STORAGE_KEY = 'vero-baambi-broker-url';
  * Known hostname → broker URL mappings.
  * Add entries here for custom domains.
  */
+// The `match` predicates detect where the APP is served (Pages preview or the
+// thåst.se brand domain). The broker TARGET is independent of that: it lives on
+// the plain-ASCII `broker.thast.live`, a separate Cloudflare zone reached over
+// the shared OCI tunnel. ASCII sidesteps the punycode round-trip an IDN host
+// forces on every TLS/SNI hop; see broker/DEPLOY-OCI.md.
 const BROKER_MAPPINGS = [
   // Cloudflare Pages production
-  { match: (h) => h.includes('vero-baambi') && h.includes('pages.dev'), broker: 'wss://broker.thåst.se' },
+  { match: (h) => h.includes('vero-baambi') && h.includes('pages.dev'), broker: 'wss://broker.thast.live' },
 
   // Custom domain (thåst.se)
-  { match: (h) => h.includes('thåst.se') || h.includes('xn--thst-roa.se'), broker: 'wss://broker.thåst.se' },
+  { match: (h) => h.includes('thåst.se') || h.includes('xn--thst-roa.se'), broker: 'wss://broker.thast.live' },
 ];
 
 /**
