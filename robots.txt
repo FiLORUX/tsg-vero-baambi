@@ -1,0 +1,18 @@
+# VERO-BAAMBI — TSG Suite
+#
+# The application itself is public. The operational surfaces are not: they
+# carry live metering, remote probe control and a facility wallboard, and a
+# search result naming a client's facility is that client's information to
+# disclose, not ours.
+#
+# X-Robots-Tag in _headers is the authoritative declaration and covers the
+# proxied brand path as well. This file exists because the pages.dev address
+# is reachable directly and a crawler may consult robots.txt before it ever
+# requests a page and sees the header.
+
+User-agent: *
+Disallow: /probe.html
+Disallow: /control.html
+Disallow: /wallboard.html
+Disallow: /tools/
+Allow: /

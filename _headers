@@ -1,0 +1,46 @@
+# Cloudflare Pages — response headers
+#
+# The repository root is the Pages output directory (there is no build step),
+# so this file ships as-is.
+#
+# WHY THESE PAGES MUST NOT BE INDEXED
+#
+# index.html is the application and is public by intent. The other four are
+# operational surfaces: probe.html transmits live metering from a facility,
+# control.html issues remote commands to a probe (Connect, Reset Integration,
+# Get State) with no authentication in front of it, wallboard.html renders a
+# gallery view of whatever probes are reporting, and tools/ holds a diagnostic.
+#
+# None of them should appear in a search result. A wallboard indexed under a
+# facility's name discloses that the facility exists, what it is called and
+# what its loudness looked like when the crawler passed. That is a client's
+# information, not ours to publish.
+#
+# This is disclosure control, not access control. It asks well-behaved crawlers
+# not to list the pages; it stops nobody who has the URL. Real gating needs a
+# Cloudflare Access policy on these paths, which is a dashboard change and is
+# recorded as outstanding in the estate doctrine.
+#
+# The header survives the tsg-proxy Worker, which forwards origin headers when
+# serving these pages under the brand path, so one declaration covers both the
+# pages.dev address and the proxied path.
+
+/probe.html
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  Referrer-Policy: no-referrer
+
+/control.html
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  Referrer-Policy: no-referrer
+
+/wallboard.html
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  Referrer-Policy: no-referrer
+
+/tools/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  Referrer-Policy: no-referrer
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
