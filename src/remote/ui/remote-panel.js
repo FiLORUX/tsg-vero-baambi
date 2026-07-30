@@ -88,7 +88,12 @@
 import { ProbeSender } from '../probe/index.js';
 import { MetricsReceiver } from '../client/index.js';
 import { STORAGE_KEYS, getItem, setItem } from '../../config/storage.js';
-import { getBrokerUrl, saveBrokerUrl, getDefaultBrokerUrl } from '../broker-url.js';
+import {
+  getBrokerUrl,
+  saveBrokerUrl,
+  getDefaultBrokerUrl,
+  UNRESOLVED_BROKER_MESSAGE
+} from '../broker-url.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION CONSTANTS
@@ -96,10 +101,18 @@ import { getBrokerUrl, saveBrokerUrl, getDefaultBrokerUrl } from '../broker-url.
 
 /**
  * Default broker URL when none is configured.
- * Auto-detected based on hostname; see broker-url.js for mappings.
- * @type {string}
+ * Auto-detected from the hostname; see broker-url.js for the host table.
+ * Null on a host with no known broker, in which case the operator must type one.
+ * @type {string|null}
  */
 const DEFAULT_BROKER_URL = getDefaultBrokerUrl();
+
+/**
+ * Input placeholder. Falls back to a worked example rather than rendering the
+ * literal "null" when the host resolves to no broker.
+ * @type {string}
+ */
+const BROKER_URL_PLACEHOLDER = DEFAULT_BROKER_URL || 'wss://broker.thast.live';
 
 /**
  * Timeout for availability check (milliseconds).
@@ -437,7 +450,9 @@ export class RemotePanel {
    * @private
    */
   #render() {
-    const brokerUrl = getBrokerUrl();
+    // Empty rather than "null" when unresolved: the field is the operator's cue
+    // to supply an address, and the placeholder shows the expected shape.
+    const brokerUrl = getBrokerUrl() || '';
     const probeName = getItem(STORAGE_KEY_PROBE_NAME, '');
 
     this.#container.innerHTML = `
@@ -468,7 +483,7 @@ export class RemotePanel {
               <input type="url"
                      id="remoteBrokerUrl"
                      class="${CSS.INPUT}"
-                     placeholder="${DEFAULT_BROKER_URL}"
+                     placeholder="${BROKER_URL_PLACEHOLDER}"
                      value="${this.#escapeHtml(brokerUrl)}"
                      autocomplete="off"
                      spellcheck="false" />
@@ -743,6 +758,23 @@ export class RemotePanel {
     const url = brokerUrl?.value?.trim() || DEFAULT_BROKER_URL;
 
     try {
+      // No address means the check cannot even be attempted. Surface that as its
+      // own outcome rather than dialling a guessed loopback and reporting
+      // "unavailable", which would blame the network for a configuration gap.
+      // Inside the try so the finally below still restores the button.
+      if (!url) {
+        console.warn(`[RemotePanel] ${UNRESOLVED_BROKER_MESSAGE}`);
+        if (brokerUrl) brokerUrl.title = UNRESOLVED_BROKER_MESSAGE;
+        this.#isRemoteAvailable = false;
+        this.#overallStatus = 'unavailable';
+        this.#updateHeaderStatus('unavailable');
+        this.#updateDisabledState();
+        this.#emitStatus();
+        return false;
+      }
+
+      if (brokerUrl) brokerUrl.title = '';
+
       const available = await this.#testWebSocketConnection(url);
       this.#isRemoteAvailable = available;
       this.#updateOverallStatus();

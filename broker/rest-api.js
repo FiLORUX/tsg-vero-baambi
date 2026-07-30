@@ -31,11 +31,24 @@
  *   All endpoints return JSON with consistent structure:
  *   { ok: boolean, data?: any, error?: string }
  *
+ * BROWSER ACCESS
+ * ──────────────
+ *   Cross-origin reads are granted only to origins listed in
+ *   `VERO_ALLOWED_ORIGINS` (see allowed-origins.js). With no list configured,
+ *   no CORS grant is emitted and browsers cannot read these responses from
+ *   another origin.
+ *
+ *   This is a browser-side control only. It is NOT authentication: these
+ *   endpoints remain readable by any non-browser client (curl, Prometheus)
+ *   that can reach the port. Bind the broker to a trusted network or put it
+ *   behind an authenticating proxy. See SECURITY.md.
+ *
  * @module broker/rest-api
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 import http from 'http';
+import { getAllowedOrigins, isOriginAllowed } from './allowed-origins.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -110,16 +123,44 @@ export function updateMetrics(probeId, metrics) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Apply CORS headers for this request.
+ *
+ * The REST API answers with probe names, locations and live loudness figures.
+ * A wildcard grant would let any web page in any tab read all of that
+ * cross-origin, so the grant is now conditional: the request Origin is echoed
+ * back only when it appears in the allow-list, and when no list is configured
+ * no `Access-Control-Allow-Origin` header is emitted at all. Browsers then
+ * refuse to hand the response body to the calling script.
+ *
+ * `Vary: Origin` is set unconditionally, including on the refusal path. The
+ * body is identical for every origin but the CORS headers are not, so any
+ * shared cache in front of the broker must key on Origin regardless of the
+ * outcome — otherwise one allowed origin's grant could be replayed to another.
+ *
+ * @param {http.IncomingMessage} req - HTTP request
+ * @param {http.ServerResponse} res - HTTP response
+ */
+function applyCorsHeaders(req, res) {
+  res.setHeader('Vary', 'Origin');
+
+  if (getAllowedOrigins().length === 0) return;
+
+  const origin = req.headers.origin;
+  if (!isOriginAllowed(origin)) return;
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+/**
  * Handle incoming HTTP request.
  *
  * @param {http.IncomingMessage} req - HTTP request
  * @param {http.ServerResponse} res - HTTP response
  */
 function handleRequest(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  applyCorsHeaders(req, res);
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);

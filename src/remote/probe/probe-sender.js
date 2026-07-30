@@ -39,19 +39,15 @@ import { WebSocketClient, ConnectionState } from '../transport/index.js';
 import { MetricsCollector } from './metrics-collector.js';
 import { DEFAULT_UPDATE_RATE, serializeMetrics, validateBrokerUrl } from '../types.js';
 import { appState, InputMode } from '../../app/state.js';
+import { getDefaultBrokerUrl, UNRESOLVED_BROKER_MESSAGE } from '../broker-url.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Default broker URL for local development.
- * @type {string}
- */
-const DEFAULT_BROKER_URL = 'ws://localhost:8765';
-
-/**
  * LocalStorage key for broker URL persistence.
+ * Shared with broker-url.js, which owns the same key for the auto-detect override.
  * @type {string}
  */
 const STORAGE_KEY_BROKER_URL = 'vero-baambi-broker-url';
@@ -98,7 +94,7 @@ export class ProbeSender {
   /** @type {WebSocketClient|null} */
   #client = null;
 
-  /** @type {string} */
+  /** @type {string|null} Null when the host resolves to no known broker */
   #brokerUrl;
 
   /** @type {number} */
@@ -127,7 +123,10 @@ export class ProbeSender {
     const storedUrl = this.#loadSetting(STORAGE_KEY_BROKER_URL);
     const storedName = this.#loadSetting(STORAGE_KEY_PROBE_NAME);
 
-    this.#brokerUrl = config.brokerUrl || storedUrl || DEFAULT_BROKER_URL;
+    // May legitimately be null on an unrecognised host. Resolving to a hard-coded
+    // loopback here would reintroduce exactly the silent failure broker-url.js
+    // removes, so the null is carried through and start() refuses loudly.
+    this.#brokerUrl = config.brokerUrl || storedUrl || getDefaultBrokerUrl();
     this.#updateRate = Math.min(30, Math.max(1, config.updateRate || DEFAULT_UPDATE_RATE));
 
     this.#collector = new MetricsCollector({
@@ -171,7 +170,8 @@ export class ProbeSender {
 
   /**
    * Get/set broker URL.
-   * @type {string}
+   * Null when no broker could be resolved for the current host.
+   * @type {string|null}
    */
   get brokerUrl() {
     return this.#brokerUrl;
@@ -244,6 +244,14 @@ export class ProbeSender {
   async start() {
     if (this.#isEnabled) {
       return; // Already running
+    }
+
+    // Refuse before opening a socket rather than after: with no address there is
+    // nothing to dial, and an unexplained "disabled" is the failure mode this
+    // guard exists to prevent.
+    if (!this.#brokerUrl) {
+      this.#notifyStatus('error');
+      throw new Error(`[ProbeSender] ${UNRESOLVED_BROKER_MESSAGE}`);
     }
 
     this.#isEnabled = true;

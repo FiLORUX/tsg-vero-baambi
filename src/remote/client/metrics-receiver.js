@@ -44,19 +44,20 @@ import {
   createEmptyStereo,
   validateBrokerUrl
 } from '../types.js';
+import { getDefaultBrokerUrl, UNRESOLVED_BROKER_MESSAGE } from '../broker-url.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Default broker URL for local development.
- * @type {string}
- */
-const DEFAULT_BROKER_URL = 'ws://localhost:8765';
-
-/**
  * LocalStorage key for broker URL persistence.
+ *
+ * Deliberately distinct from the probe's key (`vero-baambi-broker-url`): one
+ * browser profile may receive from one broker while its own probe publishes to
+ * another, and collapsing the two would silently discard whichever override was
+ * saved first.
+ *
  * @type {string}
  */
 const STORAGE_KEY_BROKER_URL = 'vero-baambi-client-broker-url';
@@ -122,7 +123,7 @@ export class MetricsReceiver {
   /** @type {WebSocketClient|null} */
   #client = null;
 
-  /** @type {string} */
+  /** @type {string|null} Null when the host resolves to no known broker */
   #brokerUrl;
 
   /** @type {Map<string, ProbeInfo>} */
@@ -154,7 +155,11 @@ export class MetricsReceiver {
    */
   constructor(config = {}) {
     const storedUrl = this.#loadSetting(STORAGE_KEY_BROKER_URL);
-    this.#brokerUrl = config.brokerUrl || storedUrl || DEFAULT_BROKER_URL;
+
+    // May legitimately be null on an unrecognised host. Resolving to a hard-coded
+    // loopback here would reintroduce exactly the silent failure broker-url.js
+    // removes, so the null is carried through and connect() refuses loudly.
+    this.#brokerUrl = config.brokerUrl || storedUrl || getDefaultBrokerUrl();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -163,7 +168,8 @@ export class MetricsReceiver {
 
   /**
    * Get/set broker URL.
-   * @type {string}
+   * Null when no broker could be resolved for the current host.
+   * @type {string|null}
    */
   get brokerUrl() {
     return this.#brokerUrl;
@@ -234,6 +240,14 @@ export class MetricsReceiver {
   async connect() {
     if (this.#client?.isConnected) {
       return;
+    }
+
+    // Refuse before opening a socket rather than after: with no address there is
+    // nothing to dial, and an unexplained "disconnected" is the failure mode this
+    // guard exists to prevent.
+    if (!this.#brokerUrl) {
+      this.#notifyStatus('error');
+      throw new Error(`[MetricsReceiver] ${UNRESOLVED_BROKER_MESSAGE}`);
     }
 
     if (!this.#client) {

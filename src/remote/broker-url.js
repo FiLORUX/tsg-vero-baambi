@@ -8,8 +8,18 @@
  *
  * Priority:
  *   1. localStorage saved URL (user override)
- *   2. Auto-detect based on hostname
- *   3. Fallback to localhost for development
+ *   2. Exact/suffix match against the known-host table
+ *   3. Loopback broker, but only on a genuine development host
+ *   4. null — no broker can be inferred; the caller must say so out loud
+ *
+ * WHY NULL RATHER THAN A LOCALHOST FALLBACK
+ * ─────────────────────────────────────────
+ * Returning `ws://localhost:8765` for an unrecognised host is worse than
+ * returning nothing. On an HTTPS page the browser blocks the ws:// dial as
+ * mixed content before it reaches the network, so the UI reports "disconnected"
+ * with no indication that the app simply does not know where its broker lives.
+ * Null forces the caller to distinguish "cannot reach the broker" from "have no
+ * broker address", and to tell the operator which it is.
  *
  * @module remote/broker-url
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -18,45 +28,112 @@
 const STORAGE_KEY = 'vero-baambi-broker-url';
 
 /**
- * Known hostname → broker URL mappings.
- * Add entries here for custom domains.
+ * Broker reached from the published deployments.
+ *
+ * The host the APP is served from and the broker TARGET are independent. The
+ * broker lives on the plain-ASCII `broker.thast.live`, a separate Cloudflare
+ * zone reached over the shared OCI tunnel — ASCII sidesteps the punycode
+ * round-trip an IDN host forces on every TLS/SNI hop; see broker/DEPLOY-OCI.md.
+ *
+ * @type {string}
  */
-// The `match` predicates detect where the APP is served (Pages preview or the
-// thåst.se brand domain). The broker TARGET is independent of that: it lives on
-// the plain-ASCII `broker.thast.live`, a separate Cloudflare zone reached over
-// the shared OCI tunnel. ASCII sidesteps the punycode round-trip an IDN host
-// forces on every TLS/SNI hop; see broker/DEPLOY-OCI.md.
-const BROKER_MAPPINGS = [
-  // Cloudflare Pages production
-  { match: (h) => h.includes('vero-baambi') && h.includes('pages.dev'), broker: 'wss://broker.thast.live' },
+const PRODUCTION_BROKER = 'wss://broker.thast.live';
 
-  // Custom domain (thåst.se)
-  { match: (h) => h.includes('thåst.se') || h.includes('xn--thst-roa.se'), broker: 'wss://broker.thast.live' },
-];
+/** Broker used when the app itself is served from a development machine. */
+const DEV_BROKER = 'ws://localhost:8765';
 
 /**
- * Detect broker URL based on current hostname.
+ * Known app hostname → broker URL.
  *
- * @returns {string} WebSocket URL for broker
+ * Entries match either an exact `host` or an explicit leading-dot `suffix`.
+ * Substring matching was removed deliberately: `h.includes('xn--thst-roa.se')`
+ * also matched `xn--thst-roa.se.attacker.example`, which would have pointed the
+ * app at the production broker from a host the operator does not control. A
+ * leading-dot suffix can only ever match a true subdomain.
+ *
+ * @type {ReadonlyArray<{host?: string, suffix?: string, broker: string}>}
  */
-function detectBrokerUrl() {
-  const hostname = window.location.hostname;
+const BROKER_HOSTS = Object.freeze([
+  // Planned future home of the suite.
+  { host: 'tsg.thast.live', broker: PRODUCTION_BROKER },
 
-  // Check mappings
-  for (const { match, broker } of BROKER_MAPPINGS) {
-    if (match(hostname)) {
-      return broker;
-    }
+  // Cloudflare Pages: the project host plus its per-deployment preview hosts
+  // (`<hash>.vero-baambi.pages.dev`).
+  { host: 'vero-baambi.pages.dev', broker: PRODUCTION_BROKER },
+  { suffix: '.vero-baambi.pages.dev', broker: PRODUCTION_BROKER },
+
+  // Brand domain thåst.se, in its punycode A-label form. `window.location.hostname`
+  // always reports the A-label, never the Unicode U-label, so testing for the
+  // literal 'thåst.se' here could never fire — that clause has been removed.
+  { host: 'xn--thst-roa.se', broker: PRODUCTION_BROKER },
+  { suffix: '.xn--thst-roa.se', broker: PRODUCTION_BROKER }
+]);
+
+/**
+ * Hostnames that genuinely denote the local machine.
+ * `[::1]` appears because `location.hostname` keeps the brackets for IPv6 literals.
+ */
+const DEV_HOSTS = Object.freeze(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+/**
+ * Suffixes that denote the local machine or link-local mDNS names.
+ * `.localhost` is reserved to loopback (RFC 6761) and `.local` to mDNS (RFC 6762),
+ * so neither can be delegated to a public host.
+ */
+const DEV_SUFFIXES = Object.freeze(['.localhost', '.local']);
+
+/**
+ * Operator-facing explanation for an unresolved host.
+ * Shared so every surface reports the same diagnosis in the same words.
+ *
+ * @type {string}
+ */
+export const UNRESOLVED_BROKER_MESSAGE =
+  'No broker configured for this host — enter a broker URL (e.g. wss://broker.thast.live)';
+
+/**
+ * Resolve a broker URL for a given app hostname.
+ *
+ * Pure: takes the hostname rather than reading `window`, so it is testable and
+ * has no hidden dependency on the document.
+ *
+ * @param {string} hostname - Host the app is served from, as `location.hostname`
+ * @returns {string|null} Broker WebSocket URL, or null when none can be inferred
+ */
+export function resolveBrokerUrl(hostname) {
+  if (typeof hostname !== 'string') return null;
+
+  // Hostnames are case-insensitive; compare in one case so `LOCALHOST` resolves.
+  const host = hostname.trim().toLowerCase();
+  if (host === '') return null;
+
+  for (const entry of BROKER_HOSTS) {
+    if (entry.host !== undefined && host === entry.host) return entry.broker;
+    if (entry.suffix !== undefined && host.endsWith(entry.suffix)) return entry.broker;
   }
 
-  // Default: localhost for development
-  return 'ws://localhost:8765';
+  if (DEV_HOSTS.includes(host)) return DEV_BROKER;
+  if (DEV_SUFFIXES.some((suffix) => host.endsWith(suffix))) return DEV_BROKER;
+
+  return null;
+}
+
+/**
+ * Detect broker URL based on the current hostname.
+ *
+ * @returns {string|null} WebSocket URL for broker, or null when unresolved
+ */
+function detectBrokerUrl() {
+  // Guarded so the module can be imported outside a document (tests, tooling).
+  if (typeof window === 'undefined' || !window.location) return null;
+
+  return resolveBrokerUrl(window.location.hostname);
 }
 
 /**
  * Get broker URL with localStorage override support.
  *
- * @returns {string} WebSocket URL for broker
+ * @returns {string|null} WebSocket URL for broker, or null when unresolved
  */
 export function getBrokerUrl() {
   try {
@@ -102,7 +179,7 @@ export function clearBrokerUrl() {
 /**
  * Get the auto-detected URL (ignoring localStorage).
  *
- * @returns {string} Auto-detected WebSocket URL
+ * @returns {string|null} Auto-detected WebSocket URL, or null when unresolved
  */
 export function getDefaultBrokerUrl() {
   return detectBrokerUrl();
@@ -113,5 +190,7 @@ export default {
   saveBrokerUrl,
   clearBrokerUrl,
   getDefaultBrokerUrl,
+  resolveBrokerUrl,
+  UNRESOLVED_BROKER_MESSAGE,
   STORAGE_KEY
 };

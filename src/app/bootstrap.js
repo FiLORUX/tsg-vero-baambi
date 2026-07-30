@@ -67,7 +67,7 @@ import { initLayout, sizeWrap, layoutXY, layoutLoudness } from './layout.js';
 import { setupBargraphMeter, navigateTo as navigateToBargraph } from './bargraph-meter.js';
 // Remote metering client
 import { MetricsReceiver } from '../remote/client/index.js';
-import { getBrokerUrl, saveBrokerUrl } from '../remote/broker-url.js';
+import { getBrokerUrl, saveBrokerUrl, UNRESOLVED_BROKER_MESSAGE } from '../remote/broker-url.js';
 // Calibration system
 import { CalibrationStatusBadge } from '../ui/calibration-badge.js';
 import { VerificationStatusBadge } from '../ui/verification-badge.js';
@@ -201,7 +201,9 @@ const inputSourceSummary = $('inputSourceSummary');
 
 // Remote source controls
 const remoteBrokerUrl = $('remoteBrokerUrl');
-if (remoteBrokerUrl) remoteBrokerUrl.value = getBrokerUrl();
+// Empty rather than the string "null" when this host maps to no known broker —
+// a blank field is the operator's cue to supply an address.
+if (remoteBrokerUrl) remoteBrokerUrl.value = getBrokerUrl() || '';
 const btnRemoteCheck = $('btnRemoteCheck');
 const remoteBrokerStatus = $('remoteBrokerStatus');
 const remoteLatency = $('remoteLatency');
@@ -1184,7 +1186,25 @@ function stopGeneratorCapture() {
 async function connectRemoteBroker() {
   const url = remoteBrokerUrl?.value?.trim() || getBrokerUrl();
 
-  if (remoteBrokerStatus) remoteBrokerStatus.textContent = 'Connecting…';
+  // Distinguish "no address" from "address unreachable". Both used to end up as
+  // "Unavailable", which sent operators hunting for a network fault when the app
+  // simply had nowhere to connect to.
+  if (!url) {
+    console.warn(`[Bootstrap] ${UNRESOLVED_BROKER_MESSAGE}`);
+    isRemoteAvailable = false;
+    if (remoteBrokerStatus) {
+      remoteBrokerStatus.textContent = 'No broker URL';
+      remoteBrokerStatus.style.color = 'var(--hot)';
+      remoteBrokerStatus.title = UNRESOLVED_BROKER_MESSAGE;
+    }
+    if (remoteWarning) remoteWarning.style.display = '';
+    return false;
+  }
+
+  if (remoteBrokerStatus) {
+    remoteBrokerStatus.title = '';
+    remoteBrokerStatus.textContent = 'Connecting…';
+  }
   if (remoteWarning) remoteWarning.style.display = 'none';
   if (btnRemoteCheck) btnRemoteCheck.disabled = true;
 

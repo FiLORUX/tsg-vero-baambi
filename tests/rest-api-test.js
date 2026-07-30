@@ -22,9 +22,15 @@ function test(name, condition) {
   }
 }
 
-function fetch(path) {
+/**
+ * Issue a GET against the test server.
+ *
+ * @param {string} path - Request path
+ * @param {Object} [headers] - Extra request headers (used to simulate an Origin)
+ */
+function fetch(path, headers = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.get(`http://localhost:${PORT}${path}`, (res) => {
+    const req = http.get(`http://localhost:${PORT}${path}`, { headers }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
@@ -169,8 +175,52 @@ async function runTests() {
     test('ok is false', unknown.body.ok === false);
 
     // --- Test: CORS headers ---
-    console.log('\n--- CORS Headers ---');
-    test('Has Access-Control-Allow-Origin', health.headers['access-control-allow-origin'] === '*');
+    // The REST API exposes probe names, locations and live loudness. A wildcard
+    // grant would let any page read that cross-origin, so the grant must be
+    // withheld by default and issued only to configured origins.
+    console.log('\n--- CORS: no allow-list configured ---');
+    delete process.env.VERO_ALLOWED_ORIGINS;
+
+    const unconfigured = await fetch('/health', { Origin: 'https://attacker.example' });
+    test('No Access-Control-Allow-Origin by default',
+      unconfigured.headers['access-control-allow-origin'] === undefined);
+    test('No wildcard grant anywhere',
+      unconfigured.headers['access-control-allow-origin'] !== '*');
+    test('Vary: Origin present on the refusal path',
+      unconfigured.headers['vary']?.includes('Origin'));
+
+    console.log('\n--- CORS: allow-list configured ---');
+    process.env.VERO_ALLOWED_ORIGINS = 'https://vero-baambi.pages.dev, https://tsg.thast.live';
+
+    const allowedOrigin = await fetch('/probes', { Origin: 'https://tsg.thast.live' });
+    test('Echoes an allowed Origin verbatim',
+      allowedOrigin.headers['access-control-allow-origin'] === 'https://tsg.thast.live');
+    test('Never echoes a wildcard for an allowed Origin',
+      allowedOrigin.headers['access-control-allow-origin'] !== '*');
+    test('Vary: Origin present on the grant path',
+      allowedOrigin.headers['vary']?.includes('Origin'));
+    test('Advertises allowed methods when granting',
+      allowedOrigin.headers['access-control-allow-methods']?.includes('GET'));
+
+    const deniedOrigin = await fetch('/probes', { Origin: 'https://attacker.example' });
+    test('Withholds grant from an unlisted Origin',
+      deniedOrigin.headers['access-control-allow-origin'] === undefined);
+
+    // A suffix or substring comparison would let this through; an exact one does not.
+    const lookalike = await fetch('/probes', { Origin: 'https://tsg.thast.live.attacker.example' });
+    test('Withholds grant from a look-alike Origin',
+      lookalike.headers['access-control-allow-origin'] === undefined);
+
+    const noOrigin = await fetch('/probes');
+    test('Withholds grant when no Origin is sent',
+      noOrigin.headers['access-control-allow-origin'] === undefined);
+
+    // Preflight must obey the same rule as the actual request.
+    const preflightAllowed = await fetch('/probes', { Origin: 'https://vero-baambi.pages.dev' });
+    test('Preflight-eligible request grants a listed Origin',
+      preflightAllowed.headers['access-control-allow-origin'] === 'https://vero-baambi.pages.dev');
+
+    delete process.env.VERO_ALLOWED_ORIGINS;
 
   } finally {
     // Cleanup

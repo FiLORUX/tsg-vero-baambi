@@ -491,7 +491,7 @@ david@thast.se  ·  +46 700 30 30 60
     import { computeGoniometerPoints } from './src/ui/goniometer.js';
     import { computeSpectrumBands, SPECTRUM_NUM_BANDS } from './src/ui/spectrum.js';
     import { ThastVectorTextGenerator } from './src/generators/thast-vector-text.js';
-    import { getBrokerUrl, saveBrokerUrl } from './src/remote/broker-url.js';
+    import { getBrokerUrl, saveBrokerUrl, UNRESOLVED_BROKER_MESSAGE } from './src/remote/broker-url.js';
 
     // ─────────────────────────────────────────────────────────────────────────
     // CONFIGURATION
@@ -563,8 +563,15 @@ david@thast.se  ·  +46 700 30 30 60
       headerStatusText: $('headerStatusText')
     };
 
-    // Initialize broker URL from auto-detect/localStorage
-    dom.brokerUrl.value = getBrokerUrl();
+    // Initialise broker URL from auto-detect/localStorage. Null means this host
+    // maps to no known broker, so leave the field blank and say why rather than
+    // pre-filling a loopback address that cannot work from an HTTPS page.
+    const detectedBrokerUrl = getBrokerUrl();
+    dom.brokerUrl.value = detectedBrokerUrl || '';
+    if (!detectedBrokerUrl) {
+      console.warn(`[Probe] ${UNRESOLVED_BROKER_MESSAGE}`);
+      updateConnectionStatus('error', 'No broker URL');
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // AUDIO CONTEXT & METERING
@@ -796,7 +803,12 @@ david@thast.se  ·  +46 700 30 30 60
 
     function connectBroker() {
       const url = dom.brokerUrl.value.trim();
-      if (!url) return;
+      if (!url) {
+        // Fail out loud: a silent return leaves the button looking inert.
+        console.warn(`[Probe] ${UNRESOLVED_BROKER_MESSAGE}`);
+        updateConnectionStatus('error', 'No broker URL');
+        return;
+      }
 
       // Save URL for next time
       saveBrokerUrl(url);

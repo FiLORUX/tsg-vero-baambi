@@ -458,7 +458,7 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-import { getBrokerUrl, saveBrokerUrl } from './src/remote/broker-url.js';
+import { getBrokerUrl, saveBrokerUrl, UNRESOLVED_BROKER_MESSAGE } from './src/remote/broker-url.js';
 
 // DOM elements
 const brokerUrl = document.getElementById('brokerUrl');
@@ -496,8 +496,16 @@ const stats = {
   outOfSpecProbes: 0
 };
 
-// Initialize broker URL from auto-detect/localStorage
-brokerUrl.value = getBrokerUrl();
+// Initialise broker URL from auto-detect/localStorage. Null means this host maps
+// to no known broker, so leave the field blank and say why rather than pre-filling
+// a loopback address that cannot work from an HTTPS page.
+const detectedBrokerUrl = getBrokerUrl();
+brokerUrl.value = detectedBrokerUrl || '';
+if (!detectedBrokerUrl) {
+  console.warn(`[Wallboard] ${UNRESOLVED_BROKER_MESSAGE}`);
+  connectionIndicator.className = 'status-indicator offline';
+  connectionStatus.textContent = 'No broker URL';
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONNECTION
@@ -509,7 +517,13 @@ function connect() {
   }
 
   const url = brokerUrl.value.trim();
-  if (!url) return;
+  if (!url) {
+    // Fail out loud: a silent return leaves the wallboard blank with no reason.
+    console.warn(`[Wallboard] ${UNRESOLVED_BROKER_MESSAGE}`);
+    connectionIndicator.className = 'status-indicator offline';
+    connectionStatus.textContent = 'No broker URL';
+    return;
+  }
 
   // Save URL for next time
   saveBrokerUrl(url);

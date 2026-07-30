@@ -70,6 +70,9 @@ import http from 'http';
 import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { initRestApi, handleRequest, updateMetrics } from './rest-api.js';
+// The origin allow-list lives in its own module so this upgrade gate and the REST
+// API's CORS grant can never disagree about which origins are trusted.
+import { getAllowedOrigins, isOriginAllowed } from './allowed-origins.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -86,10 +89,6 @@ const RATE_LIMIT_MAX_MESSAGES = 100;  // 100 msgs/sec (probe at 20Hz = 20 msgs/s
 // Optional access control. Each guard is enforced only when its env var is set,
 // so existing trusted-network deployments are unaffected. See SECURITY.md.
 const CONTROL_TOKEN = process.env.VERO_CONTROL_TOKEN || '';
-const ALLOWED_ORIGINS = (process.env.VERO_ALLOWED_ORIGINS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
 const MAX_PAYLOAD_BYTES = 512 * 1024;  // Bound per-message size (metrics are ~4 KB)
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +171,11 @@ function timingSafeEqualStr(a, b) {
 function verifyClient(info) {
   const { origin, req } = info;
 
-  if (ALLOWED_ORIGINS.length > 0 && (!origin || !ALLOWED_ORIGINS.includes(origin))) {
+  // An empty list leaves the upgrade open, preserving trusted-network deployments.
+  // Note this differs from the REST API, where an empty list withholds the CORS
+  // grant: a WebSocket upgrade is not subject to the same-origin policy, so there
+  // is nothing to grant — only something to refuse.
+  if (getAllowedOrigins().length > 0 && !isOriginAllowed(origin)) {
     console.warn(`[Broker] Rejected upgrade: origin ${origin || '(none)'} not in allow-list`);
     return false;
   }
@@ -220,11 +223,17 @@ httpServer.listen(port, () => {
 ║  Press Ctrl+C to stop                                                         ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 `);
+  const allowedOrigins = getAllowedOrigins();
   if (CONTROL_TOKEN) console.log('[Broker] Access-token authentication: ENABLED');
-  if (ALLOWED_ORIGINS.length) console.log(`[Broker] Origin allow-list: ${ALLOWED_ORIGINS.join(', ')}`);
-  if (!CONTROL_TOKEN && !ALLOWED_ORIGINS.length) {
+  if (allowedOrigins.length) console.log(`[Broker] Origin allow-list: ${allowedOrigins.join(', ')}`);
+  if (!CONTROL_TOKEN && !allowedOrigins.length) {
     console.warn('[Broker] WARNING: no access token or origin allow-list configured — expose only on a trusted network.');
   }
+  // Stated on every start because it is easy to assume the token gates everything:
+  // it does not. CONTROL_TOKEN and the origin allow-list gate the WebSocket
+  // upgrade only. /probes and /metrics stay readable by any client that can reach
+  // the port, so the port itself must not be publicly routable.
+  console.warn('[Broker] NOTE: the REST API (/health, /probes, /metrics) is unauthenticated — restrict access at the network or proxy layer.');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
