@@ -5,8 +5,17 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies.
+#
+# `npm install`, not `npm ci`: package-lock.json is deliberately gitignored in
+# this repo, so `npm ci` — which requires a lockfile and exits non-zero without
+# one — could never succeed from a clean checkout. The single runtime dependency
+# is `ws`, pinned by a caret range, so resolving at build time is acceptable
+# here; if the lockfile is ever committed, switch back to `npm ci --omit=dev`
+# for reproducible builds.
+#
+# `--omit=dev` supersedes the deprecated `--only=production`.
+RUN npm install --omit=dev
 
 # Copy source
 COPY . .
