@@ -28,33 +28,22 @@ This approach was chosen because broadcast environments often have:
 
 The codebase is organised into distinct layers:
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          index.html                              │
-│                      (DOM structure only)                        │
-└─────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         src/app/                                 │
-│              Application Integration Layer                       │
-│    bootstrap.js · state.js · sources.js · render-loop.js        │
-└─────────────────────────────────────────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                  ▼
-┌─────────────────────┐ ┌─────────────────┐ ┌─────────────────────┐
-│    src/metering/    │ │    src/ui/      │ │  src/generators/    │
-│   DSP Algorithms    │ │   Rendering     │ │  Signal Sources     │
-│   (pure functions)  │ │   (Canvas)      │ │  (Web Audio)        │
-└─────────────────────┘ └─────────────────┘ └─────────────────────┘
-              │                  │                  │
-              └──────────────────┼──────────────────┘
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        src/utils/                                │
-│              Pure Utilities (math, format)                       │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    HTML["index.html<br/>(DOM structure only)"]
+    APP["src/app/ — Application Integration Layer<br/>bootstrap.js · state.js · sources.js · render-loop.js"]
+    METERING["src/metering/<br/>DSP Algorithms<br/>(pure functions)"]
+    UI["src/ui/<br/>Rendering<br/>(Canvas)"]
+    GEN["src/generators/<br/>Signal Sources<br/>(Web Audio)"]
+    UTILS["src/utils/<br/>Pure Utilities<br/>(math, format)"]
+
+    HTML --> APP
+    APP --> METERING
+    APP --> UI
+    APP --> GEN
+    METERING --> UTILS
+    UI --> UTILS
+    GEN --> UTILS
 ```
 
 **Key principle**: Lower layers have no knowledge of higher layers. Metering algorithms don't know about UI. UI components don't know about application state management.
@@ -138,36 +127,26 @@ Signal generators for alignment and testing.
 
 ### Audio Signal Path
 
-```
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   Source    │──▶│  TrimGain   │──▶│  Splitter   │
-│ (capture/   │   │ (input dB)  │   │   (L/R)     │
-│  generator) │   └─────────────┘   └──────┬──────┘
-└─────────────┘                            │
-                                    ┌──────┴──────┐
-                                    ▼             ▼
-                              ┌─────────┐   ┌─────────┐
-                              │ mixL    │   │ mixR    │
-                              │ (GainNode)  │ (GainNode)
-                              └────┬────┘   └────┬────┘
-                                   │             │
-                              ┌────┴────┐   ┌────┴────┐
-                              │analyserL│   │analyserR│
-                              └────┬────┘   └────┴────┘
-                                   │             │
-                                   └──────┬──────┘
-                                          ▼
-                                   ┌─────────────┐
-                                   │   bufL/R    │
-                                   │(Float32Array)│
-                                   └──────┬──────┘
-                                          │
-              ┌───────────────────────────┼───────────────────────────┐
-              ▼                           ▼                           ▼
-       ┌─────────────┐            ┌─────────────┐            ┌─────────────┐
-       │ LUFSMeter   │            │ Goniometer  │            │ Spectrum    │
-       │ (20 Hz)     │            │ (60 Hz)     │            │ (60 Hz)     │
-       └─────────────┘            └─────────────┘            └─────────────┘
+```mermaid
+flowchart TD
+    SRC["Source<br/>(capture/generator)"]
+    TRIM["TrimGain<br/>(input dB)"]
+    SPLIT["Splitter (L/R)"]
+    MIXL["mixL (GainNode)"]
+    MIXR["mixR (GainNode)"]
+    ANL["analyserL"]
+    ANR["analyserR"]
+    BUF["bufL/R<br/>(Float32Array)"]
+    LUFS["LUFSMeter<br/>(20 Hz)"]
+    GONIO["Goniometer<br/>(60 Hz)"]
+    SPEC["Spectrum<br/>(60 Hz)"]
+
+    SRC --> TRIM --> SPLIT
+    SPLIT --> MIXL --> ANL --> BUF
+    SPLIT --> MIXR --> ANR --> BUF
+    BUF --> LUFS
+    BUF --> GONIO
+    BUF --> SPEC
 ```
 
 **Key insight**: Buffers are sampled once per frame and shared across all consumers. This ensures all meters see identical data and prevents timing skew between L/R channels.
@@ -272,13 +251,14 @@ At 60 fps, each frame has ~16.6 ms. Budget allocation:
 
 The remote metering module enables distributed audio monitoring across network:
 
-```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│   Probe     │────────▶│   Broker    │◀────────│   Client    │
-│ (probe.html │ WebSocket│ (broker/   │ WebSocket│ (index.html │
-│  captures   │  10 Hz   │  server.js)│  10 Hz   │  displays   │
-│  & meters)  │  metrics │  relays    │  metrics │  metrics)   │
-└─────────────┘         └─────────────┘         └─────────────┘
+```mermaid
+flowchart LR
+    PROBE["Probe<br/>(probe.html)<br/>captures &amp; meters"]
+    BROKER["Broker<br/>(broker/server.js)<br/>relays"]
+    CLIENT["Client<br/>(index.html)<br/>displays metrics"]
+
+    PROBE -- "WebSocket · 10 Hz metrics" --> BROKER
+    CLIENT -- "WebSocket · 10 Hz metrics" --> BROKER
 ```
 
 ### Module Structure (`src/remote/`)

@@ -36,18 +36,20 @@ function sampleAnalysers() {
 
 ### Race Condition
 
-```
-AUDIO THREAD (high priority)          MAIN THREAD (JavaScript)
-─────────────────────────────         ─────────────────────────
-│                                     │
-│  Writes to analyserL buffer         │
-│  Writes to analyserR buffer         │  requestAnimationFrame
-│         ↓                           │         ↓
-│  [NEW BLOCK BOUNDARY]               │  getFloatTimeDomainData(L) ──► Gets old L
-│         ↓                           │         ↓
-│  Writes to analyserL buffer         │  getFloatTimeDomainData(R) ──► Gets NEW R
-│  Writes to analyserR buffer         │
-│                                     │  L and R now out of sync!
+```mermaid
+sequenceDiagram
+    participant A as Audio thread (high priority)
+    participant M as Main thread (JavaScript)
+
+    A->>A: Write block N to analyserL
+    A->>A: Write block N to analyserR
+    Note over A: New block boundary
+    M->>M: requestAnimationFrame fires
+    A->>A: Write block N+1 to analyserL
+    M-->>A: getFloatTimeDomainData(L) → reads block N (stale)
+    A->>A: Write block N+1 to analyserR
+    M-->>A: getFloatTimeDomainData(R) → reads block N+1 (fresh)
+    Note over M: L and R are now out of sync
 ```
 
 ### Symptom
