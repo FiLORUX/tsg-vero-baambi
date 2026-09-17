@@ -7,46 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **EBU Tech 3341 play/pause** — tap for toggle, hold >300ms for momentary pause
-- **K-weighting signal chain** — ITU-R BS.1770-4 pre-filter (high-pass 38 Hz + high-shelf +4 dB @ 4 kHz)
-- **Broker URL validation** — `validateBrokerUrl()` with helpful error messages for ws:// and wss://
-- **Production deployment docs** — nginx, systemd, Docker Compose, HTTPS reverse proxy configurations
-- **Probe name persistence** — broker remembers probe names after disconnect/reconnect
-- **Broker rate limiting** — 100 messages/second per connection, sliding window
-- **Dynamic radar tooltip** — 60 Hz updates showing LUFS value and time offset on hover
-- **Radar settings persistence** — sweep time and history duration saved to localStorage
-- **CRT phosphor glow effect** — radar segments with authentic phosphor bloom
-- **Continuous radar segments** — dynamic Catmull-Rom interpolation for smooth curves
-- **Keyboard shortcuts documentation** — `docs/shortcuts.md` and sidebar help panel
-- **JSON session export** — EBU R 128 format summary via `getSessionSummary()` API
-- **Meter verification suite** — 5 automated tests (LUFS, PPM, correlation, ISP)
-- **K-weighting visualisation** — toggle overlay in spectrum analyser
-- **Calibration system** — auto/manual workflows with device-keyed profile storage
-- **Loudness history strip** — configurable duration (1–10 min) with S/I overlay
-- **REST API** — `/probes`, `/metrics` (Prometheus), `/health` endpoints
-- **Wallboard view** — `wallboard.html` for NOC displays with alert indicators
-- **Remote control** — `control.html` for headless probe operation
+## [2.2.1] - 2025-12-18
 
 ### Changed
-- Renamed `SpectrumAnalyzer` → `SpectrumAnalyser` (British English consistency)
-  - Constant: `SPECTRUM_CENTER_FREQS` → `SPECTRUM_CENTRE_FREQS`
-  - Variables: `spectrumAnalyzerUI` → `spectrumAnalyserUI`, `centerFreq` → `centreFreq`
-  - DOM ID: `spectrumAnalyzer` → `spectrumAnalyser`
-- **Radar fade zone** — reduced to 3 LU from donut edge (was 30 LU)
-- **BBC PPM display** — removed dBu unit (IEC 60268-10 Type IIa is dimensionless)
-- **R128 panel hierarchy** — visual weight for M (small) / S (medium) / I (large)
-- **Removed drag-and-drop panels** — fixed layout for broadcast consistency
-
-### Fixed
-- **BBC PPM input** — uses sample peak (max |sample|) not True Peak per IEC 60268-10 Type IIa
-- **Radar pause/resume** — gap handling preserves smoothing, segments continue ageing during pause
-- **Verification signal isolation** — `muteAllSources()` catches all generator signals
-- **ISP verification test** — uses clipped 500 Hz sine for Gibbs phenomenon (was 12 kHz)
-- **True Peak verification** — polyphase mode during tests for laboratory-grade accuracy
-- **K-weighting applied** — LUFS meter now receives K-weighted samples (was unweighted)
-- **PPM reset** — full state reset between verification tests
-- **Boot timing** — 777ms splash masks canvas oval-to-circle glitch
+- Repository consolidated into monorepo structure with automated mirroring
 
 ## [2.2.0] - 2024-12-10
 
@@ -86,9 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expanded test coverage (35 tests across all metering algorithms)
 
 ### Changed
-- Renamed functions and variables for consistency
+- **Enforced British English exclusively** — removed all American spelling aliases
   - Functions: `getCorrelationColour`, `normalise`, `normaliseAngle`
   - Variables: `centreX`, `centreY`, `colour`, `colours`
+  - No legacy aliases for backwards compatibility (no external consumers)
 - Remote features now opt-in and fully functional (previously marked "Future")
 - Directory structure updated with `broker/` and `src/remote/` modules
 

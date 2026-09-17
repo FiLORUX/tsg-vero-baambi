@@ -1,0 +1,42 @@
+name: Notify thast-docs
+
+# Pings the thast-docs site to rebuild whenever any file that feeds
+# the published documentation changes. The path filter mirrors the
+# manifest registered in thast-docs/scripts/sync-docs.mjs for this
+# repo — keep the two in sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'README.md'
+      - 'docs/**'
+      - 'ARCHITECTURE.md'
+      - 'CHANGELOG.md'
+      - 'LICENCE'
+      - 'CONTRIBUTING.md'
+      - 'SECURITY.md'
+      - 'smoke-checklist.md'
+      - 'src/images/**'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch docs-update event
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_DISPATCH_TOKEN }}
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/FiLORUX/thast-docs/dispatches" \
+            -d '{
+              "event_type": "docs-update",
+              "client_payload": {
+                "source_repo": "${{ github.repository }}",
+                "source_sha": "${{ github.sha }}",
+                "source_ref": "${{ github.ref }}"
+              }
+            }'
