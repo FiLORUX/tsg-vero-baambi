@@ -29,26 +29,30 @@ Enable control of VERO-BAAMBI probe settings from a secondary device (laptop/tab
 
 ### Current State
 
+```mermaid
+flowchart LR
+    P["Probe<br/>(metrics)"]
+    B["Broker<br/>(relay)"]
+    C["Client<br/>(display)"]
+
+    P -- "WS · metrics" --> B -- "WS · metrics" --> C
 ```
-┌─────────────┐         ┌─────────────┐
-│   Probe     │────────►│   Broker    │────────►│   Client    │
-│ (metrics)   │   WS    │  (relay)    │   WS    │ (display)   │
-└─────────────┘         └─────────────┘         └─────────────┘
-        │                                               │
-        └───────── Metrics flow (unidirectional) ───────┘
-```
+
+_Metrics flow is unidirectional: probe → broker → client._
 
 ### Target State
 
+```mermaid
+flowchart LR
+    P["Probe<br/>(metrics + settings)"]
+    B["Broker<br/>(relay + control)"]
+    C["Controller<br/>(settings)"]
+
+    P <-- "WS · bidirectional" --> B
+    B <-- "WS · bidirectional" --> C
 ```
-┌─────────────┐         ┌─────────────┐         ┌─────────────┐
-│   Probe     │◄───────►│   Broker    │◄───────►│  Controller │
-│ (metrics +  │   WS    │  (relay +   │   WS    │ (settings)  │
-│  settings)  │         │  control)   │         │             │
-└─────────────┘         └─────────────┘         └─────────────┘
-        │                      │                        │
-        └──── Bidirectional: metrics + control ─────────┘
-```
+
+_Bidirectional flow: metrics travel one way, control commands the other._
 
 ---
 
