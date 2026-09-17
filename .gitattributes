@@ -1,0 +1,81 @@
+# THAST canonical line-ending policy — master copy.
+#
+# This is the single source of truth for line-ending normalisation across every
+# THAST repository. It is deployed two ways (see git/LINE-ENDINGS.md):
+#   1. Per-repo: copied to each repo as a committed .gitattributes — authoritative,
+#      travels with every clone, wins over global config, and is honoured by CI.
+#   2. Fleet-wide safety net: symlinked to ~/.gitattributes_global and referenced
+#      by core.attributesfile, so repos that have not yet adopted the per-repo file
+#      still normalise on machines where install.sh has run.
+#
+# Why LF everywhere: text is stored as LF in the repository and checked out as LF
+# on macOS, Linux and WSL/Windows alike. This keeps working trees byte-identical
+# across machines — essential where one checkout is shared over a cross-OS mount
+# (e.g. a WSL node reading a /mnt/c path) or byte-synced by Syncthing, and so a
+# shell shebang never carries a stray CR that breaks the interpreter.
+
+# Default: auto-detect text vs binary; store anything textual as LF.
+* text=auto eol=lf
+
+# Executable scripts — LF is mandatory. A trailing CR in the shebang yields
+# "bad interpreter: /bin/bash^M" under WSL/Linux.
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.zsh   text eol=lf
+*.ps1   text eol=lf
+
+# Windows batch files genuinely require CRLF to parse reliably.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# SVG is XML — keep it text and diffable, but pinned to LF.
+*.svg   text eol=lf
+
+# IMPORTANT: *.ts is TypeScript across the THAST fleet, NOT an MPEG transport
+# stream. It must remain text — never add *.ts to the binary list below.
+
+# ── Binary assets: no EOL conversion, no line-based diffs ────────────────────
+# Packet captures (broadcast protocol analysis)
+*.pcapng  binary
+*.pcap    binary
+# Images
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.icns  binary
+*.webp  binary
+# Audio
+*.mp3   binary
+*.wav   binary
+*.flac  binary
+*.ogg   binary
+*.opus  binary
+*.m4a   binary
+*.aac   binary
+# Video / broadcast containers
+*.mxf   binary
+*.mov   binary
+*.mp4   binary
+*.mkv   binary
+*.m2ts  binary
+# Fonts
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.eot    binary
+# Archives
+*.zip  binary
+*.gz   binary
+*.tar  binary
+*.7z   binary
+# Documents / databases
+*.pdf       binary
+*.db        binary
+*.sqlite    binary
+*.sqlite3   binary
+
+# Syncthing conflict artefacts — never normalise, never diff as text.
+*.sync-conflict-* -text -diff
