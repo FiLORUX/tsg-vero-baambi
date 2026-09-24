@@ -122,6 +122,14 @@ The synthesised Tech 3341 signals were cross-checked against two independent imp
 
 The lower readings of cases 15 and 17 are the passband ripple of the tabulated Annex 2 filter, which the EBU tolerance explicitly includes.
 
+To check the official files, download the [EBU loudness test set](https://tech.ebu.ch/publications/ebu_loudness_test_set), unpack it and run:
+
+```bash
+npm run test:ebu-files -- /path/to/ebu-loudness-test-set
+```
+
+The test finds cases 15 to 23 by their Tech 3341 number in the file name, reads 16-, 24- and 32-bit PCM or float WAV, and asserts the +0.2/−0.4 dB tolerance.
+
 The `truePeakMode` key in application state remains for persisted settings; `polyphase` is its only value.
 
 ### Test Procedure: PPM Ballistics
