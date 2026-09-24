@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed drag-and-drop panels** — fixed layout for broadcast consistency
 
 ### Fixed
+- **Meter verification signal** · the in-app pink-noise test now scales its noise by 0.0297 (0.042/√2) so it still reads −23 LUFS with the corrected channel summation
 - **Stereo loudness summation** · `LUFSMeter.calculateBlockEnergy()` now sums the left and right mean-square energies per ITU-R BS.1770-4 (Σ Gᵢ·zᵢ, G = 1.0) instead of averaging them. Every stereo reading was 3.01 LU low: EBU Tech 3341 test case 1 (stereo 1 kHz sine at −23 dBFS) read −26.0 LUFS and now reads −23.0. Calibration profiles created before this change carry a trim offset that is 3.01 dB off for stereo sources; re-run calibration after updating. The tests now pin BS.1770-4 §4 (single-channel 0 dBFS sine → −3.01 LKFS, stereo → 0.0) and EBU Tech 3341 cases 1 and 2 with deterministic sines instead of a self-tuned pink-noise level
 - **BBC PPM input** — uses sample peak (max |sample|) not True Peak per IEC 60268-10 Type IIa
 - **Radar pause/resume** — gap handling preserves smoothing, segments continue ageing during pause
