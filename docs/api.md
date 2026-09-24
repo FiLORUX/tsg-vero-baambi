@@ -52,7 +52,7 @@ Reset all measurements and history.
 
 ### TruePeakMeter
 
-ITU-R BS.1770-4 Annex 2 intersample peak detection with the tabulated 48-tap polyphase FIR (4× up to 48 kHz, 2× up to 96 kHz). Pass `sampleRate` so the over-sampling ratio follows the input, and `contiguous: true` only when successive `update()` buffers are gap-free blocks rather than rolling analyser windows.
+ITU-R BS.1770-4 Annex 2 intersample peak detection with the tabulated 48-tap polyphase FIR (4× up to 48 kHz, 2× above). Pass `sampleRate` so the over-sampling ratio follows the input. TPmax, peak hold and the over indication come from the unsmoothed peak of every update; only the bar reading has ballistics (instant attack, timed release).
 
 ```javascript
 import { TruePeakMeter } from './src/metering/true-peak.js';
@@ -71,31 +71,44 @@ const meter = new TruePeakMeter({
 | `sampleRate` | number | 48000 | Audio sample rate in Hz |
 | `peakHoldSeconds` | number | 3 | Peak hold duration |
 | `limit` | number | -1 | Over-limit threshold (dBTP) |
+| `releaseDbPerSecond` | number | 11.76 | Fall rate of the bar reading (20 dB in 1.7 s) |
+| `contiguous` | boolean | false | `update()` buffers are gap-free consecutive blocks rather than rolling analyser windows |
+| `now` | function | `performance.now` | Monotonic clock in milliseconds |
 
 #### Methods
 
+##### `updateFromPeaks(peakLeft, peakRight)`
+
+Sample-complete feed: linear true peaks of every sample since the previous call, as delivered by `consumeTruePeaks()` from `src/audio/stereo-sampler.js`. Pass zero when nothing new arrived; the bar then only falls.
+
 ##### `update(leftBuffer, rightBuffer)`
 
-Process audio samples and detect intersample peaks.
+Measure audio buffers: rolling analyser windows by default, gap-free blocks with `contiguous: true`.
+
+##### `createPeakReader()` → `{ take(), close() }`
+
+Independent reader for a consumer on its own schedule (a network sender, a logger). `take()` returns the largest unsmoothed levels in dBTP per channel since the reader's previous `take()`.
 
 ##### `getState()` → `TruePeakMeterState`
 
 ```javascript
 {
-  dbtpLeft: number,      // Current left True Peak (dBTP)
-  dbtpRight: number,     // Current right True Peak (dBTP)
+  dbtpLeft: number,      // Left bar reading (dBTP, instant attack, timed release)
+  dbtpRight: number,     // Right bar reading
   dbtpHoldLeft: number,  // Peak hold left (dBTP, 3s)
   dbtpHoldRight: number, // Peak hold right (dBTP, 3s)
-  dbtpMax: number,       // Maximum since reset (dBTP)
-  isOverLeft: boolean,   // Left exceeded limit
-  isOverRight: boolean,  // Right exceeded limit
-  isOverAny: boolean     // Either channel exceeded limit
+  dbtpMax: number,       // Maximum since reset, both channels (dBTP)
+  dbtpMaxLeft: number,   // Maximum since reset, left (dBTP)
+  dbtpMaxRight: number,  // Maximum since reset, right (dBTP)
+  isOverLeft: boolean,   // Left hold at or above the limit
+  isOverRight: boolean,  // Right hold at or above the limit
+  isOverAny: boolean     // Either channel
 }
 ```
 
 ##### `reset()`
 
-Reset peak hold and over indicator.
+Reset peak hold, TPmax, the over indicator and the filter history.
 
 ---
 

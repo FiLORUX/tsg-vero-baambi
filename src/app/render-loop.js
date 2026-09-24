@@ -523,14 +523,17 @@ function renderLoopInternal() {
 
   let tpLeft, tpRight;
 
-  if (isRemoteCapture) {
-    // Use remote values from meterState (set by handleRemoteMetrics)
+  if (isRemoteCapture || isTauriCapture) {
+    // Values measured at the source: the remote probe, or the Rust engine,
+    // which runs the Annex 2 filter on every sample. The Tauri display
+    // buffers are spliced 512-sample snapshots and must not be re-measured:
+    // each splice is a discontinuity that the filter would read as a peak.
     tpLeft = meterState.remoteTpL;
     tpRight = meterState.remoteTpR;
-    // Peak holds and peak indicator already updated by handleRemoteMetrics
+    // Peak holds and peak indicator already updated by the metrics handlers
   } else {
-    // Local metering
-    meters.truePeakMeter.update(meters.bufL, meters.bufR);
+    // Local metering: sample-complete when the stereo sampler runs
+    helpers.updateTruePeakMeter();
     const tpState = meters.truePeakMeter.getState();
     tpLeft = tpState.dbtpLeft;
     tpRight = tpState.dbtpRight;

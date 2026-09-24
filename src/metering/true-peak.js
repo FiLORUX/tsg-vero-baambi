@@ -37,10 +37,14 @@
  * SAMPLE RATES
  * ────────────
  *   ≤ 48 kHz        4× (all four branches)
- *   88.2 / 96 kHz   2× (branches 0 and 2, half an input sample apart), the
+ *   > 48 kHz        2× (branches 0 and 2, half an input sample apart), the
  *                   ratio Annex 2 names as sufficient for 96 kHz input
- *   ≥ 176.4 kHz     no over-sampling; the sample peak already satisfies the
- *                   ≥ 192 kHz criterion of Annex 2
+ *
+ * Tech 3341 defines its signals relative to fs (fs/4, fs/6, fs/8), so at a
+ * higher rate the same sample sequences recur at proportionally higher
+ * frequencies. With 2× all nine cases stay within tolerance at 96 and
+ * 192 kHz; without over-sampling at 192 kHz seven of them would fail (case 16
+ * would read −9.0 dBTP), which is why the ratio never drops to 1×.
  *
  * ACCURACY
  * ────────
@@ -54,13 +58,29 @@
  * ─────────────────
  * TruePeakDetector is a stream processor: it keeps the last eleven input
  * samples so that a peak straddling two consecutive blocks is still found.
- * That presumes gap-free blocks. TruePeakMeter.update() defaults to window
- * semantics because src/app feeds it a rolling window of the most recent
- * samples (AnalyserNode or worklet ring buffer): consecutive windows overlap,
- * and splicing them through a shared history would read the discontinuity as
- * a peak (+1.3 dB measured on a full-scale 1 kHz sine). Pass
- * { contiguous: true } when consecutive update() buffers follow each other
- * without gap or overlap.
+ * That presumes gap-free blocks. TruePeakMeter accepts three feeds:
+ *
+ *   updateFromPeaks()   linear peaks already measured on every sample, for
+ *                       example by the stereo-sampler AudioWorklet. This is
+ *                       the sample-complete path and the one src/app uses
+ *                       whenever the worklet or ScriptProcessor sampler runs.
+ *   update(), default   a rolling window of recent samples (AnalyserNode).
+ *                       Each window is measured on its own, because splicing
+ *                       overlapping windows through a shared history reads the
+ *                       join as a peak (+1.3 dB on a full-scale 1 kHz sine).
+ *                       Coverage is complete only while windows overlap.
+ *   update(), contiguous: true
+ *                       gap-free consecutive blocks, measured through the
+ *                       carried history.
+ *
+ * BALLISTICS
+ * ──────────
+ * TPmax, peak hold and the over indication are taken from the unsmoothed
+ * over-sampled peak of each update, so a single inter-sample over is never
+ * lost to display smoothing. Only the bar reading has ballistics: it rises
+ * instantly to a new peak and falls at a fixed rate in dB per second
+ * (default 20 dB in 1.7 s, the IEC 60268-10 return time), independent of
+ * how often update() is called.
  *
  * TRUE PEAK LIMITS (Broadcast standards)
  * ──────────────────────────────────────
@@ -102,6 +122,19 @@ export const TP_LIMIT_SAFE = -3.0;
  * @type {number}
  */
 export const PEAK_HOLD_SECONDS = 3;
+
+/**
+ * Default fall rate of the bar reading: 20 dB in 1.7 s (IEC 60268-10 return
+ * time), roughly 11.76 dB per second.
+ * @type {number}
+ */
+export const TP_RELEASE_DB_PER_SECOND = 20 / 1.7;
+
+/**
+ * Lowest bar and hold reading in dBTP; matches the bottom of the bar scale.
+ * @type {number}
+ */
+export const TP_DISPLAY_FLOOR_DB = -60;
 
 /**
  * Polyphase branches of the Annex 2 interpolator (4× over-sampling).
@@ -187,18 +220,16 @@ export const BS1770_TRUE_PEAK_COEFFICIENTS = Object.freeze([
  * Over-sampling ratio the Annex 2 method requires for a given input rate.
  *
  * Annex 2 presumes 48 kHz and a 4× ratio, and states that input at a higher
- * rate needs proportionately less: 2× for 96 kHz. The ratios below keep the
- * over-sampled rate at or above the 192 kHz the Annex names as the basis for
- * the dB TP scale. An invalid rate is treated as 48 kHz so that a meter never
- * degrades to sample peak by accident.
+ * rate needs proportionately less: 2× for 96 kHz. Above 96 kHz the ratio
+ * stays at 2×, because the Tech 3341 signals are defined relative to fs and
+ * need an evaluation point half-way between samples at every rate. An
+ * invalid rate is treated as 48 kHz.
  *
  * @param {number} sampleRate - Input sample rate in Hz
- * @returns {4|2|1} Over-sampling ratio
+ * @returns {4|2} Over-sampling ratio
  */
 export function oversamplingFactor(sampleRate) {
-  if (!(sampleRate > 0) || sampleRate <= 48000) return 4;
-  if (sampleRate <= 96000) return 2;
-  return 1;
+  return !(sampleRate > 0) || sampleRate <= 48000 ? 4 : 2;
 }
 
 /**
@@ -210,12 +241,25 @@ export function oversamplingFactor(sampleRate) {
  * scales with the input sample period.
  *
  * @param {number} factor - Over-sampling ratio from oversamplingFactor()
- * @returns {Float64Array[]} Branches to evaluate (empty for sample peak)
+ * @returns {Float64Array[]} Branches to evaluate
  */
 function branchesForFactor(factor) {
-  if (factor === 4) return [...BS1770_TRUE_PEAK_COEFFICIENTS];
-  if (factor === 2) return [BS1770_TRUE_PEAK_COEFFICIENTS[0], BS1770_TRUE_PEAK_COEFFICIENTS[2]];
-  return [];
+  return factor === 4
+    ? [...BS1770_TRUE_PEAK_COEFFICIENTS]
+    : [BS1770_TRUE_PEAK_COEFFICIENTS[0], BS1770_TRUE_PEAK_COEFFICIENTS[2]];
+}
+
+/**
+ * Polyphase branches to evaluate for a given input sample rate.
+ *
+ * Returns independent copies, suitable for transfer to an AudioWorklet
+ * through processorOptions.
+ *
+ * @param {number} sampleRate - Input sample rate in Hz
+ * @returns {Float64Array[]} Branch coefficient arrays, hₚ[0] applied to the newest sample
+ */
+export function interpolationBranches(sampleRate) {
+  return branchesForFactor(oversamplingFactor(sampleRate)).map(branch => Float64Array.from(branch));
 }
 
 /**
@@ -319,7 +363,7 @@ export class TruePeakDetector {
   }
 
   /**
-   * Over-sampling ratio in use (4, 2 or 1).
+   * Over-sampling ratio in use (4 or 2).
    * @type {number}
    */
   get oversamplingFactor() {
@@ -342,7 +386,6 @@ export class TruePeakDetector {
   process(buffer) {
     const n = buffer.length;
     if (n === 0) return 0;
-    if (this.#branches.length === 0) return samplePeak(buffer);
 
     // Prefix the block with the carried history so that the first outputs
     // see the samples that preceded them.
@@ -380,7 +423,7 @@ export class TruePeakDetector {
   measureWindow(buffer) {
     const n = buffer.length;
     if (n === 0) return 0;
-    if (this.#branches.length === 0 || n < BS1770_TAPS_PER_PHASE) return samplePeak(buffer);
+    if (n < BS1770_TAPS_PER_PHASE) return samplePeak(buffer);
     return branchMaximum(buffer, HISTORY_LENGTH, n, this.#branches);
   }
 
@@ -472,22 +515,32 @@ export const TRUE_PEAK_MODE = {
 };
 
 /**
- * True Peak Meter with smoothing and peak hold.
+ * Monotonic clock in milliseconds.
+ * @returns {number}
+ */
+const monotonicMs = () => performance.now();
+
+/**
+ * True Peak Meter with bar ballistics, peak hold, TPmax and over indication.
  *
- * Provides broadcast-style metering with:
- * - Instantaneous True Peak (smoothed for display stability)
- * - 3-second peak hold (RTW/DK convention)
- * - Over indicator with latch
+ * TPmax, the per-channel maxima, peak hold and the over indication are
+ * derived from the unsmoothed over-sampled peak of every update. The bar
+ * reading (dbtpLeft/dbtpRight) rises instantly and falls at
+ * releaseDbPerSecond, measured on the meter's clock.
  *
  * @example
  * const tpMeter = new TruePeakMeter({ limit: -1.0, sampleRate: ac.sampleRate });
  *
- * // In animation loop:
+ * // Sample-complete feed: peaks measured on every sample by the sampler
+ * const { left, right } = stereoSampler.consumeTruePeaks();
+ * tpMeter.updateFromPeaks(left, right);
+ *
+ * // Window feed: the most recent analyser samples
  * analyserL.getFloatTimeDomainData(bufferL);
  * analyserR.getFloatTimeDomainData(bufferR);
  * tpMeter.update(bufferL, bufferR);
  *
- * const { dbtpLeft, dbtpRight, dbtpHoldLeft, dbtpHoldRight, isOverAny } = tpMeter.getState();
+ * const { dbtpLeft, dbtpRight, dbtpMax, isOverAny } = tpMeter.getState();
  */
 export class TruePeakMeter {
   /** @type {TruePeakDetector} */
@@ -496,50 +549,64 @@ export class TruePeakMeter {
   /** @type {TruePeakDetector} */
   #detectorR;
 
+  /** @type {() => number} */
+  #now;
+
+  /** @type {number|null} Clock reading of the previous update in seconds */
+  #lastUpdateSeconds = null;
+
+  /** @type {Set<{left: number, right: number}>} Open peak readers */
+  #readers = new Set();
+
   /**
    * @param {Object} options - Configuration options
    * @param {number} [options.limit=TP_LIMIT_EBU] - True Peak limit for over detection
-   * @param {number} [options.smoothing=0.25] - Smoothing factor (0-1, higher = faster)
    * @param {number} [options.peakHoldSeconds=PEAK_HOLD_SECONDS] - Peak hold duration
+   * @param {number} [options.releaseDbPerSecond=TP_RELEASE_DB_PER_SECOND] - Fall rate of the bar reading
    * @param {number} [options.sampleRate=48000] - Input sample rate in Hz (selects the over-sampling ratio)
    * @param {boolean} [options.contiguous=false] - True when successive update() buffers
    *   are gap-free consecutive blocks; false when each buffer is a rolling window
    *   of the most recent samples (AnalyserNode / ring buffer)
    * @param {string} [options.mode='polyphase'] - Accepted for API stability; see TRUE_PEAK_MODE
+   * @param {() => number} [options.now] - Monotonic clock in milliseconds (performance.now by default)
    */
   constructor({
     limit = TP_LIMIT_EBU,
-    smoothing = 0.25,
     peakHoldSeconds = PEAK_HOLD_SECONDS,
+    releaseDbPerSecond = TP_RELEASE_DB_PER_SECOND,
     sampleRate = DEFAULT_SAMPLE_RATE,
     contiguous = false,
-    mode = TRUE_PEAK_MODE.POLYPHASE
+    mode = TRUE_PEAK_MODE.POLYPHASE,
+    now = monotonicMs
   } = {}) {
     this.limit = limit;
-    this.smoothing = smoothing;
     this.peakHoldSeconds = peakHoldSeconds;
+    this.releaseDbPerSecond = releaseDbPerSecond;
     this.sampleRate = sampleRate;
     this.contiguous = contiguous;
     this.mode = TRUE_PEAK_MODE.POLYPHASE;
     this.setMode(mode);
 
+    this.#now = now;
     this.#detectorL = new TruePeakDetector(sampleRate);
     this.#detectorR = new TruePeakDetector(sampleRate);
 
-    // Smoothed current values
-    this.smoothL = -60;
-    this.smoothR = -60;
+    // Bar readings (instant attack, timed release)
+    this.smoothL = TP_DISPLAY_FLOOR_DB;
+    this.smoothR = TP_DISPLAY_FLOOR_DB;
 
-    // Peak hold state
-    this.peakHoldL = -60;
-    this.peakHoldR = -60;
+    // Peak hold state (from unsmoothed peaks)
+    this.peakHoldL = TP_DISPLAY_FLOOR_DB;
+    this.peakHoldR = TP_DISPLAY_FLOOR_DB;
     this.peakTimeL = 0;
     this.peakTimeR = 0;
 
-    // Over indicator (latched)
+    // Over indicator (latched until reset)
     this.isOver = false;
 
-    // Maximum peak since reset (for TPmax display)
+    // Maximum true-peak level since reset (TPmax), per channel and combined
+    this.maxPeakL = -Infinity;
+    this.maxPeakR = -Infinity;
     this.maxPeak = -Infinity;
   }
 
@@ -569,56 +636,60 @@ export class TruePeakMeter {
   /**
    * Over-sampling ratio derived from the configured sample rate.
    *
-   * @returns {number} 4, 2 or 1
+   * @returns {number} 4 or 2
    */
   getOversamplingFactor() {
     return this.#detectorL.oversamplingFactor;
   }
 
   /**
-   * Update meter with new audio buffers.
+   * Measure new audio buffers and update the meter.
    *
    * @param {Float32Array} leftBuffer - Left channel samples
    * @param {Float32Array} rightBuffer - Right channel samples
    */
   update(leftBuffer, rightBuffer) {
-    const rawL = amplitudeToDbTP(this.#measure(this.#detectorL, leftBuffer));
-    const rawR = amplitudeToDbTP(this.#measure(this.#detectorR, rightBuffer));
+    this.#apply(this.#measure(this.#detectorL, leftBuffer), this.#measure(this.#detectorR, rightBuffer));
+  }
 
-    // Smooth for stable display
-    const a = this.smoothing;
-    this.smoothL = this.smoothL + a * (rawL - this.smoothL);
-    this.smoothR = this.smoothR + a * (rawR - this.smoothR);
+  /**
+   * Update the meter with peaks measured elsewhere on every sample.
+   *
+   * The values are the largest over-sampled absolute values (linear) of all
+   * samples since the previous call, as produced by TruePeakDetector. Pass
+   * zero when no samples arrived; the bar then only falls.
+   *
+   * @param {number} [peakLeft=0] - Left channel peak, linear
+   * @param {number} [peakRight=0] - Right channel peak, linear
+   */
+  updateFromPeaks(peakLeft = 0, peakRight = 0) {
+    this.#apply(sanitisePeak(peakLeft), sanitisePeak(peakRight));
+  }
 
-    // Peak hold logic (3s hold)
-    const now = performance.now() / 1000;
-
-    if (this.smoothL > this.peakHoldL) {
-      this.peakHoldL = this.smoothL;
-      this.peakTimeL = now;
-    } else if (now - this.peakTimeL > this.peakHoldSeconds) {
-      this.peakHoldL = this.smoothL;
-      this.peakTimeL = now;
-    }
-
-    if (this.smoothR > this.peakHoldR) {
-      this.peakHoldR = this.smoothR;
-      this.peakTimeR = now;
-    } else if (now - this.peakTimeR > this.peakHoldSeconds) {
-      this.peakHoldR = this.smoothR;
-      this.peakTimeR = now;
-    }
-
-    // Over indicator (latched until reset)
-    const maxPeakHold = Math.max(this.peakHoldL, this.peakHoldR);
-    if (maxPeakHold >= this.limit) {
-      this.isOver = true;
-    }
-
-    // Track maximum peak since reset
-    if (maxPeakHold > this.maxPeak) {
-      this.maxPeak = maxPeakHold;
-    }
+  /**
+   * Create an independent reader of the unsmoothed peaks.
+   *
+   * A consumer that samples the meter on its own schedule (a network sender,
+   * a logger) would otherwise see only the bar reading at that instant and
+   * miss a peak that has already begun to fall. Each reader accumulates the
+   * largest unsmoothed level per channel since its own previous take().
+   *
+   * @returns {TruePeakReader} Reader handle
+   */
+  createPeakReader() {
+    const pending = { left: -Infinity, right: -Infinity };
+    this.#readers.add(pending);
+    return {
+      take: () => {
+        const peaks = { left: pending.left, right: pending.right };
+        pending.left = -Infinity;
+        pending.right = -Infinity;
+        return peaks;
+      },
+      close: () => {
+        this.#readers.delete(pending);
+      }
+    };
   }
 
   /**
@@ -636,6 +707,8 @@ export class TruePeakMeter {
       dbtpHoldLeft: this.peakHoldL,
       dbtpHoldRight: this.peakHoldR,
       dbtpMax: this.maxPeak,
+      dbtpMaxLeft: this.maxPeakL,
+      dbtpMaxRight: this.maxPeakR,
       isOverLeft,
       isOverRight,
       isOverAny: isOverLeft || isOverRight
@@ -643,15 +716,68 @@ export class TruePeakMeter {
   }
 
   /**
-   * Reset peak hold, over indicator and the filter history.
+   * Reset peak hold, TPmax, over indicator and the filter history.
    */
   reset() {
-    this.peakHoldL = -60;
-    this.peakHoldR = -60;
+    this.peakHoldL = TP_DISPLAY_FLOOR_DB;
+    this.peakHoldR = TP_DISPLAY_FLOOR_DB;
+    this.maxPeakL = -Infinity;
+    this.maxPeakR = -Infinity;
     this.maxPeak = -Infinity;
     this.isOver = false;
     this.#detectorL.reset();
     this.#detectorR.reset();
+  }
+
+  /**
+   * Apply one pair of unsmoothed linear peaks to readings, holds and TPmax.
+   *
+   * @param {number} peakL - Left channel peak, linear
+   * @param {number} peakR - Right channel peak, linear
+   */
+  #apply(peakL, peakR) {
+    const nowSeconds = this.#now() / 1000;
+    const elapsed = this.#lastUpdateSeconds === null ? 0 : Math.max(0, nowSeconds - this.#lastUpdateSeconds);
+    this.#lastUpdateSeconds = nowSeconds;
+
+    const rawL = amplitudeToDbTP(peakL);
+    const rawR = amplitudeToDbTP(peakR);
+
+    // Bar reading: instant attack, fixed release rate in dB per second
+    const fall = this.releaseDbPerSecond * elapsed;
+    this.smoothL = Math.max(rawL, this.smoothL - fall, TP_DISPLAY_FLOOR_DB);
+    this.smoothR = Math.max(rawR, this.smoothR - fall, TP_DISPLAY_FLOOR_DB);
+
+    // Peak hold from the unsmoothed peak; after the hold time it follows the bar
+    if (rawL > this.peakHoldL) {
+      this.peakHoldL = rawL;
+      this.peakTimeL = nowSeconds;
+    } else if (nowSeconds - this.peakTimeL > this.peakHoldSeconds) {
+      this.peakHoldL = this.smoothL;
+      this.peakTimeL = nowSeconds;
+    }
+
+    if (rawR > this.peakHoldR) {
+      this.peakHoldR = rawR;
+      this.peakTimeR = nowSeconds;
+    } else if (nowSeconds - this.peakTimeR > this.peakHoldSeconds) {
+      this.peakHoldR = this.smoothR;
+      this.peakTimeR = nowSeconds;
+    }
+
+    // Independent readers see every unsmoothed peak since their last take()
+    for (const pending of this.#readers) {
+      if (rawL > pending.left) pending.left = rawL;
+      if (rawR > pending.right) pending.right = rawR;
+    }
+
+    // TPmax and the latched over indication from the unsmoothed peak
+    if (rawL > this.maxPeakL) this.maxPeakL = rawL;
+    if (rawR > this.maxPeakR) this.maxPeakR = rawR;
+    this.maxPeak = Math.max(this.maxPeakL, this.maxPeakR);
+    if (this.maxPeak >= this.limit) {
+      this.isOver = true;
+    }
   }
 
   /**
@@ -668,12 +794,35 @@ export class TruePeakMeter {
 }
 
 /**
+ * Coerce an externally supplied peak to a non-negative finite value.
+ *
+ * NaN (a broken upstream measurement) reads as silence rather than poisoning
+ * the maxima; +Infinity is kept so a non-finite signal still shows as an over.
+ *
+ * @param {number} peak - Linear peak
+ * @returns {number} Sanitised linear peak
+ */
+function sanitisePeak(peak) {
+  if (Number.isNaN(peak) || typeof peak !== 'number') return 0;
+  return peak < 0 ? -peak : peak;
+}
+
+/**
+ * @typedef {Object} TruePeakReader
+ * @property {() => {left: number, right: number}} take - Largest unsmoothed
+ *   levels in dBTP since the previous take(); −Infinity when no update occurred
+ * @property {() => void} close - Detach the reader from the meter
+ */
+
+/**
  * @typedef {Object} TruePeakMeterState
- * @property {number} dbtpLeft - Current left True Peak (dBTP)
- * @property {number} dbtpRight - Current right True Peak (dBTP)
+ * @property {number} dbtpLeft - Left bar reading (dBTP, instant attack, timed release)
+ * @property {number} dbtpRight - Right bar reading (dBTP, instant attack, timed release)
  * @property {number} dbtpHoldLeft - Peak hold left (dBTP, 3s)
  * @property {number} dbtpHoldRight - Peak hold right (dBTP, 3s)
- * @property {number} dbtpMax - Maximum True Peak since reset (dBTP)
+ * @property {number} dbtpMax - Maximum True Peak since reset, both channels (dBTP)
+ * @property {number} dbtpMaxLeft - Maximum left True Peak since reset (dBTP)
+ * @property {number} dbtpMaxRight - Maximum right True Peak since reset (dBTP)
  * @property {boolean} isOverLeft - Left channel exceeded limit
  * @property {boolean} isOverRight - Right channel exceeded limit
  * @property {boolean} isOverAny - Either channel exceeded limit

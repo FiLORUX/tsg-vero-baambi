@@ -48,6 +48,12 @@ The first tests pure mathematical functions: dB conversions, RMS calculation, co
 
 ### Browser Tests
 
+```bash
+npm run test:browser
+```
+
+Drives the real Web Audio pipeline in headless Chromium (needs the `playwright-core` dev dependency and `npx playwright-core install chromium`, or `CHROMIUM_PATH`): the stereo-sampler AudioWorklet against `TruePeakDetector` bit for bit at 44.1, 48, 96 and 192 kHz; EBU Tech 3341 cases 15 to 23 in real time with the main thread blocked for one second across the signal; the four Intersample Peak Demo presets through the application's generator, measure loop and TPmax display; the built-in Meter Verification Tool; and the remote chain, from the probe page through a local broker into the application's remote mode, including a scripted probe whose level drops while the received TPmax must hold.
+
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 
 Tests Web Audio integration: sine RMS measurement, K-weighting frequency response, stereo correlation.
@@ -76,9 +82,16 @@ For accurate verification, you need:
 
 ### Test Procedure: True Peak
 
-1. **Generate intersample peak test signal**: Two frequencies near Nyquist that constructively interfere
-2. **Compare sample peak vs True Peak**: True Peak should exceed sample peak
-3. **Known intersample over**: Use +3 dBTP test signal; verify detection
+Use the generator's **Intersample Peak Demo** presets. Each has a fixed phase against the sample grid, so both the sample peak and the true peak are known exactly:
+
+| Preset | Signal | Sample peak | True peak | Reads |
+|--------|--------|-------------|-----------|-------|
+| No ISP | 1 kHz, 0 dBFS | 0.0 dBFS | 0.0 dBTP | 0.0 dBTP |
+| Mild ISP | fs/8 at 67.5° | −0.7 dBFS | 0.0 dBTP | −0.0 dBTP |
+| Moderate ISP | fs/6 at 60° | −1.2 dBFS | 0.0 dBTP | −0.3 dBTP |
+| Maximum ISP | fs/4 at 45°, samples +1, +1, −1, −1 | 0.0 dBFS | +3.0 dBTP | +3.1 dBTP |
+
+Reset R128 after selecting a preset: switching presets starts the new waveform abruptly, and that onset has a genuinely higher true peak (up to +3.2 dBTP for Maximum ISP).
 
 #### True Peak Algorithm
 
@@ -87,9 +100,27 @@ VERO-BAAMBI measures true peak with a single method, the ITU-R BS.1770-4 Annex 2
 | Property | Value |
 |----------|-------|
 | Filter | 48-tap FIR interpolation filter from the Annex 2 table, four 12-tap branches |
-| Over-sampling | 4× up to 48 kHz, 2× (branches 0 and 2) up to 96 kHz, sample peak from 176.4 kHz |
+| Over-sampling | 4× up to 48 kHz, 2× (branches 0 and 2) above; the Tech 3341 cases, which scale with fs, pass at 48, 96 and 192 kHz |
 | Conformance | EBU Tech 3341 Table 1 cases 15 to 23 within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
+| Feed | Every sample, in the stereo-sampler AudioWorklet (ScriptProcessor fallback on the main thread); independent of frame rate, dropped frames and background-tab throttling. Analyser windows only without a sampler |
+| Ballistics | TPmax, peak hold and the over indication from the unsmoothed peak; the bar rises instantly and falls 20 dB in 1.7 s |
 | Cost | 48 multiply-accumulates per input sample and channel at 4× |
+
+The synthesised Tech 3341 signals were cross-checked against two independent implementations that pass the official EBU files:
+
+| Case | VERO-BAAMBI | libebur128 1.2.6 | FFmpeg 6.1 `ebur128` | Required |
+|------|-------------|------------------|----------------------|----------|
+| 15 | −6.22 | −6.02 | −6.0 | −6.0 +0.2/−0.4 |
+| 16 | −5.98 | −6.05 | −6.0 | −6.0 +0.2/−0.4 |
+| 17 | −6.31 | −6.01 | −6.0 | −6.0 +0.2/−0.4 |
+| 18 | −6.03 | −6.02 | −6.0 | −6.0 +0.2/−0.4 |
+| 19 | +3.03 | +2.95 | +3.0 | +3.0 +0.2/−0.4 |
+| 20 | −0.15 | −0.13 | −0.1 | 0.0 +0.2/−0.4 |
+| 21 | −0.08 | −0.08 | −0.1 | 0.0 +0.2/−0.4 |
+| 22 | −0.20 | −0.18 | −0.1 | 0.0 +0.2/−0.4 |
+| 23 | −0.08 | −0.08 | −0.1 | 0.0 +0.2/−0.4 |
+
+The lower readings of cases 15 and 17 are the passband ripple of the tabulated Annex 2 filter, which the EBU tolerance explicitly includes.
 
 The `truePeakMode` key in application state remains for persisted settings; `polyphase` is its only value.
 

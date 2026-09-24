@@ -25,13 +25,30 @@
  * GUARANTEED to be from the same render quantum, then posts them to the
  * main thread for visualization.
  *
+ * It also measures the true-peak level of EVERY sample (ITU-R BS.1770-4
+ * Annex 2 polyphase FIR) and posts the per-channel maximum at a fixed cadence
+ * of about 10 ms. Measurement in the audio thread is independent of the UI
+ * frame rate, of dropped frames and of background-tab throttling, so TPmax
+ * derived from these messages is sample-complete. The filter branches arrive
+ * through processorOptions from src/metering/true-peak.js, the single source
+ * of the coefficient table; the kernel below is the same arithmetic as
+ * TruePeakDetector.process() and is verified against it in
+ * tests/true-peak-test.js.
+ *
+ * Messages to the main thread:
+ *   { type: 'snapshot', bufL, bufR, timestamp }   rolling display buffers
+ *   { type: 'truePeak', left, right, samples }    linear true-peak maxima of
+ *                                                 the `samples` samples since
+ *                                                 the previous truePeak message
+ *
  * Usage:
- *   await ac.audioWorklet.addModule('./src/audio/stereo-sampler-worklet.js');
- *   const sampler = new AudioWorkletNode(ac, 'stereo-sampler');
- *   source.connect(sampler);
- *   sampler.port.onmessage = (e) => { bufL = e.data.bufL; bufR = e.data.bufR; };
+ *   await ac.audioWorklet.addModule(new URL('./stereo-sampler-worklet.js', import.meta.url));
+ *   const sampler = new AudioWorkletNode(ac, 'stereo-sampler', {
+ *     processorOptions: { bufferSize: 4096, truePeakBranches: interpolationBranches(ac.sampleRate) }
+ *   });
  *
  * @see docs/STEREO-SAMPLING-ARCHITECTURE.md
+ * @see ITU-R BS.1770-4 Annex 2
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
@@ -52,6 +69,78 @@
 const DEFAULT_BUFFER_SIZE = 4096;
 const MIN_BUFFER_SIZE = 128;
 const MAX_BUFFER_SIZE = 8192;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRUE-PEAK MEASUREMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Taps per polyphase branch of the ITU-R BS.1770-4 Annex 2 interpolator. */
+const TRUE_PEAK_TAPS = 12;
+
+/** Input samples carried between render quanta (taps − 1). */
+const TRUE_PEAK_HISTORY = TRUE_PEAK_TAPS - 1;
+
+/** Target interval between true-peak messages in seconds. */
+const TRUE_PEAK_POST_SECONDS = 0.01;
+
+/**
+ * Single-channel true-peak kernel with carried history.
+ *
+ * Same arithmetic as TruePeakDetector.process() in src/metering/true-peak.js:
+ * branch h yields Σₖ h[k] · x[n − k], with h[0] applied to the newest sample,
+ * and the maximum absolute output over all branches is the true peak. Without
+ * branches (processorOptions omitted) the sample peak is returned, so the
+ * processor never reports nothing.
+ */
+class TruePeakKernel {
+  /**
+   * @param {Float64Array[]} branches - Polyphase branches from interpolationBranches()
+   * @param {number} maxBlock - Largest block length process() will receive
+   */
+  constructor(branches, maxBlock) {
+    this.branches = branches;
+    this.history = new Float64Array(TRUE_PEAK_HISTORY);
+    this.extended = new Float64Array(TRUE_PEAK_HISTORY + maxBlock);
+  }
+
+  /**
+   * @param {Float32Array} block - Next samples of the channel
+   * @returns {number} Largest over-sampled absolute value in the block, linear
+   */
+  process(block) {
+    const n = block.length;
+    let max = 0;
+
+    if (this.branches.length === 0) {
+      for (let i = 0; i < n; i++) {
+        const abs = block[i] < 0 ? -block[i] : block[i];
+        if (abs > max) max = abs;
+      }
+      return max;
+    }
+
+    if (this.extended.length < TRUE_PEAK_HISTORY + n) {
+      this.extended = new Float64Array(TRUE_PEAK_HISTORY + n);
+    }
+    const x = this.extended;
+    x.set(this.history, 0);
+    x.set(block, TRUE_PEAK_HISTORY);
+
+    for (const h of this.branches) {
+      for (let i = TRUE_PEAK_HISTORY; i < TRUE_PEAK_HISTORY + n; i++) {
+        let acc = 0;
+        for (let k = 0; k < TRUE_PEAK_TAPS; k++) {
+          acc += h[k] * x[i - k];
+        }
+        const abs = acc < 0 ? -acc : acc;
+        if (abs > max) max = abs;
+      }
+    }
+
+    this.history.set(x.subarray(n, n + TRUE_PEAK_HISTORY));
+    return max;
+  }
+}
 
 class StereoSamplerProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -80,17 +169,26 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
 
     /** @type {number} */
     this._samplesSincePost = 0;
+
+    // True-peak measurement of every sample. Without branches from the main
+    // thread the processor still reports the sample peak, never nothing.
+    const branches = (options?.processorOptions?.truePeakBranches ?? [])
+      .map(branch => Float64Array.from(branch));
+    this._truePeakL = new TruePeakKernel(branches, 128);
+    this._truePeakR = new TruePeakKernel(branches, 128);
+    this._truePeakMaxL = 0;
+    this._truePeakMaxR = 0;
+    this._truePeakSamples = 0;
+    this._truePeakPostInterval = Math.max(128, Math.round((sampleRate * TRUE_PEAK_POST_SECONDS) / 128) * 128);
   }
 
   /**
-   * Process audio - capture L/R samples atomically.
+   * Process audio - capture L/R samples atomically and measure true peak.
    *
    * @param {Float32Array[][]} inputs - Input audio
-   * @param {Float32Array[][]} outputs - Output audio (unused)
-   * @param {Object} parameters - Audio parameters (unused)
    * @returns {boolean} Keep processor alive
    */
-  process(inputs, outputs, parameters) {
+  process(inputs) {
     const input = inputs[0];
 
     // Need stereo input
@@ -107,6 +205,25 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
       this._bufferL[this._writeIndex] = L[i];
       this._bufferR[this._writeIndex] = R[i];
       this._writeIndex = (this._writeIndex + 1) % bufferSize;
+    }
+
+    // True peak of every sample, accumulated until the next truePeak message
+    const peakL = this._truePeakL.process(L);
+    const peakR = this._truePeakR.process(R);
+    if (peakL > this._truePeakMaxL) this._truePeakMaxL = peakL;
+    if (peakR > this._truePeakMaxR) this._truePeakMaxR = peakR;
+    this._truePeakSamples += blockSize;
+
+    if (this._truePeakSamples >= this._truePeakPostInterval) {
+      this.port.postMessage({
+        type: 'truePeak',
+        left: this._truePeakMaxL,
+        right: this._truePeakMaxR,
+        samples: this._truePeakSamples
+      });
+      this._truePeakMaxL = 0;
+      this._truePeakMaxR = 0;
+      this._truePeakSamples = 0;
     }
 
     this._samplesSincePost += blockSize;
@@ -127,6 +244,7 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
       }
 
       this.port.postMessage({
+        type: 'snapshot',
         bufL: snapshotL,
         bufR: snapshotR,
         timestamp: currentTime

@@ -9,8 +9,11 @@
  * the table describes them and asserts that the ITU-R BS.1770-4 Annex 2
  * detector in src/metering/true-peak.js reads within the +0.2/−0.4 dB
  * tolerance the table specifies. The remaining sections verify the
- * coefficient table, block-boundary continuity, the two feed semantics of
- * TruePeakMeter and the sample-rate dependent over-sampling ratio.
+ * coefficient table, block-boundary continuity, the sample-rate dependent
+ * over-sampling ratio, and the meter as the application drives it:
+ * TruePeakMeter ballistics (TPmax, hold and over from unsmoothed peaks),
+ * independent peak readers, and the sample-complete chain from the
+ * stereo-sampler AudioWorklet through the main-thread sampler into the meter.
  *
  * Every measurement starts from a cleared detector, as Tech 3341 requires
  * ("the loudness meter shall be reset before each measurement").
@@ -25,13 +28,21 @@ import {
   BS1770_PHASES,
   BS1770_TAPS_PER_PHASE,
   BS1770_TRUE_PEAK_COEFFICIENTS,
+  TP_DISPLAY_FLOOR_DB,
   TruePeakDetector,
   TruePeakMeter,
   amplitudeToDbTP,
   calculateTruePeak,
   calculateTruePeakStereo,
+  interpolationBranches,
   oversamplingFactor
 } from '../src/metering/true-peak.js';
+import {
+  stereoSine,
+  tech3341Case20,
+  tech3341SineCases,
+  withinEbuTolerance
+} from './fixtures/tech3341-signals.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST UTILITIES
@@ -60,17 +71,6 @@ function check(name, condition, detail) {
   else fail(name, detail);
 }
 
-/**
- * EBU Tech 3341 Table 1 tolerance for the true-peak cases.
- *
- * @param {number} readingDb - Meter reading in dBTP
- * @param {number} expectedDb - Expected maximum true-peak level in dBTP
- * @returns {boolean} True when the reading lies within +0.2/−0.4 dB
- */
-function withinEbuTolerance(readingDb, expectedDb) {
-  return readingDb <= expectedDb + 0.2 && readingDb >= expectedDb - 0.4;
-}
-
 function assertEbu(name, readingDb, expectedDb) {
   const detail = `${readingDb.toFixed(3)} dBTP (expected ${expectedDb.toFixed(1)} +0.2/−0.4 dBTP)`;
   check(name, withinEbuTolerance(readingDb, expectedDb), detail);
@@ -94,130 +94,6 @@ function samplePeakDb(buffer) {
     if (abs > max) max = abs;
   }
   return amplitudeToDbTP(max);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SIGNAL SYNTHESIS (EBU Tech 3341 Table 1)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Stereo sine wave as Tech 3341 describes it for cases 15 to 19: amplitude in
- * FFS, phase in degrees, and a 10 ms linear fade-in and fade-out. The duration
- * does not matter for the measurement; one second is used.
- *
- * @param {Object} spec - Signal specification
- * @param {number} spec.sampleRate - Sample rate in Hz
- * @param {number} spec.frequency - Frequency in Hz
- * @param {number} spec.amplitude - Amplitude in FFS (1.0 = full scale)
- * @param {number} spec.phaseDegrees - Initial phase in degrees
- * @returns {{ left: Float32Array, right: Float32Array }} Stereo signal
- */
-function stereoSine({ sampleRate, frequency, amplitude, phaseDegrees }) {
-  const length = sampleRate;
-  const fade = Math.round(sampleRate * 0.010);
-  const phase = (phaseDegrees * Math.PI) / 180;
-  const left = new Float32Array(length);
-
-  for (let i = 0; i < length; i++) {
-    let gain = 1;
-    if (i < fade) gain = i / fade;
-    else if (i >= length - fade) gain = (length - 1 - i) / fade;
-    left[i] = amplitude * gain * Math.sin((2 * Math.PI * frequency * i) / sampleRate + phase);
-  }
-
-  return { left, right: Float32Array.from(left) };
-}
-
-/**
- * Blackman-windowed sinc low-pass kernel with unity DC gain.
- *
- * @param {number} taps - Kernel length (odd)
- * @param {number} cutoffNormalised - Cut-off as a fraction of the sample rate
- * @returns {Float64Array} Kernel
- */
-function lowPassKernel(taps, cutoffNormalised) {
-  const kernel = new Float64Array(taps);
-  const centre = (taps - 1) / 2;
-  let sum = 0;
-
-  for (let i = 0; i < taps; i++) {
-    const x = i - centre;
-    const sinc = x === 0
-      ? 2 * cutoffNormalised
-      : Math.sin(2 * Math.PI * cutoffNormalised * x) / (Math.PI * x);
-    const window = 0.42
-      - 0.5 * Math.cos((2 * Math.PI * i) / (taps - 1))
-      + 0.08 * Math.cos((4 * Math.PI * i) / (taps - 1));
-    kernel[i] = sinc * window;
-    sum += kernel[i];
-  }
-
-  for (let i = 0; i < taps; i++) kernel[i] /= sum;
-  return kernel;
-}
-
-/**
- * Cases 20 to 23: a stereo sine at fs/6, 0.50 FFS, containing a single period
- * of a sine at fs/4 with amplitude 1.00, phase-continuous on both sides. The
- * signal is synthesised at 4·fs, low-pass (anti-alias) filtered at fs/2 and
- * downsampled to fs with an offset of 0 to 3 samples at the 4·fs rate, with a
- * short fade-in and fade-out.
- *
- * At 4·fs the carrier spans 24 samples per period and the fs/4 period 16. The
- * burst begins at a positive-going zero crossing of the carrier, and the
- * carrier resumes from phase zero when the burst has completed its period, so
- * the waveform is continuous in value and phase at both junctions.
- *
- * @param {number} sampleRate - Target sample rate fs in Hz
- * @param {number} offset - Downsampling offset at the 4·fs rate (0 to 3)
- * @returns {{ left: Float32Array, right: Float32Array, referencePeakDb: number }}
- *   Stereo signal and the true peak of the band-limited 4·fs signal in dBTP
- */
-function tech3341Case20(sampleRate, offset) {
-  const rate4 = 4 * sampleRate;
-  const length = Math.round(rate4 * 0.2);
-  const carrierPeriod = 24;
-  const burstPeriod = 16;
-  const burstStart = Math.floor(length / 2 / carrierPeriod) * carrierPeriod;
-  const source = new Float64Array(length);
-
-  for (let i = 0; i < length; i++) {
-    if (i < burstStart) {
-      source[i] = 0.5 * Math.sin((2 * Math.PI * i) / carrierPeriod);
-    } else if (i < burstStart + burstPeriod) {
-      source[i] = Math.sin((2 * Math.PI * (i - burstStart)) / burstPeriod);
-    } else {
-      source[i] = 0.5 * Math.sin((2 * Math.PI * (i - burstStart - burstPeriod)) / carrierPeriod);
-    }
-  }
-
-  const fade = Math.round(rate4 * 0.010);
-  for (let i = 0; i < fade; i++) {
-    source[i] *= i / fade;
-    source[length - 1 - i] *= i / fade;
-  }
-
-  // Anti-alias at fs/2 before decimation, as the table prescribes.
-  const kernel = lowPassKernel(511, 0.5 / 4);
-  const centre = (kernel.length - 1) / 2;
-  const filtered = new Float64Array(length);
-  let referencePeak = 0;
-
-  for (let i = 0; i < length; i++) {
-    let acc = 0;
-    const lo = Math.max(0, i + centre - (length - 1));
-    const hi = Math.min(kernel.length - 1, i + centre);
-    for (let k = lo; k <= hi; k++) acc += kernel[k] * source[i + centre - k];
-    filtered[i] = acc;
-    const abs = Math.abs(acc);
-    if (abs > referencePeak) referencePeak = abs;
-  }
-
-  const decimatedLength = Math.floor((length - offset) / 4);
-  const left = new Float32Array(decimatedLength);
-  for (let n = 0; n < decimatedLength; n++) left[n] = filtered[4 * n + offset];
-
-  return { left, right: Float32Array.from(left), referencePeakDb: amplitudeToDbTP(referencePeak) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,13 +146,7 @@ function testCoefficientTable() {
 
 const SAMPLE_RATE = 48000;
 
-const SINE_CASES = [
-  { id: 15, frequency: SAMPLE_RATE / 4, amplitude: 0.50, phaseDegrees: 0.0, expectedDb: -6.0 },
-  { id: 16, frequency: SAMPLE_RATE / 4, amplitude: 0.50, phaseDegrees: 45.0, expectedDb: -6.0 },
-  { id: 17, frequency: SAMPLE_RATE / 6, amplitude: 0.50, phaseDegrees: 60.0, expectedDb: -6.0 },
-  { id: 18, frequency: SAMPLE_RATE / 8, amplitude: 0.50, phaseDegrees: 67.5, expectedDb: -6.0 },
-  { id: 19, frequency: SAMPLE_RATE / 4, amplitude: 1.41, phaseDegrees: 45.0, expectedDb: 3.0 }
-];
+const SINE_CASES = tech3341SineCases(SAMPLE_RATE);
 
 function testSineCases() {
   console.log('\n--- EBU Tech 3341 cases 15 to 19 (stereo sine, 48 kHz) ---');
@@ -352,7 +222,7 @@ function testMeterFeeds() {
   const { left, right } = stereoSine({ sampleRate: SAMPLE_RATE, ...spec });
   const singlePass = calculateTruePeakStereo(left, right, SAMPLE_RATE).max;
 
-  const contiguous = new TruePeakMeter({ sampleRate: SAMPLE_RATE, contiguous: true, smoothing: 1 });
+  const contiguous = new TruePeakMeter({ sampleRate: SAMPLE_RATE, contiguous: true });
   for (let start = 0; start < left.length; start += 480) {
     contiguous.update(left.subarray(start, start + 480), right.subarray(start, start + 480));
   }
@@ -366,7 +236,7 @@ function testMeterFeeds() {
   const sine = new Float32Array(SAMPLE_RATE * seconds);
   for (let i = 0; i < sine.length; i++) sine[i] = Math.sin((2 * Math.PI * 1000 * i) / SAMPLE_RATE);
 
-  const windowed = new TruePeakMeter({ sampleRate: SAMPLE_RATE, smoothing: 1 });
+  const windowed = new TruePeakMeter({ sampleRate: SAMPLE_RATE });
   for (let start = 0; start + 4096 <= sine.length; start += 800) {
     const window = sine.subarray(start, start + 4096);
     windowed.update(window, window);
@@ -377,13 +247,285 @@ function testMeterFeeds() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// METER BALLISTICS (THE APPLICATION'S PATH)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Manually advanced clock for deterministic ballistics.
+ */
+function manualClock() {
+  let ms = 0;
+  return { now: () => ms, advance: (deltaMs) => { ms += deltaMs; } };
+}
+
+/**
+ * Feed a mono signal to a default meter as the application's analyser path
+ * does: a 4096-sample window of the most recent samples every `hop` samples,
+ * with the clock advancing in real time.
+ */
+function feedRollingWindows(signal, hop) {
+  const clock = manualClock();
+  const meter = new TruePeakMeter({ sampleRate: SAMPLE_RATE, now: clock.now });
+  for (let end = 4096; end <= signal.length; end += hop) {
+    const window = signal.subarray(end - 4096, end);
+    meter.update(window, window);
+    clock.advance((hop / SAMPLE_RATE) * 1000);
+  }
+  return meter;
+}
+
+/**
+ * Silence, a 20 ms 1 kHz burst at full scale, silence.
+ */
+function burstAfterSilence() {
+  const signal = new Float32Array(SAMPLE_RATE * 2);
+  const start = SAMPLE_RATE;
+  for (let i = 0; i < 960; i++) signal[start + i] = Math.sin((2 * Math.PI * 1000 * i) / SAMPLE_RATE);
+  return signal;
+}
+
+function testMeterBallistics() {
+  console.log('\n--- TruePeakMeter ballistics (TPmax, hold and over from unsmoothed peaks) ---');
+
+  // Transients through the default meter at 60 and 30 frames per second
+  const burst = burstAfterSilence();
+  const burstTruth = calculateTruePeak(burst, SAMPLE_RATE);
+  for (const [fps, hop] of [[60, 800], [30, 1600]]) {
+    const state = feedRollingWindows(burst, hop).getState();
+    assertClose(`20 ms burst after silence, ${fps} fps windows: TPmax`, state.dbtpMax, burstTruth, 0.01, ' dBTP');
+    check(`20 ms burst after silence, ${fps} fps windows: over indication at −1 dBTP`, state.isOverAny, String(state.isOverAny));
+  }
+
+  for (let offset = 0; offset < 4; offset++) {
+    const { left } = tech3341Case20(SAMPLE_RATE, offset);
+    for (const [fps, hop] of [[60, 800], [30, 1600]]) {
+      assertEbu(`Case ${20 + offset} through the default meter, ${fps} fps windows`, feedRollingWindows(left, hop).getState().dbtpMaxLeft, 0.0);
+    }
+  }
+
+  // Instant attack, timed release, hold behaviour
+  const clock = manualClock();
+  const meter = new TruePeakMeter({ sampleRate: SAMPLE_RATE, now: clock.now });
+  meter.updateFromPeaks(0.001, 0.001);
+  clock.advance(500);
+  meter.updateFromPeaks(1.0, 0.5);
+  let state = meter.getState();
+  assertClose('Instant attack: bar equals the new peak at once', state.dbtpLeft, 0.0, 1e-6, ' dBTP');
+  assertClose('Instant attack on the other channel', state.dbtpRight, amplitudeToDbTP(0.5), 1e-6, ' dBTP');
+
+  clock.advance(1700);
+  meter.updateFromPeaks(0, 0);
+  state = meter.getState();
+  assertClose('Release: 20 dB in 1.7 s, independent of update rate', state.dbtpLeft, -20.0, 1e-6, ' dBTP');
+  assertClose('Hold keeps the peak within its 3 s', state.dbtpHoldLeft, 0.0, 1e-6, ' dBTP');
+
+  clock.advance(1400);
+  meter.updateFromPeaks(0, 0);
+  state = meter.getState();
+  check('Hold follows the bar after 3 s', Math.abs(state.dbtpHoldLeft - state.dbtpLeft) < 1e-9,
+    `hold ${state.dbtpHoldLeft.toFixed(2)}, bar ${state.dbtpLeft.toFixed(2)}`);
+  assertClose('TPmax keeps the peak after the hold has fallen', state.dbtpMaxLeft, 0.0, 1e-6, ' dBTP');
+
+  clock.advance(10000);
+  meter.updateFromPeaks(0, 0);
+  assertClose('Bar stops at the display floor', meter.getState().dbtpLeft, TP_DISPLAY_FLOOR_DB, 1e-9, ' dBTP');
+
+  meter.reset();
+  state = meter.getState();
+  check('Reset clears TPmax and the over indication',
+    state.dbtpMax === -Infinity && !state.isOverAny && meter.isOver === false, `${state.dbtpMax}, ${state.isOverAny}`);
+
+  const guarded = new TruePeakMeter({ now: manualClock().now });
+  guarded.updateFromPeaks(Number.NaN, -0.5);
+  state = guarded.getState();
+  check('NaN peak reads as silence, negative peak by magnitude',
+    state.dbtpMaxLeft < -150 && Math.abs(state.dbtpMaxRight - amplitudeToDbTP(0.5)) < 1e-9,
+    `${state.dbtpMaxLeft.toFixed(1)}, ${state.dbtpMaxRight.toFixed(2)}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PEAK READERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function testPeakReaders() {
+  console.log('\n--- TruePeakMeter peak readers (consumers on their own schedule) ---');
+
+  const clock = manualClock();
+  const meter = new TruePeakMeter({ now: clock.now });
+  const fast = meter.createPeakReader();
+  const slow = meter.createPeakReader();
+
+  const idle = fast.take();
+  check('No update since creation reads −Infinity', idle.left === -Infinity && idle.right === -Infinity, `${idle.left}`);
+
+  meter.updateFromPeaks(1.0, 0.25);
+  clock.advance(90);
+  meter.updateFromPeaks(0.1, 0.1);
+
+  // A sender that samples the bar 90 ms after the peak sees the fall...
+  const bar = meter.getState().dbtpLeft;
+  check('Bar has begun to fall 90 ms after the peak', bar < -0.5, `${bar.toFixed(2)} dBTP`);
+
+  // ...but its reader still carries the peak itself
+  const first = fast.take();
+  assertClose('Reader reports the peak since its previous take', first.left, amplitudeToDbTP(1.0), 1e-9, ' dBTP');
+  assertClose('Reader reports the right channel independently', first.right, amplitudeToDbTP(0.25), 1e-9, ' dBTP');
+
+  meter.updateFromPeaks(0.5, 0.5);
+  assertClose('Reader restarts after take()', fast.take().left, amplitudeToDbTP(0.5), 1e-9, ' dBTP');
+  assertClose('Readers are independent of each other', slow.take().left, amplitudeToDbTP(1.0), 1e-9, ' dBTP');
+
+  fast.close();
+  meter.updateFromPeaks(1.0, 1.0);
+  check('A closed reader no longer accumulates', fast.take().left === -Infinity, 'detached');
+  slow.close();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAMPLE-COMPLETE CHAIN: WORKLET → SAMPLER → METER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Load the stereo-sampler AudioWorklet module in Node with the minimal
+ * AudioWorkletGlobalScope it relies on, and return its processor class.
+ */
+async function loadWorkletProcessor() {
+  let processorClass = null;
+  globalThis.AudioWorkletProcessor = class {
+    constructor() {
+      this.port = { postMessage: () => {}, onmessage: null };
+    }
+  };
+  globalThis.registerProcessor = (name, cls) => { processorClass = cls; };
+  globalThis.currentTime = 0;
+  globalThis.sampleRate = SAMPLE_RATE;
+  await import('../src/audio/stereo-sampler-worklet.js');
+  return processorClass;
+}
+
+/**
+ * Run a stereo signal through a worklet processor in 128-sample render quanta.
+ */
+function renderThroughWorklet(Processor, sampleRate, left, right, onMessage) {
+  globalThis.sampleRate = sampleRate;
+  const processor = new Processor({
+    processorOptions: { bufferSize: 4096, truePeakBranches: interpolationBranches(sampleRate) }
+  });
+  processor.port.postMessage = onMessage;
+  for (let start = 0; start < left.length; start += 128) {
+    const end = Math.min(start + 128, left.length);
+    processor.process([[left.subarray(start, end), right.subarray(start, end)]]);
+  }
+  return processor;
+}
+
+async function testSampleCompleteChain() {
+  console.log('\n--- Sample-complete chain: stereo-sampler worklet → sampler → meter ---');
+
+  const Processor = await loadWorkletProcessor();
+  check('Worklet module registers its processor', typeof Processor === 'function', 'stereo-sampler');
+
+  // Worklet kernel against TruePeakDetector, bit for bit, at 4×, 2× and 1×
+  for (const rate of [48000, 96000, 192000]) {
+    const { left, right } = stereoSine({ sampleRate: rate, frequency: 12000, amplitude: 0.5, phaseDegrees: 45 });
+    const reference = new TruePeakDetector(rate);
+    let referencePeak = 0;
+    for (let start = 0; start < left.length; start += 128) {
+      referencePeak = Math.max(referencePeak, reference.process(left.subarray(start, start + 128)));
+    }
+
+    let workletPeak = 0;
+    let samples = 0;
+    let messages = 0;
+    const processor = renderThroughWorklet(Processor, rate, left, right, (message) => {
+      if (message.type !== 'truePeak') return;
+      workletPeak = Math.max(workletPeak, message.left);
+      samples += message.samples;
+      messages++;
+    });
+    // The processor also holds the peak of samples not yet reported
+    workletPeak = Math.max(workletPeak, processor._truePeakMaxL);
+    const pending = processor._truePeakSamples;
+    check(`${rate / 1000} kHz: worklet peak identical to TruePeakDetector`, workletPeak === referencePeak,
+      `${amplitudeToDbTP(workletPeak).toFixed(4)} dBTP`);
+    const secondsPerMessage = samples / messages / rate;
+    check(`${rate / 1000} kHz: every sample accounted for, reported about every 10 ms`,
+      samples + pending === left.length && secondsPerMessage > 0.009 && secondsPerMessage < 0.012,
+      `${samples} reported + ${pending} pending in ${messages} messages, ${(secondsPerMessage * 1000).toFixed(1)} ms each`);
+  }
+
+  // The main-thread sampler with stubbed Web Audio nodes, fed by the worklet
+  const nodes = [];
+  globalThis.AudioWorkletNode = class {
+    constructor(context, name, options) {
+      this.options = options;
+      this.port = { onmessage: null };
+      nodes.push(this);
+    }
+    connect() {}
+    disconnect() {}
+  };
+  const context = {
+    sampleRate: SAMPLE_RATE,
+    audioWorklet: { addModule: async () => {} },
+    createChannelMerger: () => ({ connect() {} })
+  };
+  const source = { connect() {} };
+  const sampler = await import('../src/audio/stereo-sampler.js');
+  const mode = await sampler.initStereoSampler(context, source, source);
+  const node = nodes[0];
+  check('Sampler runs in worklet mode and offers the true-peak feed', mode === 'worklet' && sampler.hasTruePeakFeed(), mode);
+  check('Sampler hands the Annex 2 branches to the worklet',
+    node.options.processorOptions.truePeakBranches.length === 4
+      && node.options.processorOptions.truePeakBranches[0][6] === BS1770_TRUE_PEAK_COEFFICIENTS[0][6],
+    `${node.options.processorOptions.truePeakBranches.length} branches`);
+
+  // Case 22 (the worst case for sample peak) with a UI thread that stalls for
+  // two seconds, as a background tab does, while the worklet keeps measuring
+  const { left } = tech3341Case20(SAMPLE_RATE, 2);
+  const padded = new Float32Array(SAMPLE_RATE * 3);
+  padded.set(left, SAMPLE_RATE);
+  const truth = calculateTruePeak(padded, SAMPLE_RATE);
+
+  const clock = manualClock();
+  const meter = new TruePeakMeter({ sampleRate: SAMPLE_RATE, now: clock.now });
+  const stallStart = SAMPLE_RATE * 0.5;
+  const stallEnd = SAMPLE_RATE * 2.5;
+  let delivered = 0;
+  let lastFrame = -1;
+  renderThroughWorklet(Processor, SAMPLE_RATE, padded, padded, (message) => {
+    node.port.onmessage({ data: message });
+    delivered += message.samples ?? 0;
+    // The UI consumes once per 16.7 ms frame, except during the stall
+    const frame = Math.floor(delivered / 800);
+    const stalled = delivered >= stallStart && delivered <= stallEnd;
+    if (!stalled && frame !== lastFrame) {
+      lastFrame = frame;
+      const { left: peakL, right: peakR } = sampler.consumeTruePeaks();
+      clock.advance(16.7);
+      meter.updateFromPeaks(peakL, peakR);
+    }
+  });
+  const { left: peakL, right: peakR, samples: rest } = sampler.consumeTruePeaks();
+  meter.updateFromPeaks(peakL, peakR);
+
+  assertClose('Case 22 across a 2 s UI stall: TPmax equals the single-pass reading', meter.getState().dbtpMaxLeft, truth, 1e-6, ' dBTP');
+  assertEbu('Case 22 across a 2 s UI stall: within the EBU tolerance', meter.getState().dbtpMaxLeft, 0.0);
+  check('Sampler counted every measured sample', sampler.getSamplerStats().truePeakSamples === delivered,
+    `${sampler.getSamplerStats().truePeakSamples} of ${delivered} (${rest} in the final read)`);
+
+  sampler.disposeStereoSampler();
+  check('Dispose withdraws the true-peak feed', !sampler.hasTruePeakFeed(), 'no feed');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SAMPLE-RATE HANDLING
 // ─────────────────────────────────────────────────────────────────────────────
 
 function testSampleRates() {
   console.log('\n--- Over-sampling ratio per sample rate ---');
 
-  const expectedFactors = [[44100, 4], [48000, 4], [88200, 2], [96000, 2], [176400, 1], [192000, 1]];
+  const expectedFactors = [[44100, 4], [48000, 4], [88200, 2], [96000, 2], [176400, 2], [192000, 2]];
   for (const [rate, factor] of expectedFactors) {
     check(`${rate} Hz over-samples ${factor}×`, oversamplingFactor(rate) === factor, `${oversamplingFactor(rate)}×`);
   }
@@ -406,11 +548,19 @@ function testSampleRates() {
     assertEbu(`12 kHz at ${phaseDegrees}°, 0.50 FFS, 96 kHz (2×)`, calculateTruePeakStereo(left, right, rate).max, -6.0);
   }
 
-  // 192 kHz needs no over-sampling: the sample grid is already the Annex 2
-  // grid, and the worst-case under-read of a 12 kHz tone is 0.17 dB.
-  const rate = 192000;
-  const { left, right } = stereoSine({ sampleRate: rate, frequency: 12000, amplitude: 0.5, phaseDegrees: 11.25 });
-  assertEbu('12 kHz at 11.25°, 0.50 FFS, 192 kHz (sample peak)', calculateTruePeakStereo(left, right, rate).max, -6.0);
+  // Tech 3341 defines its signals relative to fs: at 96 and 192 kHz the same
+  // sample sequences recur at 24 and 48 kHz, and all nine cases must still
+  // pass with 2× over-sampling
+  for (const rate of [96000, 192000]) {
+    for (const spec of tech3341SineCases(rate)) {
+      const { left, right } = stereoSine({ sampleRate: rate, ...spec });
+      assertEbu(`Case ${spec.id} scaled to ${rate / 1000} kHz (2×)`, calculateTruePeakStereo(left, right, rate).max, spec.expectedDb);
+    }
+    for (let offset = 0; offset < 4; offset++) {
+      const { left, right } = tech3341Case20(rate, offset);
+      assertEbu(`Case ${20 + offset} scaled to ${rate / 1000} kHz (2×)`, calculateTruePeakStereo(left, right, rate).max, 0.0);
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -426,6 +576,9 @@ testSineCases();
 testBurstCases();
 testBlockContinuity();
 testMeterFeeds();
+testMeterBallistics();
+testPeakReaders();
+await testSampleCompleteChain();
 testSampleRates();
 
 console.log('\n═══════════════════════════════════════════════════════════════');

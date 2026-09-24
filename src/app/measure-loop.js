@@ -346,8 +346,9 @@ function measureLoop() {
   // ─────────────────────────────────────────────────────────────────────────
   const tpState = meters.truePeakMeter.getState();
 
-  if (tpState.dbtpHoldLeft > meterState.tpMaxL) meterState.tpMaxL = tpState.dbtpHoldLeft;
-  if (tpState.dbtpHoldRight > meterState.tpMaxR) meterState.tpMaxR = tpState.dbtpHoldRight;
+  // TPmax from the unsmoothed maxima of every measured sample
+  if (tpState.dbtpMaxLeft > meterState.tpMaxL) meterState.tpMaxL = tpState.dbtpMaxLeft;
+  if (tpState.dbtpMaxRight > meterState.tpMaxR) meterState.tpMaxR = tpState.dbtpMaxRight;
   const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
 
   // TPmax display

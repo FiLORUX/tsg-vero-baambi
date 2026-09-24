@@ -198,6 +198,14 @@ The `onaudioprocess` callback receives an `AudioProcessingEvent` whose `inputBuf
 
 ---
 
+### 2.4 True-Peak Measurement in the Sampler
+
+The sampler also measures the ITU-R BS.1770-4 Annex 2 true peak of **every** sample. In AudioWorklet mode the filter runs in the audio thread on each 128-frame render quantum and posts `{ type: 'truePeak', left, right, samples }` about every 10 ms; the filter branches arrive through `processorOptions` from `src/metering/true-peak.js`, so the coefficient table has a single source. In ScriptProcessor mode `TruePeakDetector` processes each gap-free `onaudioprocess` block on the main thread.
+
+On the main thread the reports accumulate until `consumeTruePeaks()` takes them. A consumer that runs late (dropped frames, a throttled background tab, a blocked main thread) therefore still receives the peak of every sample, which the rolling snapshot windows cannot guarantee. `tests/browser/true-peak-browser.js` verifies this in Chromium with the main thread blocked for one second across EBU Tech 3341 cases 20 to 23: the sample-complete feed reads them within tolerance, while the analyser windows of the same run see nothing of the signal.
+
+The snapshot messages carry `type: 'snapshot'` and keep their previous content.
+
 ## 3. Comparison Matrix
 
 | Aspect | AudioWorklet | ScriptProcessorNode |

@@ -458,6 +458,32 @@ const truePeakMeter = new TruePeakMeter({
   sampleRate: ac.sampleRate,
   mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE
 });
+
+/**
+ * Feed the True Peak meter from the most complete source available.
+ *
+ * With the AudioWorklet or ScriptProcessor sampler running, the meter receives
+ * the true peak of every sample since the previous call, measured off the UI
+ * thread's schedule: dropped frames and background-tab throttling cannot hide
+ * an inter-sample over. Without the sampler it measures the analyser window.
+ */
+function updateTruePeakMeter() {
+  if (stereoSamplerModule?.hasTruePeakFeed?.()) {
+    const { left, right } = stereoSamplerModule.consumeTruePeaks();
+    truePeakMeter.updateFromPeaks(left, right);
+  } else {
+    truePeakMeter.update(bufL, bufR);
+  }
+}
+
+/**
+ * Reset the True Peak meter and discard peaks measured before the reset,
+ * so a new measurement starts from the samples that follow it.
+ */
+function resetTruePeakMeter() {
+  stereoSamplerModule?.consumeTruePeaks?.();
+  truePeakMeter.reset();
+}
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
 const samplePeakMeter = new SamplePeakMeter();
 const stereoMeter = new StereoMeter();
@@ -1510,8 +1536,8 @@ function renderRemoteProbeList(probes) {
  * @param {number} data.lufsM - Momentary LUFS
  * @param {number} data.lufsS - Short-term LUFS
  * @param {number} data.lufsI - Integrated LUFS
- * @param {number} data.tpLeft - True Peak left (dBTP)
- * @param {number} data.tpRight - True Peak right (dBTP)
+ * @param {number} data.tpLeft - Largest left True Peak since the previous packet (dBTP)
+ * @param {number} data.tpRight - Largest right True Peak since the previous packet (dBTP)
  * @param {number} data.ppmLeft - PPM left (dBFS)
  * @param {number} data.ppmRight - PPM right (dBFS)
  * @param {number} data.correlation - Stereo correlation (-1 to +1)
@@ -1715,13 +1741,15 @@ function handleRemoteMetrics(probeId, metrics) {
   // ─────────────────────────────────────────────────────────────────────────
   // LUFS DISPLAY
   // ─────────────────────────────────────────────────────────────────────────
+  // Values arrive as JSON, where −Infinity (silence, no data yet) becomes null.
+  // Number.isFinite rejects null; the global isFinite would coerce it to 0.
   const { lufs, truePeak, ppm, rms, stereo, visualization } = metrics;
 
   if (lufs) {
     // Momentary LUFS
     if (lufsM) {
       const m = lufs.momentary;
-      if (isFinite(m) && m > -100) {
+      if (Number.isFinite(m) && m > -100) {
         lufsM.textContent = formatLUFS(m);
         lufsM.style.color = loudnessColourBase(m);
         lufsM.dataset.v = m;
@@ -1734,7 +1762,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // Short-term LUFS
     if (lufsS) {
       const s = lufs.shortTerm;
-      if (isFinite(s) && s > -100) {
+      if (Number.isFinite(s) && s > -100) {
         lufsS.textContent = formatLUFS(s);
         lufsS.style.color = loudnessColourBase(s);
         meterState.shortTermLufs = s;
@@ -1748,7 +1776,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // Integrated LUFS
     if (lufsI) {
       const i = lufs.integrated;
-      if (isFinite(i) && i > -100) {
+      if (Number.isFinite(i) && i > -100) {
         lufsI.textContent = formatLUFS(i);
         lufsI.style.color = loudnessColourBase(i);
         meterState.integratedLufs = i;
@@ -1762,7 +1790,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // LRA
     if (lraEl) {
       const lra = lufs.lra;
-      if (isFinite(lra) && lra >= 0) {
+      if (Number.isFinite(lra) && lra >= 0) {
         // Fixed-width format: pad to 4 chars (e.g., " 5.2" or "12.3")
         lraEl.textContent = lra.toFixed(1).padStart(4, ' ') + ' LU';
       } else {
@@ -1774,7 +1802,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // RADAR HISTORY (short-term LUFS over time)
     // ─────────────────────────────────────────────────────────────────────────
     const st = lufs.shortTerm;
-    if (isFinite(st) && st > -100) {
+    if (Number.isFinite(st) && st > -100) {
       const now = Date.now();
       const cutoff = now - (radarMaxSeconds * 1000);
       // Efficient pruning using binary search + splice (O(log n) instead of O(n²))
@@ -1790,8 +1818,13 @@ function handleRemoteMetrics(probeId, metrics) {
   // TRUE PEAK DISPLAY
   // ─────────────────────────────────────────────────────────────────────────
   if (truePeak && r128TpMax) {
-    const tpMax = Math.max(truePeak.left ?? -Infinity, truePeak.right ?? -Infinity);
-    if (isFinite(tpMax) && tpMax > -100) {
+    // TPmax is the maximum since the last local reset. Each transmission
+    // carries the largest level since the previous one, so the running
+    // maximum of the received values is the true-peak maximum.
+    if ((truePeak.left ?? -Infinity) > meterState.tpMaxL) meterState.tpMaxL = truePeak.left;
+    if ((truePeak.right ?? -Infinity) > meterState.tpMaxR) meterState.tpMaxR = truePeak.right;
+    const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
+    if (Number.isFinite(tpMax) && tpMax > -100) {
       r128TpMax.textContent = formatTruePeak(tpMax);
       // Colour coding: red if over limit
       const TP_LIMIT = appState.get('truePeakLimit') ?? -1;
@@ -2072,7 +2105,7 @@ function bindEvents() {
         updatePauseButtonState(false);
       }
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
       // Reset history strip
       if (loudnessHistoryStrip) loudnessHistoryStrip.reset();
@@ -2453,7 +2486,7 @@ function bindEvents() {
       }
       // Reset R128 when target changes (like original resetR128)
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
       // Update display with fixed-width placeholders
       if (lufsM) lufsM.textContent = ' --.- LUFS';
@@ -2752,7 +2785,7 @@ function bindTauriEvents() {
   if (r128Reset) {
     r128Reset.addEventListener('click', () => {
       lufsMeter?.reset();
-      truePeakMeter?.reset();
+      resetTruePeakMeter();
       ppmMeter?.reset();
       resetMeterState();
       radar?.clear();
@@ -2833,7 +2866,7 @@ function init() {
     truePeakMeter,
     resetMeters: () => {
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
     },
     getTrim: () => {
@@ -2890,8 +2923,9 @@ function init() {
 
       // Update meters directly with current buffer data
       // (Bypasses measure-loop which requires activeCapture)
-      // True Peak and PPM use unweighted samples
-      truePeakMeter.update(bufL, bufR);
+      // True Peak and PPM use unweighted samples; True Peak takes the
+      // sample-complete feed when the sampler runs
+      updateTruePeakMeter();
       ppmMeter.update(bufL, bufR);
 
       // LUFS uses K-weighted samples per ITU-R BS.1770-4
@@ -2921,7 +2955,7 @@ function init() {
       // Critical for tests like PPM where previous test (LUFS pink noise)
       // has high peak levels that persist due to slow decay (11.76 dB/s)
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       ppmMeter.reset();
     },
     onStart: () => {
@@ -2932,7 +2966,7 @@ function init() {
       truePeakMeter.setMode(TRUE_PEAK_MODE.POLYPHASE);
       // Reset all meters before verification
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       ppmMeter.reset();
       resetMeterState();
     },
@@ -3193,7 +3227,7 @@ function init() {
       getTpLimit: () => TP_LIMIT
     },
     helpers: {
-      layoutXY, layoutLoudness, sampleAnalysers,
+      layoutXY, layoutLoudness, sampleAnalysers, updateTruePeakMeter,
       drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
       updateRadarTooltip
     },

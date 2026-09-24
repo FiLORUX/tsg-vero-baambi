@@ -493,12 +493,12 @@ Full shortcuts reference: [`docs/shortcuts.md`](docs/shortcuts.md)
 
 | Parameter | Standard | Implementation |
 |-----------|----------|----------------|
-| Oversampling | ITU-R BS.1770-4 Annex 2 | 48-tap polyphase FIR from the Annex 2 table: 4× up to 48 kHz, 2× up to 96 kHz, sample peak from 176.4 kHz |
+| Oversampling | ITU-R BS.1770-4 Annex 2 | 48-tap polyphase FIR from the Annex 2 table: 4× up to 48 kHz, 2× above |
 | Conformance | EBU Tech 3341 Table 1, cases 15–23 | Within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
 | Maximum permitted level | EBU R128 | −1 dBTP |
 | Streaming headroom | Industry practice | −2 dBTP (lossy codec margin) |
 
-**Implementation note:** `TruePeakDetector` keeps the last eleven input samples across gap-free blocks, so a peak that straddles a block boundary is measured exactly as in a single pass. `TruePeakMeter` is fed rolling analyser windows and therefore measures each window on its own; pass `contiguous: true` when feeding consecutive blocks. The Annex 2 filter carries about ±0.3 dB of passband ripple below 20 kHz and rolls off above it; the EBU tolerance includes both.
+**Implementation note:** the true peak of every sample is measured in the stereo-sampler AudioWorklet, off the UI thread's schedule, so TPmax and the over indication cannot miss an inter-sample over through dropped frames or a throttled tab. TPmax, peak hold and the over indication come from the unsmoothed peak; only the bar has ballistics (instant attack, 20 dB in 1.7 s release). `TruePeakDetector` keeps the last eleven input samples across gap-free blocks, so a peak that straddles a block boundary is measured exactly as in a single pass. The Annex 2 filter carries about ±0.3 dB of passband ripple below 20 kHz and rolls off above it; the EBU tolerance includes both.
 
 ### PPM Metering (IEC 60268-10 Type I / Nordic)
 
@@ -606,6 +606,8 @@ It is **not** intended to replace certified measurement equipment for delivery Q
 ### Automated Tests
 
 ```bash
+npm test               # all Node.js suites
+npm run test:browser   # true peak in headless Chromium (playwright-core)
 node tests/metering-verification.js
 ```
 
