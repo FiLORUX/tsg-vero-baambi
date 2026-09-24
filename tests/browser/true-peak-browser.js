@@ -5,7 +5,7 @@
  *
  * Run: npm run test:browser
  *
- * Drives the real Web Audio pipeline in headless Chromium and checks what the
+ * Drives the real Web Audio pipeline in a headless browser and checks what the
  * Node tests cannot: the AudioWorklet running in a browser's audio thread,
  * real-time delivery to a main thread that stalls, and the application itself.
  *
@@ -26,9 +26,10 @@
  *      where the received TPmax must hold while the bar follows the level,
  *      and a switch to a second probe, which must start a new TPmax.
  *
- * Requirements: the playwright-core dev dependency and a Chromium build
- * (npx playwright-core install chromium), or CHROMIUM_PATH pointing at a
- * Chromium or Chrome executable.
+ * Engines: BROWSER=chromium (default), firefox or webkit, the engine behind
+ * Safari. Requirements: the playwright-core dev dependency and the engine's
+ * Playwright build (npx playwright-core install chromium firefox webkit), or
+ * CHROMIUM_PATH pointing at a Chromium or Chrome executable.
  *
  * @module tests/browser/true-peak-browser
  * @see EBU Tech 3341 Table 1, cases 15–23
@@ -43,7 +44,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright-core';
+import { chromium, firefox, webkit } from 'playwright-core';
 import { WebSocket } from 'ws';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ function startServer() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function testOfflineWorklet(page) {
-  console.log('\n--- 1. Offline rendering: stereo-sampler worklet in Chromium against TruePeakDetector ---');
+  console.log('\n--- 1. Offline rendering: stereo-sampler worklet in the browser against TruePeakDetector ---');
 
   const results = await page.evaluate(async () => {
     const tp = await import('/src/metering/true-peak.js');
@@ -530,10 +531,16 @@ async function testRemoteChain(browser, origin) {
       }
     }, 100);
 
-    const waitForBar = (app, levelDb) => app.waitForFunction(async (expected) => {
-      const { meterState } = await import('/src/app/meter-state.js');
-      return meterState.remoteTpL === expected;
-    }, levelDb);
+    // Poll from Node: an async predicate in waitForFunction resolves at once
+    // in some engines, because the returned Promise itself is truthy
+    const waitForBar = async (app, levelDb) => {
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        if ((await readRemoteTruePeak(app)).bar === levelDb) return;
+        await new Promise((wake) => setTimeout(wake, 50));
+      }
+      throw new Error(`remote bar never reached ${levelDb} dBTP`);
+    };
 
     try {
       const scripted = await openRemoteApplication(browser, origin, url, `[data-probe-id="${probeA}"] input[type=radio]`);
@@ -570,18 +577,35 @@ async function testRemoteChain(browser, origin) {
 console.log(`${BOLD}VERO-BAAMBI True-Peak Browser Verification${RESET}`);
 console.log('═══════════════════════════════════════════════════════════════');
 
+/**
+ * Launch options per engine: each needs audio to start without a user gesture.
+ */
+const ENGINES = {
+  chromium: () => chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH || undefined,
+    args: ['--autoplay-policy=no-user-gesture-required']
+  }),
+  firefox: () => firefox.launch({
+    firefoxUserPrefs: { 'media.autoplay.default': 0, 'media.autoplay.blocking_policy': 0 }
+  }),
+  webkit: () => webkit.launch()
+};
+
+const engineName = (process.env.BROWSER || 'chromium').toLowerCase();
+if (!ENGINES[engineName]) {
+  console.error(`Unknown BROWSER "${engineName}"; use chromium, firefox or webkit`);
+  process.exit(2);
+}
+
 const { server, origin } = await startServer();
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--autoplay-policy=no-user-gesture-required']
-});
+const browser = await ENGINES[engineName]();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   page.setDefaultTimeout(180000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  console.log(`Chromium ${browser.version()}`);
+  console.log(`${engineName} ${browser.version()}`);
 
   await page.goto(`${origin}/__blank`);
   await testOfflineWorklet(page);
