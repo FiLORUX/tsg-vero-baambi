@@ -23,7 +23,8 @@
  *   4. Application: the built-in Meter Verification Tool must pass.
  *   5. Remote chain: the probe page through a local broker into the
  *      application's remote mode; then a scripted probe whose level drops,
- *      where the received TPmax must hold while the bar follows the level.
+ *      where the received TPmax must hold while the bar follows the level,
+ *      and a switch to a second probe, which must start a new TPmax.
  *
  * Requirements: the playwright-core dev dependency and a Chromium build
  * (npx playwright-core install chromium), or CHROMIUM_PATH pointing at a
@@ -502,43 +503,60 @@ async function testRemoteChain(browser, origin) {
     await remote.app.close();
     await probe.close();
 
-    // 5b. A scripted probe whose level drops from −20 to −40 dBTP
-    const probeId = randomUUID();
-    const socket = new WebSocket(url);
-    await new Promise((opened, failed) => { socket.once('open', opened); socket.once('error', failed); });
-    socket.send(JSON.stringify({ type: 'register', probeId, name: 'Scripted probe', location: 'test', capabilities: { format: 'rich-v1' } }));
-
-    let levelDb = -20;
+    // 5b. Scripted probes: A drops from −20 to −40 dBTP, B stays at −30 dBTP
+    const levels = new Map([[randomUUID(), -20], [randomUUID(), -30]]);
+    const [probeA, probeB] = [...levels.keys()];
+    const sockets = [];
+    for (const [probeId] of levels) {
+      const socket = new WebSocket(url);
+      await new Promise((opened, failed) => { socket.once('open', opened); socket.once('error', failed); });
+      socket.send(JSON.stringify({ type: 'register', probeId, name: `Scripted ${probeId.slice(0, 4)}`, location: 'test', capabilities: { format: 'rich-v1' } }));
+      sockets.push([probeId, socket]);
+    }
     const sender = setInterval(() => {
-      socket.send(JSON.stringify({
-        type: 'metrics',
-        payload: {
-          probe: { id: probeId, name: 'Scripted probe' },
-          timestamp: Date.now(),
-          metrics: {
-            lufs: { momentary: levelDb - 3, shortTerm: levelDb - 3, integrated: levelDb - 3, lra: null },
-            truePeak: { left: levelDb, right: levelDb, max: levelDb }
+      for (const [probeId, socket] of sockets) {
+        const levelDb = levels.get(probeId);
+        socket.send(JSON.stringify({
+          type: 'metrics',
+          payload: {
+            probe: { id: probeId, name: `Scripted ${probeId.slice(0, 4)}` },
+            timestamp: Date.now(),
+            metrics: {
+              lufs: { momentary: levelDb - 3, shortTerm: levelDb - 3, integrated: levelDb - 3, lra: null },
+              truePeak: { left: levelDb, right: levelDb, max: levelDb }
+            }
           }
-        }
-      }));
+        }));
+      }
     }, 100);
 
+    const waitForBar = (app, levelDb) => app.waitForFunction(async (expected) => {
+      const { meterState } = await import('/src/app/meter-state.js');
+      return meterState.remoteTpL === expected;
+    }, levelDb);
+
     try {
-      const scripted = await openRemoteApplication(browser, origin, url, `[data-probe-id="${probeId}"] input[type=radio]`);
-      await scripted.app.waitForFunction(async () => {
-        const { meterState } = await import('/src/app/meter-state.js');
-        return meterState.remoteTpL === -20;
-      });
-      levelDb = -40;
+      const scripted = await openRemoteApplication(browser, origin, url, `[data-probe-id="${probeA}"] input[type=radio]`);
+      await waitForBar(scripted.app, -20);
+      levels.set(probeA, -40);
       await scripted.app.waitForTimeout(1000);
       const after = await readRemoteTruePeak(scripted.app);
       check('Bar follows the received level down to −40 dBTP', after.bar === -40, `${after.bar} dBTP`);
       check('TPmax holds −20 dBTP after the level has dropped', after.tpMax === -20 && after.text === '-20.0 dBTP',
         `${after.tpMax} dBTP, display "${after.text}"`);
+
+      await scripted.app.click(`[data-probe-id="${probeB}"] input[type=radio]`);
+      await waitForBar(scripted.app, -30);
+      await scripted.app.waitForTimeout(300);
+      const switched = await readRemoteTruePeak(scripted.app);
+      check('Switching probe starts a new TPmax', switched.tpMax === -30 && switched.text === '-30.0 dBTP',
+        `${switched.tpMax} dBTP, display "${switched.text}"`);
+      check('Received metrics are applied without listener errors', scripted.listenerErrors.length === 0,
+        scripted.listenerErrors[0] ?? 'none');
       await scripted.app.close();
     } finally {
       clearInterval(sender);
-      socket.close();
+      for (const [, socket] of sockets) socket.close();
     }
   } finally {
     broker.kill();

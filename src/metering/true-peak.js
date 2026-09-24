@@ -63,7 +63,8 @@
  *   updateFromPeaks()   linear peaks already measured on every sample, for
  *                       example by the stereo-sampler AudioWorklet. This is
  *                       the sample-complete path and the one src/app uses
- *                       whenever the worklet or ScriptProcessor sampler runs.
+ *                       whenever the stereo sampler runs, and in Tauri mode
+ *                       with the peaks measured by the Rust engine.
  *   update(), default   a rolling window of recent samples (AnalyserNode).
  *                       Each window is measured on its own, because splicing
  *                       overlapping windows through a shared history reads the
@@ -457,7 +458,7 @@ export class TruePeakDetector {
  * peaks at both edges are included.
  *
  * @param {ArrayLike<number>} buffer - Audio samples
- * @param {number} [sampleRate=48000] - Sample rate in Hz (selects 4×, 2× or 1×)
+ * @param {number} [sampleRate=48000] - Sample rate in Hz (selects 4× or 2×)
  * @returns {number} True Peak in dBTP (−Infinity for an empty buffer)
  *
  * @example
@@ -649,7 +650,10 @@ export class TruePeakMeter {
    * @param {Float32Array} rightBuffer - Right channel samples
    */
   update(leftBuffer, rightBuffer) {
-    this.#apply(this.#measure(this.#detectorL, leftBuffer), this.#measure(this.#detectorR, rightBuffer));
+    this.#apply(
+      sanitisePeak(this.#measure(this.#detectorL, leftBuffer)),
+      sanitisePeak(this.#measure(this.#detectorR, rightBuffer))
+    );
   }
 
   /**
@@ -716,9 +720,11 @@ export class TruePeakMeter {
   }
 
   /**
-   * Reset peak hold, TPmax, over indicator and the filter history.
+   * Reset the bar, peak hold, TPmax, over indicator and the filter history.
    */
   reset() {
+    this.smoothL = TP_DISPLAY_FLOOR_DB;
+    this.smoothR = TP_DISPLAY_FLOOR_DB;
     this.peakHoldL = TP_DISPLAY_FLOOR_DB;
     this.peakHoldR = TP_DISPLAY_FLOOR_DB;
     this.maxPeakL = -Infinity;
@@ -794,16 +800,25 @@ export class TruePeakMeter {
 }
 
 /**
- * Coerce an externally supplied peak to a non-negative finite value.
+ * Linear level at which a non-finite peak is recorded: +60 dBTP.
+ * @type {number}
+ */
+const NON_FINITE_PEAK = 1000;
+
+/**
+ * Coerce a peak to a non-negative finite value.
  *
- * NaN (a broken upstream measurement) reads as silence rather than poisoning
- * the maxima; +Infinity is kept so a non-finite signal still shows as an over.
+ * NaN cannot be ordered and reads as silence rather than poisoning the
+ * maxima. ±Infinity, the mark of a broken signal, reads as a gross over of
+ * +60 dBTP: it trips the over indication and appears in TPmax, yet stays
+ * finite, so the bar can fall and a reset clears it.
  *
  * @param {number} peak - Linear peak
  * @returns {number} Sanitised linear peak
  */
 function sanitisePeak(peak) {
-  if (Number.isNaN(peak) || typeof peak !== 'number') return 0;
+  if (typeof peak !== 'number' || Number.isNaN(peak)) return 0;
+  if (!Number.isFinite(peak)) return NON_FINITE_PEAK;
   return peak < 0 ? -peak : peak;
 }
 

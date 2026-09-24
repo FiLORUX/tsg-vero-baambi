@@ -20,14 +20,14 @@
 
 import { amplitudeToDbTP } from '../../src/metering/true-peak.js';
 
-export /**
+/**
  * EBU Tech 3341 Table 1 tolerance for the true-peak cases.
  *
  * @param {number} readingDb - Meter reading in dBTP
  * @param {number} expectedDb - Expected maximum true-peak level in dBTP
  * @returns {boolean} True when the reading lies within +0.2/−0.4 dB
  */
-function withinEbuTolerance(readingDb, expectedDb) {
+export function withinEbuTolerance(readingDb, expectedDb) {
   return readingDb <= expectedDb + 0.2 && readingDb >= expectedDb - 0.4;
 }
 
@@ -48,7 +48,7 @@ export function tech3341SineCases(sampleRate) {
   ];
 }
 
-export /**
+/**
  * Stereo sine wave as Tech 3341 describes it for cases 15 to 19: amplitude in
  * FFS, phase in degrees, and a 10 ms linear fade-in and fade-out. The duration
  * does not matter for the measurement; one second is used.
@@ -60,7 +60,7 @@ export /**
  * @param {number} spec.phaseDegrees - Initial phase in degrees
  * @returns {{ left: Float32Array, right: Float32Array }} Stereo signal
  */
-function stereoSine({ sampleRate, frequency, amplitude, phaseDegrees }) {
+export function stereoSine({ sampleRate, frequency, amplitude, phaseDegrees }) {
   const length = sampleRate;
   const fade = Math.round(sampleRate * 0.010);
   const phase = (phaseDegrees * Math.PI) / 180;
@@ -104,7 +104,7 @@ function lowPassKernel(taps, cutoffNormalised) {
   return kernel;
 }
 
-export /**
+/**
  * Cases 20 to 23: a stereo sine at fs/6, 0.50 FFS, containing a single period
  * of a sine at fs/4 with amplitude 1.00, phase-continuous on both sides. The
  * signal is synthesised at 4·fs, low-pass (anti-alias) filtered at fs/2 and
@@ -121,7 +121,7 @@ export /**
  * @returns {{ left: Float32Array, right: Float32Array, referencePeakDb: number }}
  *   Stereo signal and the true peak of the band-limited 4·fs signal in dBTP
  */
-function tech3341Case20(sampleRate, offset) {
+export function tech3341Case20(sampleRate, offset) {
   const rate4 = 4 * sampleRate;
   const length = Math.round(rate4 * 0.2);
   const carrierPeriod = 24;

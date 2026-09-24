@@ -64,6 +64,9 @@ let pendingPeakSamples = 0;
 /** @type {number} Samples measured since initialisation (coverage diagnostics) */
 let totalPeakSamples = 0;
 
+/** @type {number} Reset generation; worklet reports from an earlier generation are dropped */
+let peakGeneration = 0;
+
 /** @type {'worklet'|'scriptprocessor'|null} Current sampling mode */
 let samplingMode = null;
 
@@ -176,13 +179,16 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
   workletNode.port.onmessage = (event) => {
     const data = event.data;
     if (data.type === 'truePeak') {
-      accumulateTruePeak(data.left, data.right, data.samples);
-      return;
+      // Reports measured before the latest reset were already in flight
+      if (data.generation === peakGeneration) {
+        accumulateTruePeak(data.left, data.right, data.samples);
+      }
+    } else if (data.type === 'snapshot') {
+      syncedBufL = data.bufL;
+      syncedBufR = data.bufR;
+      lastTimestamp = data.timestamp;
+      dataReady = true;
     }
-    syncedBufL = data.bufL;
-    syncedBufR = data.bufR;
-    lastTimestamp = data.timestamp;
-    dataReady = true;
   };
 }
 
@@ -221,15 +227,26 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
   scriptProcessorNode.connect(silentGain);
   silentGain.connect(audioContext.destination);
 
-  // True peak of every sample: onaudioprocess delivers gap-free blocks
+  // True peak of every sample. onaudioprocess delivers consecutive blocks
+  // while the main thread keeps up; a block it misses is detected from
+  // playbackTime and the filter history is cleared, so two unrelated blocks
+  // are never joined and read as a peak. Samples in a missed block are not
+  // measured, which is why the AudioWorklet is preferred.
   const detectorL = new TruePeakDetector(audioContext.sampleRate);
   const detectorR = new TruePeakDetector(audioContext.sampleRate);
+  const halfSample = 0.5 / audioContext.sampleRate;
+  let expectedPlaybackTime = null;
 
   // Process audio - L/R are GUARANTEED from same audio block
   scriptProcessorNode.onaudioprocess = (event) => {
     const inputL = event.inputBuffer.getChannelData(0);
     const inputR = event.inputBuffer.getChannelData(1);
 
+    if (expectedPlaybackTime !== null && Math.abs(event.playbackTime - expectedPlaybackTime) > halfSample) {
+      detectorL.reset();
+      detectorR.reset();
+    }
+    expectedPlaybackTime = event.playbackTime + inputL.length / audioContext.sampleRate;
     accumulateTruePeak(detectorL.process(inputL), detectorR.process(inputR), inputL.length);
 
     // Copy to our buffers (they're the same size: 4096)
@@ -269,6 +286,18 @@ function accumulateTruePeak(left, right, samples) {
  */
 export function hasTruePeakFeed() {
   return samplingMode === 'worklet' || samplingMode === 'scriptprocessor';
+}
+
+/**
+ * Discard the true-peak maxima measured so far, including reports already on
+ * their way from the AudioWorklet, so a new measurement starts at this call.
+ */
+export function resetTruePeaks() {
+  peakGeneration++;
+  pendingPeakL = 0;
+  pendingPeakR = 0;
+  pendingPeakSamples = 0;
+  workletNode?.port.postMessage({ type: 'resetTruePeak', generation: peakGeneration });
 }
 
 /**
@@ -354,10 +383,12 @@ export function getBufferSize() {
  */
 export function disposeStereoSampler() {
   if (workletNode) {
+    workletNode.port.onmessage = null;
     workletNode.disconnect();
     workletNode = null;
   }
   if (scriptProcessorNode) {
+    scriptProcessorNode.onaudioprocess = null;
     scriptProcessorNode.disconnect();
     scriptProcessorNode = null;
   }

@@ -52,7 +52,7 @@ The first tests pure mathematical functions: dB conversions, RMS calculation, co
 npm run test:browser
 ```
 
-Drives the real Web Audio pipeline in headless Chromium (needs the `playwright-core` dev dependency and `npx playwright-core install chromium`, or `CHROMIUM_PATH`): the stereo-sampler AudioWorklet against `TruePeakDetector` bit for bit at 44.1, 48, 96 and 192 kHz; EBU Tech 3341 cases 15 to 23 in real time with the main thread blocked for one second across the signal; the four Intersample Peak Demo presets through the application's generator, measure loop and TPmax display; the built-in Meter Verification Tool; and the remote chain, from the probe page through a local broker into the application's remote mode, including a scripted probe whose level drops while the received TPmax must hold.
+Drives the real Web Audio pipeline in headless Chromium (needs the `playwright-core` dev dependency and `npx playwright-core install chromium`, or `CHROMIUM_PATH`): the stereo-sampler AudioWorklet against `TruePeakDetector` bit for bit at 44.1, 48, 96 and 192 kHz; EBU Tech 3341 cases 15 to 23 in real time with the main thread blocked for one second across the signal; the four Intersample Peak Demo presets through the application's generator, measure loop and TPmax display; the built-in Meter Verification Tool; and the remote chain, from the probe page through a local broker into the application's remote mode, including a scripted probe whose level drops while the received TPmax must hold, and a switch to a second probe that must start a new TPmax.
 
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 
@@ -102,7 +102,7 @@ VERO-BAAMBI measures true peak with a single method, the ITU-R BS.1770-4 Annex 2
 | Filter | 48-tap FIR interpolation filter from the Annex 2 table, four 12-tap branches |
 | Over-sampling | 4× up to 48 kHz, 2× (branches 0 and 2) above; the Tech 3341 cases, which scale with fs, pass at 48, 96 and 192 kHz |
 | Conformance | EBU Tech 3341 Table 1 cases 15 to 23 within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
-| Feed | Every sample, in the stereo-sampler AudioWorklet (ScriptProcessor fallback on the main thread); independent of frame rate, dropped frames and background-tab throttling. Analyser windows only without a sampler |
+| Feed | Every sample, in the stereo-sampler AudioWorklet; independent of frame rate, dropped frames and background-tab throttling. The ScriptProcessor fallback measures on the main thread and skips, without splicing, any block a stalled thread misses. Analyser windows only without a sampler; the Rust engine's per-sample peaks in Tauri mode |
 | Ballistics | TPmax, peak hold and the over indication from the unsmoothed peak; the bar rises instantly and falls 20 dB in 1.7 s |
 | Cost | 48 multiply-accumulates per input sample and channel at 4× |
 

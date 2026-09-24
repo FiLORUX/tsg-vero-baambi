@@ -66,6 +66,10 @@ function fail(name, detail) {
   failed++;
 }
 
+function info(text) {
+  console.log(`       ${text}`);
+}
+
 function check(name, condition, detail) {
   if (condition) pass(name, detail);
   else fail(name, detail);
@@ -341,6 +345,23 @@ function testMeterBallistics() {
   check('NaN peak reads as silence, negative peak by magnitude',
     state.dbtpMaxLeft < -150 && Math.abs(state.dbtpMaxRight - amplitudeToDbTP(0.5)) < 1e-9,
     `${state.dbtpMaxLeft.toFixed(1)}, ${state.dbtpMaxRight.toFixed(2)}`);
+
+  // A non-finite sample is a broken signal: a finite gross over that a reset clears
+  const brokenClock = manualClock();
+  const broken = new TruePeakMeter({ now: brokenClock.now });
+  broken.updateFromPeaks(Infinity, -Infinity);
+  state = broken.getState();
+  check('±Infinity reads as a finite +60 dBTP over',
+    Math.abs(state.dbtpMaxLeft - 60) < 1e-3 && Math.abs(state.dbtpMaxRight - 60) < 1e-3 && state.isOverAny,
+    `${state.dbtpMaxLeft.toFixed(2)}, ${state.dbtpMaxRight.toFixed(2)} dBTP, over ${state.isOverAny}`);
+  broken.reset();
+  brokenClock.advance(20);
+  broken.updateFromPeaks(0.5, 0.5);
+  state = broken.getState();
+  check('Reset clears bar, hold, TPmax and over after a non-finite peak',
+    Math.abs(state.dbtpLeft - amplitudeToDbTP(0.5)) < 1e-9 && Math.abs(state.dbtpHoldLeft - amplitudeToDbTP(0.5)) < 1e-9
+      && Math.abs(state.dbtpMax - amplitudeToDbTP(0.5)) < 1e-9 && !state.isOverAny,
+    `bar ${state.dbtpLeft.toFixed(2)}, hold ${state.dbtpHoldLeft.toFixed(2)}, TPmax ${state.dbtpMax.toFixed(2)}, over ${state.isOverAny}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -389,7 +410,10 @@ function testPeakReaders() {
  * Load the stereo-sampler AudioWorklet module in Node with the minimal
  * AudioWorkletGlobalScope it relies on, and return its processor class.
  */
+let workletProcessorClass = null;
+
 async function loadWorkletProcessor() {
+  if (workletProcessorClass) return workletProcessorClass;
   let processorClass = null;
   globalThis.AudioWorkletProcessor = class {
     constructor() {
@@ -400,6 +424,7 @@ async function loadWorkletProcessor() {
   globalThis.currentTime = 0;
   globalThis.sampleRate = SAMPLE_RATE;
   await import('../src/audio/stereo-sampler-worklet.js');
+  workletProcessorClass = processorClass;
   return processorClass;
 }
 
@@ -425,7 +450,7 @@ async function testSampleCompleteChain() {
   const Processor = await loadWorkletProcessor();
   check('Worklet module registers its processor', typeof Processor === 'function', 'stereo-sampler');
 
-  // Worklet kernel against TruePeakDetector, bit for bit, at 4×, 2× and 1×
+  // Worklet kernel against TruePeakDetector, bit for bit, at 48, 96 and 192 kHz
   for (const rate of [48000, 96000, 192000]) {
     const { left, right } = stereoSine({ sampleRate: rate, frequency: 12000, amplitude: 0.5, phaseDegrees: 45 });
     const reference = new TruePeakDetector(rate);
@@ -518,6 +543,113 @@ async function testSampleCompleteChain() {
   check('Dispose withdraws the true-peak feed', !sampler.hasTruePeakFeed(), 'no feed');
 }
 
+/**
+ * Minimal Web Audio stand-ins for the main-thread sampler: an AudioWorkletNode
+ * whose port is wired to a real worklet processor instance, or a
+ * ScriptProcessorNode driven by hand when the worklet is unavailable.
+ */
+function stubContext({ workletAvailable }) {
+  const nodes = [];
+  globalThis.AudioWorkletNode = class {
+    constructor(context, name, options) {
+      this.options = options;
+      this.port = { onmessage: null, postMessage: () => {} };
+      nodes.push(this);
+    }
+    connect() {}
+    disconnect() {}
+  };
+  const context = {
+    sampleRate: SAMPLE_RATE,
+    destination: {},
+    audioWorklet: { addModule: async () => { if (!workletAvailable) throw new Error('unavailable'); } },
+    createChannelMerger: () => ({ connect() {} }),
+    createGain: () => ({ gain: { value: 1 }, connect() {} }),
+    createScriptProcessor: () => {
+      const node = { onaudioprocess: null, connect() {}, disconnect() {} };
+      nodes.push(node);
+      return node;
+    }
+  };
+  return { context, nodes };
+}
+
+async function testSamplerResetAndGaps() {
+  console.log('\n--- Sampler: silent input, reset generations, ScriptProcessor gaps ---');
+
+  const Processor = await loadWorkletProcessor();
+  const sampler = await import('../src/audio/stereo-sampler.js');
+  const source = { connect() {} };
+
+  // Worklet mode with the processor and the node wired both ways
+  const { context, nodes } = stubContext({ workletAvailable: true });
+  await sampler.initStereoSampler(context, source, source);
+  const node = nodes[0];
+  globalThis.sampleRate = SAMPLE_RATE;
+  const processor = new Processor({ processorOptions: node.options.processorOptions });
+  processor.port.postMessage = (message) => node.port.onmessage({ data: message });
+  node.port.postMessage = (message) => processor.port.onmessage({ data: message });
+  const render = (left, right = left) => {
+    for (let start = 0; start < left.length; start += 128) {
+      processor.process([[left.subarray(start, start + 128), right.subarray(start, start + 128)]]);
+    }
+  };
+
+  // Abruptly stopped +3 dBTP pattern, then quanta without input channels
+  const ispMax = new Float32Array(4800);
+  for (let i = 0; i < ispMax.length; i++) ispMax[i] = (i % 4) < 2 ? 1 : -1;
+  render(ispMax);
+  for (let quantum = 0; quantum < 20; quantum++) processor.process([[]]);
+  const idle = sampler.consumeTruePeaks();
+  const accounted = idle.samples + processor._truePeakSamples;
+  check('Quanta without input are measured as silence', accounted === ispMax.length + 20 * 128,
+    `${idle.samples} reported + ${processor._truePeakSamples} pending of ${ispMax.length + 20 * 128}`);
+
+  // After a reset, the next signal must not inherit the old tail
+  sampler.resetTruePeaks();
+  const quiet = new Float32Array(9600);
+  const amplitude = Math.pow(10, -40 / 20);
+  for (let i = 0; i < quiet.length; i++) quiet[i] = amplitude * Math.sin((2 * Math.PI * 1000 * i) / SAMPLE_RATE);
+  render(quiet);
+  const fresh = sampler.consumeTruePeaks();
+  assertClose('A −40 dBFS tone after an abrupt +3 dBTP stop and a reset', amplitudeToDbTP(fresh.left), -40.0, 0.1, ' dBTP');
+
+  // Reports already in flight when the reset happens are dropped
+  sampler.consumeTruePeaks();
+  const staleGeneration = { type: 'truePeak', left: 1, right: 1, samples: 512, generation: -1 };
+  node.port.onmessage({ data: staleGeneration });
+  const afterStale = sampler.consumeTruePeaks();
+  check('A report from before the latest reset is discarded', afterStale.samples === 0 && afterStale.left === 0,
+    `${afterStale.samples} samples, peak ${afterStale.left}`);
+  sampler.disposeStereoSampler();
+
+  // ScriptProcessor fallback: a missed block is not spliced into the stream
+  const fallback = stubContext({ workletAvailable: false });
+  const mode = await sampler.initStereoSampler(fallback.context, source, source, { bufferSize: 1024 });
+  const scriptNode = fallback.nodes.find((candidate) => 'onaudioprocess' in candidate);
+  check('Sampler falls back to ScriptProcessor', mode === 'scriptprocessor' && sampler.hasTruePeakFeed(), mode);
+
+  const block = 1024;
+  const tone = new Float32Array(block * 12);
+  for (let i = 0; i < tone.length; i++) tone[i] = Math.sin((2 * Math.PI * 1000 * i) / SAMPLE_RATE + 0.3);
+  const deliver = (index) => {
+    const data = tone.subarray(index * block, (index + 1) * block);
+    scriptNode.onaudioprocess({
+      playbackTime: (index * block) / SAMPLE_RATE,
+      inputBuffer: { getChannelData: () => data }
+    });
+  };
+  // Blocks 0–4, then 7–11: blocks 5 and 6 were missed by a stalled main thread
+  for (const index of [0, 1, 2, 3, 4, 7, 8, 9, 10, 11]) deliver(index);
+  const spliced = sampler.consumeTruePeaks();
+  assertClose('Missed ScriptProcessor blocks are not read as a peak', amplitudeToDbTP(spliced.left), 0.0, 0.05, ' dBTP');
+
+  const joined = new TruePeakDetector(SAMPLE_RATE);
+  const joinedPeak = Math.max(joined.process(tone.subarray(0, 5 * block)), joined.process(tone.subarray(7 * block)));
+  info(`the same blocks joined without gap detection would read ${amplitudeToDbTP(joinedPeak).toFixed(2)} dBTP`);
+  sampler.disposeStereoSampler();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SAMPLE-RATE HANDLING
 // ─────────────────────────────────────────────────────────────────────────────
@@ -579,6 +711,7 @@ testMeterFeeds();
 testMeterBallistics();
 testPeakReaders();
 await testSampleCompleteChain();
+await testSamplerResetAndGaps();
 testSampleRates();
 
 console.log('\n═══════════════════════════════════════════════════════════════');

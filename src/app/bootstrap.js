@@ -28,7 +28,7 @@ import { Goniometer } from '../ui/goniometer.js';
 import { CorrelationMeter } from '../ui/correlation-meter.js';
 import { LoudnessRadar } from '../ui/radar.js';
 import { LUFSMeter, formatLUFS } from '../metering/lufs.js';
-import { TruePeakMeter, formatTruePeak, TRUE_PEAK_MODE } from '../metering/true-peak.js';
+import { TruePeakMeter, formatTruePeak, dbTPToAmplitude, TRUE_PEAK_MODE } from '../metering/true-peak.js';
 import { PPMMeter, formatPPM } from '../metering/ppm.js';
 import { SamplePeakMeter } from '../metering/sample-peak.js';
 import { StereoMeter, formatCorrelation, calculateCorrelation } from '../metering/correlation.js';
@@ -458,32 +458,6 @@ const truePeakMeter = new TruePeakMeter({
   sampleRate: ac.sampleRate,
   mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE
 });
-
-/**
- * Feed the True Peak meter from the most complete source available.
- *
- * With the AudioWorklet or ScriptProcessor sampler running, the meter receives
- * the true peak of every sample since the previous call, measured off the UI
- * thread's schedule: dropped frames and background-tab throttling cannot hide
- * an inter-sample over. Without the sampler it measures the analyser window.
- */
-function updateTruePeakMeter() {
-  if (stereoSamplerModule?.hasTruePeakFeed?.()) {
-    const { left, right } = stereoSamplerModule.consumeTruePeaks();
-    truePeakMeter.updateFromPeaks(left, right);
-  } else {
-    truePeakMeter.update(bufL, bufR);
-  }
-}
-
-/**
- * Reset the True Peak meter and discard peaks measured before the reset,
- * so a new measurement starts from the samples that follow it.
- */
-function resetTruePeakMeter() {
-  stereoSamplerModule?.consumeTruePeaks?.();
-  truePeakMeter.reset();
-}
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
 const samplePeakMeter = new SamplePeakMeter();
 const stereoMeter = new StereoMeter();
@@ -697,6 +671,51 @@ function loudnessColour(lufs) {
 // State: selectedMode = UI selection, activeCapture = currently running source
 let selectedInputMode = 'browser'; // 'browser', 'external', 'generator'
 let activeCapture = null; // null, 'browser', 'external', 'generator'
+
+/**
+ * Feed the True Peak meter from the most complete source available.
+ *
+ * With the stereo sampler running, the meter receives the true peak of every
+ * sample since the previous call, measured off the UI thread's schedule:
+ * dropped frames and background-tab throttling cannot hide an inter-sample
+ * over. A frame in which no new samples were measured leaves the meter
+ * untouched, so the bar does not dip between reports. Without the sampler the
+ * meter measures the analyser window. In Tauri mode the Rust engine's peaks
+ * arrive through handleTauriMeteringUpdate instead.
+ */
+function updateTruePeakMeter() {
+  if (activeCapture === 'tauri') return;
+  if (stereoSamplerModule?.hasTruePeakFeed?.()) {
+    const { left, right, samples } = stereoSamplerModule.consumeTruePeaks();
+    if (samples > 0) truePeakMeter.updateFromPeaks(left, right);
+  } else {
+    truePeakMeter.update(bufL, bufR);
+  }
+}
+
+/**
+ * Reset the True Peak meter and discard peaks measured before the reset,
+ * including reports still on their way from the AudioWorklet, so a new
+ * measurement starts from the samples that follow it.
+ */
+function resetTruePeakMeter() {
+  stereoSamplerModule?.resetTruePeaks?.();
+  truePeakMeter.reset();
+}
+
+/**
+ * Clear the remote TPmax. A different probe, or the switch from local to
+ * remote metering, starts a new programme whose maximum must not inherit the
+ * previous source's.
+ */
+function resetRemoteTruePeakMax() {
+  meterState.tpMaxL = -Infinity;
+  meterState.tpMaxR = -Infinity;
+  if (r128TpMax) {
+    r128TpMax.textContent = ' --.- dBTP';
+    r128TpMax.style.color = '';
+  }
+}
 
 // Generator monitor and EBU pulse state
 let monitorMuted = false;
@@ -1344,9 +1363,10 @@ async function startRemoteCapture() {
     remoteReceiver.unsubscribe(selectedRemoteProbeId);
   }
 
-  // Subscribe to selected probe
+  // Subscribe to selected probe; its TPmax starts afresh
   selectedRemoteProbeId = selectedProbeId;
   remoteReceiver.subscribe(selectedProbeId);
+  resetRemoteTruePeakMax();
 
   // Store probe info in appState for calibration wizard
   const selectedProbe = remoteReceiver.probes.find(p => p.id === selectedProbeId);
@@ -1510,7 +1530,8 @@ function renderRemoteProbeList(probes) {
         remoteReceiver.unsubscribe(selectedRemoteProbeId);
       }
 
-      // Subscribe to new probe
+      // Subscribe to new probe; a different probe starts a new TPmax
+      if (selectedRemoteProbeId !== probeId) resetRemoteTruePeakMax();
       selectedRemoteProbeId = probeId;
       remoteReceiver.subscribe(probeId);
 
@@ -1603,45 +1624,23 @@ function handleTauriMeteringUpdate(data) {
   // ─────────────────────────────────────────────────────────────────────────
   // TRUE PEAK
   // ─────────────────────────────────────────────────────────────────────────
+  // Each packet carries the largest true peak since the previous one,
+  // measured by the Rust engine on every sample. The shared meter adds bar
+  // ballistics, hold and TPmax; the render loop draws it as in local mode.
   const tpL = data.tpLeft ?? -60;
   const tpR = data.tpRight ?? -60;
-  meterState.remoteTpL = tpL;
-  meterState.remoteTpR = tpR;
+  truePeakMeter.updateFromPeaks(dbTPToAmplitude(tpL), dbTPToAmplitude(tpR));
 
-  // Cumulative max for R128 TPmax display
-  if (tpL > meterState.tpMaxL) meterState.tpMaxL = tpL;
-  if (tpR > meterState.tpMaxR) meterState.tpMaxR = tpR;
-
-  // Update TPmax display
+  // TPmax since reset for the R128 display and the session export
+  const tpState = truePeakMeter.getState();
+  meterState.tpMaxL = tpState.dbtpMaxLeft;
+  meterState.tpMaxR = tpState.dbtpMaxRight;
   if (r128TpMax) {
-    const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
-    if (isFinite(tpMax) && tpMax > -100) {
+    const tpMax = tpState.dbtpMax;
+    if (Number.isFinite(tpMax) && tpMax > -100) {
       r128TpMax.textContent = formatTruePeak(tpMax);
       r128TpMax.style.color = tpMax > TP_LIMIT ? 'var(--hot)' : '';
     }
-  }
-
-  // Peak hold for bar meters (3s hold)
-  if (tpL > meterState.tpPeakHoldL) {
-    meterState.tpPeakHoldL = tpL;
-    meterState.tpPeakTimeL = now;
-  } else if (now - meterState.tpPeakTimeL > TP_PEAK_HOLD_SEC) {
-    meterState.tpPeakHoldL = tpL;
-    meterState.tpPeakTimeL = now;
-  }
-  if (tpR > meterState.tpPeakHoldR) {
-    meterState.tpPeakHoldR = tpR;
-    meterState.tpPeakTimeR = now;
-  } else if (now - meterState.tpPeakTimeR > TP_PEAK_HOLD_SEC) {
-    meterState.tpPeakHoldR = tpR;
-    meterState.tpPeakTimeR = now;
-  }
-
-  // Peak indicator for radar
-  const currentTruePeak = Math.max(tpL, tpR);
-  if (currentTruePeak >= TP_LIMIT) {
-    meterState.peakIndicatorOn = true;
-    meterState.peakIndicatorLastTrigger = performance.now();
   }
 
   // ─────────────────────────────────────────────────────────────────────────

@@ -523,16 +523,15 @@ function renderLoopInternal() {
 
   let tpLeft, tpRight;
 
-  if (isRemoteCapture || isTauriCapture) {
-    // Values measured at the source: the remote probe, or the Rust engine,
-    // which runs the Annex 2 filter on every sample. The Tauri display
-    // buffers are spliced 512-sample snapshots and must not be re-measured:
-    // each splice is a discontinuity that the filter would read as a peak.
+  if (isRemoteCapture) {
+    // Values measured at the probe; holds are updated by handleRemoteMetrics
     tpLeft = meterState.remoteTpL;
     tpRight = meterState.remoteTpR;
-    // Peak holds and peak indicator already updated by the metrics handlers
   } else {
-    // Local metering: sample-complete when the stereo sampler runs
+    // Local metering, sample-complete when the stereo sampler runs. In Tauri
+    // mode the meter is fed by the Rust engine's per-sample peaks; its display
+    // buffers are spliced 512-sample snapshots and are never re-measured,
+    // because each splice is a discontinuity the filter would read as a peak.
     helpers.updateTruePeakMeter();
     const tpState = meters.truePeakMeter.getState();
     tpLeft = tpState.dbtpLeft;
@@ -553,15 +552,15 @@ function renderLoopInternal() {
       meterState.tpPeakHoldR = tpRight;
       meterState.tpPeakTimeR = nowSec;
     }
+  }
 
-    // Peak indicator for radar
-    const currentTruePeak = Math.max(tpLeft, tpRight);
-    if (currentTruePeak >= config.getTpLimit()) {
-      meterState.peakIndicatorOn = true;
-      meterState.peakIndicatorLastTrigger = now;
-    } else if (now - meterState.peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
-      meterState.peakIndicatorOn = false;
-    }
+  // Peak indicator for radar, in every mode: on at the limit, off after the hold
+  const currentTruePeak = Math.max(tpLeft, tpRight);
+  if (currentTruePeak >= config.getTpLimit()) {
+    meterState.peakIndicatorOn = true;
+    meterState.peakIndicatorLastTrigger = now;
+  } else if (now - meterState.peakIndicatorLastTrigger > PEAK_INDICATOR_HOLD_MS) {
+    meterState.peakIndicatorOn = false;
   }
 
   // Text display (signed format for fixed positioning)

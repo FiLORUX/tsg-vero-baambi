@@ -108,7 +108,7 @@ Independent reader for a consumer on its own schedule (a network sender, a logge
 
 ##### `reset()`
 
-Reset peak hold, TPmax, the over indicator and the filter history.
+Reset the bar, peak hold, TPmax, the over indicator and the filter history.
 
 ---
 

@@ -233,6 +233,21 @@ export class MetricsCollector {
   }
 
   /**
+   * Discard peaks gathered while nothing was transmitted, so the first packet
+   * after a start or reconnection carries only what follows it.
+   */
+  resetTruePeakTracking() {
+    this.#truePeakReader?.take();
+  }
+
+  /**
+   * Release the peak reader. Call when the collector is no longer used.
+   */
+  dispose() {
+    this.#attachTruePeakReader(null);
+  }
+
+  /**
    * Follow the configured True Peak meter with a dedicated peak reader, so
    * every peak since the previous collection is transmitted even though the
    * bar reading has begun to fall by the time collect() runs.

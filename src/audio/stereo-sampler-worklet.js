@@ -37,9 +37,21 @@
  *
  * Messages to the main thread:
  *   { type: 'snapshot', bufL, bufR, timestamp }   rolling display buffers
- *   { type: 'truePeak', left, right, samples }    linear true-peak maxima of
+ *   { type: 'truePeak', left, right, samples, generation }
+ *                                                 linear true-peak maxima of
  *                                                 the `samples` samples since
  *                                                 the previous truePeak message
+ *
+ * Message from the main thread:
+ *   { type: 'resetTruePeak', generation }         discard the maxima gathered
+ *                                                 so far; later reports carry
+ *                                                 the new generation, so the
+ *                                                 main thread can drop reports
+ *                                                 that were already in flight
+ *
+ * A quantum without input channels (no active source upstream) is measured
+ * as silence: the stream continues, the previous signal's tail is completed
+ * with zeros, and no stale history reaches the next signal.
  *
  * Usage:
  *   await ac.audioWorklet.addModule(new URL('./stereo-sampler-worklet.js', import.meta.url));
@@ -180,6 +192,44 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     this._truePeakMaxR = 0;
     this._truePeakSamples = 0;
     this._truePeakPostInterval = Math.max(128, Math.round((sampleRate * TRUE_PEAK_POST_SECONDS) / 128) * 128);
+    this._truePeakGeneration = 0;
+    this._silence = new Float32Array(128);
+
+    this.port.onmessage = (event) => {
+      if (event.data?.type === 'resetTruePeak') {
+        this._truePeakMaxL = 0;
+        this._truePeakMaxR = 0;
+        this._truePeakSamples = 0;
+        this._truePeakGeneration = event.data.generation;
+      }
+    };
+  }
+
+  /**
+   * Measure one quantum per channel and post the maxima when due.
+   *
+   * @param {Float32Array} L - Left channel samples
+   * @param {Float32Array} R - Right channel samples
+   */
+  _measureTruePeak(L, R) {
+    const peakL = this._truePeakL.process(L);
+    const peakR = this._truePeakR.process(R);
+    if (peakL > this._truePeakMaxL) this._truePeakMaxL = peakL;
+    if (peakR > this._truePeakMaxR) this._truePeakMaxR = peakR;
+    this._truePeakSamples += L.length;
+
+    if (this._truePeakSamples >= this._truePeakPostInterval) {
+      this.port.postMessage({
+        type: 'truePeak',
+        left: this._truePeakMaxL,
+        right: this._truePeakMaxR,
+        samples: this._truePeakSamples,
+        generation: this._truePeakGeneration
+      });
+      this._truePeakMaxL = 0;
+      this._truePeakMaxR = 0;
+      this._truePeakSamples = 0;
+    }
   }
 
   /**
@@ -191,8 +241,12 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0];
 
-    // Need stereo input
-    if (!input || input.length < 2) return true;
+    // Without input channels the upstream graph is silent: measure silence so
+    // the true-peak stream stays continuous and carries no stale history
+    if (!input || input.length < 2) {
+      this._measureTruePeak(this._silence, this._silence);
+      return true;
+    }
 
     const L = input[0];
     const R = input[1];
@@ -208,23 +262,7 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     }
 
     // True peak of every sample, accumulated until the next truePeak message
-    const peakL = this._truePeakL.process(L);
-    const peakR = this._truePeakR.process(R);
-    if (peakL > this._truePeakMaxL) this._truePeakMaxL = peakL;
-    if (peakR > this._truePeakMaxR) this._truePeakMaxR = peakR;
-    this._truePeakSamples += blockSize;
-
-    if (this._truePeakSamples >= this._truePeakPostInterval) {
-      this.port.postMessage({
-        type: 'truePeak',
-        left: this._truePeakMaxL,
-        right: this._truePeakMaxR,
-        samples: this._truePeakSamples
-      });
-      this._truePeakMaxL = 0;
-      this._truePeakMaxR = 0;
-      this._truePeakSamples = 0;
-    }
+    this._measureTruePeak(L, R);
 
     this._samplesSincePost += blockSize;
 

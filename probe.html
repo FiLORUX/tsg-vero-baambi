@@ -898,7 +898,7 @@ david@thast.se  ·  +46 700 30 30 60
             case 'resetIntegration':
               // Reset all meters to initial state
               lufsMeter?.reset();
-              stereoSampler.consumeTruePeaks();
+              stereoSampler.resetTruePeaks();
               truePeakMeter?.reset();
               console.log('[TX] Integration reset by remote command');
               break;
@@ -1005,8 +1005,8 @@ david@thast.se  ·  +46 700 30 30 60
           // True Peak: every sample since the previous transmission when the
           // stereo sampler runs, otherwise the current analyser window
           if (stereoSampler.hasTruePeakFeed()) {
-            const { left, right } = stereoSampler.consumeTruePeaks();
-            truePeakMeter.updateFromPeaks(left, right);
+            const { left, right, samples } = stereoSampler.consumeTruePeaks();
+            if (samples > 0) truePeakMeter.updateFromPeaks(left, right);
           } else {
             truePeakMeter.update(bufL, bufR);
           }
@@ -1145,9 +1145,9 @@ david@thast.se  ·  +46 700 30 30 60
         dom.metricLufsM.textContent = '–';
       }
 
-      // True Peak Max
-      const tpMax = Math.max(tp.dbtpLeft, tp.dbtpRight);
-      if (isFinite(tpMax) && tpMax > -60) {
+      // True Peak Max: the maximum since the last reset
+      const tpMax = tp.dbtpMax;
+      if (Number.isFinite(tpMax) && tpMax > -60) {
         dom.metricTpMax.textContent = tpMax.toFixed(1);
       } else {
         dom.metricTpMax.textContent = '–';
@@ -1218,7 +1218,7 @@ david@thast.se  ·  +46 700 30 30 60
 
       // Reset meters
       lufsMeter?.reset();
-      stereoSampler.consumeTruePeaks();
+      stereoSampler.resetTruePeaks();
       truePeakMeter?.reset();
 
       // Update UI
