@@ -493,16 +493,12 @@ Full shortcuts reference: [`docs/shortcuts.md`](docs/shortcuts.md)
 
 | Parameter | Standard | Implementation |
 |-----------|----------|----------------|
-| Oversampling | ITU-R BS.1770-4 Annex 2 | 4× using Hermite interpolation |
+| Oversampling | ITU-R BS.1770-4 Annex 2 | 48-tap polyphase FIR from the Annex 2 table: 4× up to 48 kHz, 2× up to 96 kHz, sample peak from 176.4 kHz |
+| Conformance | EBU Tech 3341 Table 1, cases 15–23 | Within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
 | Maximum permitted level | EBU R128 | −1 dBTP |
 | Streaming headroom | Industry practice | −2 dBTP (lossy codec margin) |
 
-**Implementation note:** ITU-R BS.1770-4 Annex 2 specifies polyphase FIR reconstruction for laboratory-grade measurement. This implementation uses 4-point Hermite interpolation, which:
-- Provides sufficient accuracy (±0.5 dB) for broadcast monitoring
-- Requires ~8× less computation than polyphase FIR
-- May miss edge-case intersample peaks in near-Nyquist content
-
-Polyphase FIR coefficients and implementation guidance are documented in `true-peak.js` for future laboratory-grade implementation if required.
+**Implementation note:** `TruePeakDetector` keeps the last eleven input samples across gap-free blocks, so a peak that straddles a block boundary is measured exactly as in a single pass. `TruePeakMeter` is fed rolling analyser windows and therefore measures each window on its own; pass `contiguous: true` when feeding consecutive blocks. The Annex 2 filter carries about ±0.3 dB of passband ripple below 20 kHz and rolls off above it; the EBU tolerance includes both.
 
 ### PPM Metering (IEC 60268-10 Type I / Nordic)
 
@@ -577,13 +573,13 @@ For critical monitoring, use dedicated hardware meters.
 
 ### True Peak Interpolation
 
-The 4× oversampling uses Hermite interpolation between sample points:
+The over-sampling uses the 48-tap FIR interpolation filter tabulated in ITU-R BS.1770-4 Annex 2, split into four 12-tap polyphase branches:
 
 ```
-Interpolation points: t = 0.25, 0.50, 0.75 between each sample pair
+Evaluation points: four per input sample period at 48 kHz (192 kHz grid)
 ```
 
-This catches most intersample peaks but may miss edge cases that a full polyphase FIR would detect. Typical deviation from "true" True Peak: <0.5 dB for normal programme material.
+EBU Tech 3341 cases 15 to 23 read within the +0.2/−0.4 dB tolerance. The filter's own passband ripple (about ±0.3 dB below 20 kHz) and the geometric under-read near Nyquist described in Annex 2 Attachment 1 are part of that figure.
 
 ### What This Project Does NOT Provide
 
@@ -618,7 +614,7 @@ Runs 35 synthetic signal tests against metering modules covering:
 - dB/gain conversions
 - RMS calculation (sine wave at 0.707× peak)
 - Pearson correlation (mono, antiphase, uncorrelated)
-- Hermite interpolation accuracy
+- True Peak conformance (EBU Tech 3341 cases 15–23, `tests/true-peak-test.js`)
 - PPM ballistics (5 ms attack, 20 dB/1.7 s decay)
 - True Peak intersample detection
 - LUFS integration windows (400 ms, 3 s)

@@ -30,7 +30,7 @@ The self-test runs five automated tests using internal reference signals:
 
 - **Signal isolation**: Test signals bypass external sources entirely; they connect directly to the analysis gain stage
 - **Meter state**: The verification reads actual meter output, not calculated expectations. This validates the complete signal chain including K-weighting, ballistics, and interpolation.
-- **ISP detection**: The intersample peak test uses a clipped sine wave. Clipping creates discontinuities that produce genuine Gibbs phenomenon overshoot, detectable by both Hermite and polyphase algorithms.
+- **ISP detection**: The intersample peak test uses a clipped sine wave. Clipping creates discontinuities that produce genuine Gibbs phenomenon overshoot, which the Annex 2 polyphase filter reconstructs.
 - **PPM reset**: Between tests, all meters are reset. This prevents the slow PPM decay (11.76 dB/s per IEC 60268-10) from carrying residual levels between tests.
 
 ---
@@ -41,9 +41,10 @@ The self-test runs five automated tests using internal reference signals:
 
 ```bash
 node tests/metering-verification.js
+node tests/true-peak-test.js
 ```
 
-Tests pure mathematical functions: dB conversions, RMS calculation, correlation, Hermite interpolation, PPM decay rate.
+The first tests pure mathematical functions: dB conversions, RMS calculation, correlation, true-peak sanity, PPM decay rate. The second synthesises EBU Tech 3341 Table 1 cases 15 to 23 and asserts the +0.2/−0.4 dB true-peak tolerance.
 
 ### Browser Tests
 
@@ -79,23 +80,18 @@ For accurate verification, you need:
 2. **Compare sample peak vs True Peak**: True Peak should exceed sample peak
 3. **Known intersample over**: Use +3 dBTP test signal; verify detection
 
-#### True Peak Algorithm Modes
+#### True Peak Algorithm
 
-VERO-BAAMBI offers two True Peak detection algorithms:
+VERO-BAAMBI measures true peak with a single method, the ITU-R BS.1770-4 Annex 2 polyphase FIR:
 
-| Mode | Algorithm | Accuracy | CPU Cost | Use Case |
-|------|-----------|----------|----------|----------|
-| `hermite` | Catmull-Rom spline | ±0.5 dB typical | ~24 FLOPs/sample | Real-time monitoring (default) |
-| `polyphase` | ITU-R BS.1770-4 Annex 2 FIR | <0.1 dB | ~48 FLOPs/sample | Laboratory-grade measurement |
+| Property | Value |
+|----------|-------|
+| Filter | 48-tap FIR interpolation filter from the Annex 2 table, four 12-tap branches |
+| Over-sampling | 4× up to 48 kHz, 2× (branches 0 and 2) up to 96 kHz, sample peak from 176.4 kHz |
+| Conformance | EBU Tech 3341 Table 1 cases 15 to 23 within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
+| Cost | 48 multiply-accumulates per input sample and channel at 4× |
 
-**Polyphase Implementation:**
-- 4-phase × 12-tap FIR filter (48-tap prototype at 4× oversampling)
-- Coefficients derived from ITU-R BS.1770-4 Annex 2
-- DC gain normalised to unity per phase
-- Compliant with EBU Tech 3341 Section 3.5
-
-**Mode Selection:**
-The algorithm mode is stored in application state (`truePeakMode`) and persists across sessions. Both algorithms produce identical results for low-frequency signals; differences manifest primarily near Nyquist where the polyphase filter's flat frequency response provides superior accuracy.
+The `truePeakMode` key in application state remains for persisted settings; `polyphase` is its only value.
 
 ### Test Procedure: PPM Ballistics
 
@@ -191,6 +187,6 @@ For rigorous validation against broadcast standards:
 2. **Timing precision**: Browser scheduling introduces ±2ms jitter
 3. **Bit depth**: Web Audio operates in 32-bit float internally
 4. **Multi-channel**: Stereo only; no 5.1/7.1 support
-5. **True Peak polyphase mode**: Higher computational cost (~2× versus Hermite); use for verification rather than continuous monitoring on constrained devices
+5. **True Peak near Nyquist**: the Annex 2 filter rolls off above 20 kHz and 4× over-sampling under-reads a tone at fs/2 by up to 0.69 dB (Annex 2 Attachment 1); programme content at those frequencies is far below full scale
 
 For regulatory compliance or delivery QC, verify against certified hardware.

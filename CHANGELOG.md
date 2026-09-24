@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed drag-and-drop panels** — fixed layout for broadcast consistency
 
 ### Fixed
+- **True Peak by the ITU-R BS.1770-4 Annex 2 polyphase FIR** · the meter now over-samples with the 48-tap filter tabulated in Annex 2 (four 12-tap branches) instead of Catmull-Rom interpolation, which read EBU Tech 3341 case 16 at −7.1 dBTP and case 19 at +1.9 dBTP against −6.0 and +3.0. Cases 15 to 23 now read within +0.2/−0.4 dB (`tests/true-peak-test.js`, part of `npm test`). The over-sampling ratio follows the sample rate (4× to 48 kHz, 2× to 96 kHz, sample peak above), `TruePeakDetector` carries eleven samples of history across gap-free blocks, and `TruePeakMeter({ contiguous: true })` uses it; the default window semantics match the rolling analyser feed. Removed: `hermiteInterpolate`, `OVERSAMPLE_FACTOR`, `calculateTruePeakPolyphase`, `calculateTruePeakWithMode`, `calculateTruePeakStereoWithMode` and `TRUE_PEAK_MODE.HERMITE`; `oversamplingFactor()` and `BS1770_TRUE_PEAK_COEFFICIENTS` replace them.
 - **BBC PPM input** — uses sample peak (max |sample|) not True Peak per IEC 60268-10 Type IIa
 - **Radar pause/resume** — gap handling preserves smoothing, segments continue ageing during pause
 - **Verification signal isolation** — `muteAllSources()` catches all generator signals

@@ -455,6 +455,7 @@ function sampleKWeightedAnalysers() {
 
 const lufsMeter = new LUFSMeter({ sampleRate: ac.sampleRate, blockSize: FFT_SIZE });
 const truePeakMeter = new TruePeakMeter({
+  sampleRate: ac.sampleRate,
   mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE
 });
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
@@ -2927,8 +2928,7 @@ function init() {
       console.log('[Bootstrap] Meter verification started');
       // Mute all sources to prevent interference with verification signals
       sourceController.muteAllSources();
-      // Switch True Peak to polyphase mode for accurate ISP detection
-      // (Hermite interpolation doesn't detect ISP for Nyquist signals)
+      // Verification runs on the ITU-R BS.1770-4 Annex 2 polyphase FIR
       truePeakMeter.setMode(TRUE_PEAK_MODE.POLYPHASE);
       // Reset all meters before verification
       lufsMeter.reset();

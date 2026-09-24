@@ -52,7 +52,7 @@ Reset all measurements and history.
 
 ### TruePeakMeter
 
-ITU-R BS.1770-4 Annex 2 intersample peak detection with 4× Hermite interpolation.
+ITU-R BS.1770-4 Annex 2 intersample peak detection with the tabulated 48-tap polyphase FIR (4× up to 48 kHz, 2× up to 96 kHz). Pass `sampleRate` so the over-sampling ratio follows the input, and `contiguous: true` only when successive `update()` buffers are gap-free blocks rather than rolling analyser windows.
 
 ```javascript
 import { TruePeakMeter } from './src/metering/true-peak.js';

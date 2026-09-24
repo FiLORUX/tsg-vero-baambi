@@ -57,17 +57,21 @@ export {
   formatLRA
 } from './lufs.js';
 
-// True Peak detection (ITU-R BS.1770-4)
+// True Peak detection (ITU-R BS.1770-4 Annex 2)
 export {
   TP_LIMIT_EBU,
   TP_LIMIT_STREAMING,
   TP_LIMIT_SAFE,
-  OVERSAMPLE_FACTOR,
   PEAK_HOLD_SECONDS,
-  hermiteInterpolate,
+  BS1770_PHASES,
+  BS1770_TAPS_PER_PHASE,
+  BS1770_TRUE_PEAK_COEFFICIENTS,
+  oversamplingFactor,
   calculateTruePeak,
   calculateTruePeakStereo,
+  TruePeakDetector,
   TruePeakMeter,
+  TRUE_PEAK_MODE,
   amplitudeToDbTP,
   dbTPToAmplitude,
   formatTruePeak,
