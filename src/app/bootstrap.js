@@ -2794,8 +2794,8 @@ function bindTauriEvents() {
       lufsMeter?.reset();
       resetTruePeakMeter();
       ppmMeter?.reset();
+      // Also clears the radar history, which lives in meterState
       resetMeterState();
-      radar?.clear();
       console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
     });
   }
