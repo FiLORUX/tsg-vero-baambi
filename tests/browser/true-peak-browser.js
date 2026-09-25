@@ -177,13 +177,17 @@ async function testOfflineWorklet(page) {
         const tapL = context.createGain();
         const tapR = context.createGain();
         source.connect(splitter);
+        // The destination records what the source actually rendered: WebKit
+        // occasionally renders a buffer at 96 or 192 kHz with samples that
+        // differ from the buffer's own, so the reference follows the render
+        source.connect(context.destination);
         splitter.connect(tapL, 0);
         splitter.connect(tapR, 1);
 
         const mode = await sampler.initStereoSampler(context, tapL, tapR);
         sampler.consumeTruePeaks();
         source.start();
-        await context.startRendering();
+        const rendered = await context.startRendering();
 
         // Rendering runs in whole 128-frame quanta, so the worklet also sees the
         // zeros that complete the last quantum. Reports cover whole intervals;
@@ -196,9 +200,10 @@ async function testOfflineWorklet(page) {
           await new Promise((wake) => setTimeout(wake, 10));
         }
 
-        // Reference: the same stream, the same samples, through TruePeakDetector
+        // Reference: the samples the worklet received, through TruePeakDetector
         const stream = new Float32Array(renderedFrames);
-        stream.set(left);
+        stream.set(rendered.getChannelData(0));
+        const renderAltered = stream.subarray(0, left.length).some((sample, i) => sample !== left[i]);
         const reported = sampler.consumeTruePeaks();
         const reference = new tp.TruePeakDetector(rate).process(stream.subarray(0, expectedSamples));
         runs.push({
@@ -208,7 +213,8 @@ async function testOfflineWorklet(page) {
           identical: reported.left === reference && reported.right === reference,
           readingDb: tp.amplitudeToDbTP(reported.left),
           samples: reported.samples,
-          expectedSamples
+          expectedSamples,
+          renderAltered
         });
         sampler.disposeStereoSampler();
       }
@@ -220,6 +226,7 @@ async function testOfflineWorklet(page) {
     check(`${(run.rate / 1000).toFixed(1)} kHz, ${run.name}: ${run.mode} report identical to TruePeakDetector`,
       run.mode === 'worklet' && run.identical && run.samples === run.expectedSamples,
       `${run.readingDb.toFixed(4)} dBTP over ${run.samples} of ${run.expectedSamples} reported samples`);
+    if (run.renderAltered) info('the browser rendered this buffer with samples of its own; the reference follows the render');
   }
 }
 
