@@ -473,8 +473,12 @@ const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' })
 const samplePeakMeter = new SamplePeakMeter();
 
 // Tauri mode: the engine's per-packet sample peak and energy, gathered into
-// the window the local sample-peak and dBFS meters measure (FFT_SIZE samples)
+// the window the local dBFS meter measures (FFT_SIZE samples)
 const tauriLevelWindow = new LevelWindow({ windowFrames: FFT_SIZE });
+
+// Tauri mode: the largest sample magnitudes (linear) of the engine's packets
+// since the Sample Peak meter's previous update
+const tauriSamplePeak = { left: 0, right: 0, fresh: false };
 const stereoMeter = new StereoMeter();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -812,20 +816,32 @@ function resetPpmMeters() {
 }
 
 /**
- * Feed the Sample Peak meter with the latest FFT_SIZE samples.
+ * Feed the Sample Peak meter with the largest samples since its previous
+ * update.
  *
- * Locally the display buffers are that window. In Tauri mode they are spliced
- * from the engine's 512-sample snapshots, which overlap or leave gaps, so a
- * peak in a gap would never be seen; the window is instead rebuilt from the
- * engine's per-packet peaks, which cover every sample exactly once.
+ * With the stereo sampler that is every sample (consumeSamplePeaks). In
+ * Tauri mode it is the engine's per-packet peaks gathered since the previous
+ * update; the display buffers there are spliced from 512-sample snapshots
+ * that overlap or leave gaps. Without the sampler the analyser window of the
+ * latest 4096 samples stands in, which covers every sample while frames come
+ * faster than its 85 ms. An update with nothing new is skipped; the next one
+ * applies the release for the whole interval.
  */
 function updateSamplePeakMeter() {
   if (activeCapture === 'tauri') {
-    const { peakLeft, peakRight } = tauriLevelWindow.getState();
-    samplePeakMeter.updateFromPeaks(peakLeft, peakRight);
-  } else {
-    samplePeakMeter.update(bufL, bufR);
+    if (!tauriSamplePeak.fresh) return;
+    samplePeakMeter.updateFromPeaks(tauriSamplePeak.left, tauriSamplePeak.right);
+    tauriSamplePeak.left = 0;
+    tauriSamplePeak.right = 0;
+    tauriSamplePeak.fresh = false;
+    return;
   }
+  if (stereoSamplerModule?.hasSamplePeakFeed?.()) {
+    const { left, right, samples } = stereoSamplerModule.consumeSamplePeaks();
+    if (samples > 0) samplePeakMeter.updateFromPeaks(left, right);
+    return;
+  }
+  samplePeakMeter.update(bufL, bufR);
 }
 
 /**
@@ -1849,11 +1865,16 @@ function handleTauriMeteringUpdate(data) {
   // ─────────────────────────────────────────────────────────────────────────
   // SAMPLE PEAK AND RMS
   // ─────────────────────────────────────────────────────────────────────────
-  // Levels of every sample since the previous packet, gathered into the span
-  // the local meters measure; the render loop reads the window through
-  // updateSamplePeakMeter() and measureRms(). A packet without frames
-  // carries no signal and is ignored by the window.
+  // Levels of every sample since the previous packet. The energy goes into
+  // the window the local dBFS meter measures (read through measureRms()); the
+  // sample peak accumulates until the Sample Peak meter's next update (see
+  // updateSamplePeakMeter()). A packet without frames carries no signal.
   tauriLevelWindow.pushDb(data.spLeft, data.spRight, data.rmsLeft, data.rmsRight, data.levelFrames);
+  if (data.levelFrames > 0) {
+    tauriSamplePeak.left = Math.max(tauriSamplePeak.left, 10 ** (data.spLeft / 20));
+    tauriSamplePeak.right = Math.max(tauriSamplePeak.right, 10 ** (data.spRight / 20));
+    tauriSamplePeak.fresh = true;
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // VISUALISATION SAMPLES (for goniometer, spectrum, stereo analysis)

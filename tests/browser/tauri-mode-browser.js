@@ -14,8 +14,8 @@
  *   1. A steady −18 dBFS sine in the level fields, −40 dBFS spliced
  *      snapshots: Nordic PPM, dBFS (RMS), Sample Peak and True Peak read the
  *      sine, and the page raises no error.
- *   2. A full-scale sample the snapshots never contain: Sample Peak rises to
- *      it, then returns once it has left the meter's window.
+ *   2. A full-scale sample the snapshots never contain: Sample Peak reads it
+ *      in full, then returns at the meter's 20 dB in 1.7 s to the tone.
  *   3. A Nordic PPM reading above full scale and one below the scale: the
  *      display clamps as in local metering and shows −∞ for silence.
  *
@@ -158,14 +158,15 @@ function installMockEngine() {
   window.__runEngineWatchingSamplePeak = async (sequence) => {
     const readings = [];
     let watching = true;
+    const read = () => ({ t: performance.now(), text: document.getElementById('spLVal')?.textContent ?? '' });
     const watch = () => {
-      readings.push(document.getElementById('spLVal')?.textContent ?? '');
+      readings.push(read());
       if (watching) requestAnimationFrame(watch);
     };
     requestAnimationFrame(watch);
     for (const fields of sequence) {
       emit(fields);
-      readings.push(document.getElementById('spLVal')?.textContent ?? '');
+      readings.push(read());
       await new Promise((resolveTimer) => setTimeout(resolveTimer, 8));
     }
     watching = false;
@@ -232,18 +233,24 @@ try {
   }
 
   console.log('\n--- 2. A full-scale sample between two snapshots ---');
+  // About 2.4 s of packets: the return from 0 to −18 dBFS takes 1.53 s
   const sequence = [
     { ...steady, spDb: 0 },
-    ...Array.from({ length: 40 }, () => steady)
+    ...Array.from({ length: 280 }, () => steady)
   ];
-  const readings = await page.evaluate((fields) => window.__runEngineWatchingSamplePeak(fields), sequence);
-  const values = readings.map(readoutDb).filter(Number.isFinite);
-  const highest = Math.max(...values);
-  const last = values.at(-1);
-  check('Sample Peak rises towards the full-scale sample', highest >= -6,
+  const readings = (await page.evaluate((fields) => window.__runEngineWatchingSamplePeak(fields), sequence))
+    .map(({ t, text }) => ({ t, value: readoutDb(text) }))
+    .filter(({ value }) => Number.isFinite(value));
+  const highest = Math.max(...readings.map(({ value }) => value));
+  const start = readings.find(({ value }) => value <= -2);
+  const end = readings.find(({ t, value }) => start && t > start.t && value <= -14);
+  const fall = start && end ? (end.t - start.t) / 1000 : NaN;
+  const last = readings.at(-1).value;
+  check('Sample Peak reads the full-scale sample in full', highest === 0,
     `highest reading ${highest.toFixed(1)} dBFS, never contained in a snapshot`);
-  check('…and returns once it has left the window', Math.abs(last + 18) <= 0.1,
-    `last reading ${last.toFixed(1)} dBFS`);
+  check('…falls 12 dB in 1.02 s ±0.15 s (20 dB in 1.7 s)', Math.abs(fall - 12 / (20 / 1.7)) <= 0.15,
+    `${fall.toFixed(2)} s from −2 to −14 dBFS`);
+  check('…and returns to the tone', Math.abs(last + 18) <= 0.1, `last reading ${last.toFixed(1)} dBFS`);
 
   console.log('\n--- 3. Nordic PPM clamps to the display range ---');
   await page.evaluate((fields) => window.__runEngine(10, fields), { ...steady, ppmDb: 2.5 });

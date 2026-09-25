@@ -646,7 +646,7 @@ function renderLoopInternal() {
   // ─────────────────────────────────────────────────────────────────────────
   // Sample Peak Meter (IEC 60268-18 / AES17)
   // ─────────────────────────────────────────────────────────────────────────
-  // No ballistics - instantaneous sample peak
+  // Instant attack, 20 dB in 1.7 s return on the meter's clock
   // Linear -60 to 0 dBFS scale
   // Purist monochrome design with red clip indicator at 0 dBFS
 
@@ -658,9 +658,9 @@ function renderLoopInternal() {
     spDisplayL = meterState.remoteSpL;
     spDisplayR = meterState.remoteSpR;
   } else {
-    // Sample peak of the latest analyser window: the display buffers locally,
-    // the engine's per-packet peaks in Tauri mode (see updateSamplePeakMeter
-    // in bootstrap), so a peak that falls between two snapshots still counts
+    // Largest samples since the previous frame, from the stereo sampler or
+    // the engine's packets (see updateSamplePeakMeter in bootstrap), so a
+    // single-sample peak counts whatever the frame rate
     helpers.updateSamplePeakMeter();
     const spState = meters.samplePeakMeter.getState();
     spDisplayL = spState.dbfsLeft;

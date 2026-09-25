@@ -14,10 +14,16 @@
  *      interval, every sample once, about every 10 ms, silent quanta included.
  *   2. The main-thread sampler accumulates reports until they are consumed,
  *      across a UI that stalls, and measures each ScriptProcessor block.
+ *   3. SamplePeakMeter: instant attack, 20 dB in 1.7 s return on its own
+ *      clock, 3 s hold, and hold, maximum and clip from the unsmoothed peak,
+ *      so the same signal reads the same at 30, 60 and 180 updates per
+ *      second.
  *
  * @module tests/sample-peak-test
  * ═══════════════════════════════════════════════════════════════════════════════
  */
+
+import { SamplePeakMeter, SP_RELEASE_DB_PER_SECOND } from '../src/metering/sample-peak.js';
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +61,10 @@ function noiseWithSpikes(sampleRate, seconds, seed, spikes) {
   for (let i = 0; i < signal.length; i++) signal[i] = 0.0316 * (next() * 2 - 1);
   for (const [position, value] of spikes) signal[position] = value;
   return signal;
+}
+
+function info(text) {
+  console.log(`\x1b[2m       ${text}\x1b[0m`);
 }
 
 function peakOf(block) {
@@ -224,6 +234,123 @@ console.log('\n--- 2. Main-thread sampler ---');
   }
   check('ScriptProcessor blocks measured sample by sample', blocksMatch);
   sampler.disposeStereoSampler();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. METER BALLISTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Manual millisecond clock for a meter. */
+function manualClock() {
+  let ms = 0;
+  return { now: () => ms, advance: (delta) => { ms += delta; } };
+}
+
+console.log('\n--- 3. SamplePeakMeter ballistics ---');
+{
+  // A single full-scale sample, then silence at 60 updates per second
+  const clock = manualClock();
+  const meter = new SamplePeakMeter({ now: clock.now });
+  meter.updateFromPeaks(1, 0);
+  let state = meter.getState();
+  const fullScale = (db) => Math.abs(db) < 1e-9;
+  check('A single full-scale sample reads 0 dBFS at once',
+    fullScale(state.dbfsLeft) && fullScale(state.dbfsHoldLeft) && fullScale(state.dbfsMax),
+    `bar ${state.dbfsLeft.toFixed(3)}, hold ${state.dbfsHoldLeft.toFixed(3)}, max ${state.dbfsMax.toFixed(3)} dBFS`);
+  check('…and trips the clip indicator of its channel only', state.isClipLeft && !state.isClipRight);
+
+  let fallTime = null;
+  let holdAtTwoSeconds = null;
+  let barAtExpiry = null;
+  let holdAfterExpiry = null;
+  for (let frame = 1; frame <= 60 * 4; frame++) {
+    clock.advance(1000 / 60);
+    meter.updateFromPeaks(0, 0);
+    state = meter.getState();
+    const seconds = frame / 60;
+    if (fallTime === null && state.dbfsLeft <= -20) fallTime = seconds;
+    if (frame === 120) holdAtTwoSeconds = state.dbfsHoldLeft;
+    if (barAtExpiry === null && state.dbfsHoldLeft < -1) barAtExpiry = state.dbfsLeft;
+    if (frame === 60 * 3.5) holdAfterExpiry = { hold: state.dbfsHoldLeft, bar: state.dbfsLeft };
+  }
+  check('The bar falls 20 dB in 1.7 s', Math.abs(fallTime - 1.7) <= 2 / 60, `${fallTime.toFixed(3)} s`);
+  check('The hold keeps 0 dBFS for 3 s', fullScale(holdAtTwoSeconds), `${holdAtTwoSeconds.toFixed(3)} dBFS at 2 s`);
+  check('After the hold time the hold drops to the bar and holds that reading',
+    holdAfterExpiry.hold === barAtExpiry && holdAfterExpiry.bar < holdAfterExpiry.hold,
+    `hold ${holdAfterExpiry.hold.toFixed(2)}, bar ${holdAfterExpiry.bar.toFixed(2)} dBFS at 3.5 s`);
+  check('The clip indicator stays latched', meter.getState().isClipLeft);
+
+  meter.reset();
+  state = meter.getState();
+  check('reset() clears clip and maximum; the hold starts from the bar',
+    !state.isClipAny && state.dbfsMax === -Infinity && state.dbfsHoldLeft === state.dbfsLeft);
+}
+
+{
+  // The same programme through consumers at 30, 60 and 180 updates per
+  // second, each given the largest samples since its previous update
+  const sampleRate = 48000;
+  const signal = noiseWithSpikes(sampleRate, 6, 31, [[30000, 1], [100000, -0.5], [180000, 0.25]]);
+  for (let i = 150000; i < 152400; i++) signal[i] = 0.5 * Math.sin((2 * Math.PI * 1000 * i) / sampleRate);
+
+  const readings = new Map();
+  for (const rate of [30, 60, 180]) {
+    const clock = manualClock();
+    const meter = new SamplePeakMeter({ now: clock.now });
+    const atCommonFrames = [];
+    let previous = 0;
+    for (let frame = 1; frame <= 6 * rate; frame++) {
+      const end = Math.round((frame * sampleRate) / rate);
+      clock.advance(1000 / rate);
+      meter.updateFromPeaks(peakOf(signal.subarray(previous, end)), 0);
+      previous = end;
+      if (frame % (rate / 30) === 0) atCommonFrames.push(meter.getState());
+    }
+    readings.set(rate, atCommonFrames);
+  }
+
+  const reference = readings.get(180);
+  let largestBarDifference = 0;
+  let sameMaxAndClip = true;
+  for (const rate of [30, 60]) {
+    for (const [index, state] of readings.get(rate).entries()) {
+      largestBarDifference = Math.max(largestBarDifference, Math.abs(state.dbfsLeft - reference[index].dbfsLeft));
+      if (state.dbfsMax !== reference[index].dbfsMax || state.isClipLeft !== reference[index].isClipLeft) sameMaxAndClip = false;
+    }
+  }
+  const bound = SP_RELEASE_DB_PER_SECOND / 30;
+  check('Bar at 30 and 60 updates/s within one 30 fps frame of release of 180 updates/s',
+    largestBarDifference <= bound + 1e-9, `largest difference ${largestBarDifference.toFixed(3)} dB (bound ${bound.toFixed(3)} dB)`);
+  check('Maximum and clip identical at 30, 60 and 180 updates/s', sameMaxAndClip);
+
+  // For comparison: the former meter smoothed each reading by a quarter of
+  // the distance per update, over analyser windows of the latest 4096 samples
+  const formerReading = (rate) => {
+    let smooth = -60;
+    let largest = -Infinity;
+    for (let frame = 1; frame <= 6 * rate; frame++) {
+      const end = Math.round((frame * sampleRate) / rate);
+      const raw = 20 * Math.log10(peakOf(signal.subarray(Math.max(0, end - 4096), end)) + 1e-12);
+      smooth += 0.25 * (raw - smooth);
+      if (end > 30000 && end < 60000) largest = Math.max(largest, smooth);
+    }
+    return largest;
+  };
+  info(`the former smoothing read the full-scale sample as ${formerReading(30).toFixed(1)} dBFS at 30 fps and ${formerReading(180).toFixed(1)} dBFS at 180 fps`);
+}
+
+{
+  const clock = manualClock();
+  const meter = new SamplePeakMeter({ now: clock.now });
+  meter.updateFromPeaks(Infinity, NaN);
+  const state = meter.getState();
+  check('An infinite peak reads as a +60 dBFS over and trips the clip indicator',
+    state.dbfsLeft === 20 * Math.log10(1000 + 1e-12) && state.isClipLeft);
+  check('A NaN peak reads as silence', state.dbfsRight === -60 && !state.isClipRight);
+  clock.advance(100);
+  meter.update(new Float32Array(0), new Float32Array(0));
+  check('Empty buffers read as silence: the bar only falls',
+    meter.getState().dbfsLeft < state.dbfsLeft && meter.getState().dbfsRight === -60);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

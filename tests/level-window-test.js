@@ -266,8 +266,11 @@ console.log('\n--- 5. Invalid input, capacity and reset ---');
 console.log('\n--- 6. SamplePeakMeter.updateFromPeaks() against update() ---');
 {
   const { left, right } = programme();
-  const fromSamples = new SamplePeakMeter();
-  const fromWindow = new SamplePeakMeter();
+  // One clock for both meters, so their release covers the same intervals
+  let clockMs = 0;
+  const now = () => clockMs;
+  const fromSamples = new SamplePeakMeter({ now });
+  const fromWindow = new SamplePeakMeter({ now });
   const window = new LevelWindow({ windowFrames: WINDOW_FRAMES });
   let identical = true;
   let steps = 0;
@@ -283,6 +286,7 @@ console.log('\n--- 6. SamplePeakMeter.updateFromPeaks() against update() ---');
     // The analyser buffer: the latest 4096 samples; the window covers 4400
     // in whole blocks, so compare against those 4400 samples
     const { frames, peakLeft, peakRight } = window.getState();
+    clockMs += (800 / SAMPLE_RATE) * 1000;
     fromSamples.update(left.subarray(end - frames, end), right.subarray(end - frames, end));
     fromWindow.updateFromPeaks(peakLeft, peakRight);
     steps++;

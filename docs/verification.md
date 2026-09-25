@@ -64,7 +64,7 @@ Runs the application in Tauri mode against a mocked native engine: packets in th
 npm run test:browser:ppm
 ```
 
-Plays a 1 kHz tone at 0 dBFS through the application's generator, stops it, and times the displayed return on every animation frame: the Nordic PPM must fall 20 dB in 1.7 s ±0.3 s and the BBC PPM 24 dB in 2.8 s ±0.3 s, with the stereo-sampler AudioWorklet and again with the sampler blocked, where the application feeds its own detectors from the analyser. The detector arithmetic and the feed are tested in Node (`node tests/ppm-feed-test.js`, part of `npm test`).
+Plays a 1 kHz tone at 0 dBFS through the application's generator, stops it, and times the displayed return on every animation frame: the Nordic PPM must fall 20 dB in 1.7 s ±0.3 s, the BBC PPM 24 dB in 2.8 s ±0.3 s and the Sample Peak 20 dB in 1.7 s ±0.3 s, with the stereo-sampler AudioWorklet and again with the sampler blocked, where the application feeds its own detectors from the analyser. The detector arithmetic and the feed are tested in Node (`node tests/ppm-feed-test.js`, part of `npm test`).
 
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 

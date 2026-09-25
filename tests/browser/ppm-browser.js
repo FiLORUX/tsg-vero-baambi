@@ -6,12 +6,13 @@
  * Run: npm run test:browser:ppm
  *
  * Plays a 1 kHz tone at 0 dBFS through the application's generator in
- * headless Chromium, stops it, and records the displayed Nordic and BBC PPM
- * readouts on every animation frame. The IEC 60268-10 return times must hold
- * in real time, as the operator sees them:
+ * headless Chromium, stops it, and records the displayed Nordic PPM, BBC PPM
+ * and Sample Peak readouts on every animation frame. The return times must
+ * hold in real time, as the operator sees them:
  *
- *   Nordic PPM (Type I):  20 dB in 1.7 s ±0.3 s
- *   BBC PPM (Type IIa):   24 dB in 2.8 s ±0.3 s
+ *   Nordic PPM (IEC 60268-10 Type I):   20 dB in 1.7 s ±0.3 s
+ *   BBC PPM (IEC 60268-10 Type IIa):    24 dB in 2.8 s ±0.3 s
+ *   Sample Peak (the meter's release):  20 dB in 1.7 s ±0.3 s
  *
  * The fall is timed between two readings on the way down (2 dB below the
  * steady level and 20 or 24 dB further), so neither the generator's stop nor
@@ -116,6 +117,12 @@ function bbcDb(text) {
   return normalised.includes('∞') ? -Infinity : (Number.parseFloat(normalised) - 4) * 4 - 18;
 }
 
+/** Sample Peak readout ('−0.0', '−20.5', ' −∞') to dBFS. */
+function samplePeakDb(text) {
+  const normalised = text.trim().replace('\u2212', '-');
+  return normalised.includes('∞') ? -Infinity : Number.parseFloat(normalised);
+}
+
 /**
  * Time between the first reading at or below `steady − 2` dB after the stop
  * and the first at or below `steady − 2 − span` dB.
@@ -143,7 +150,8 @@ async function recordReturn(page) {
       frames.push({
         t: performance.now(),
         nordic: document.getElementById('nordicLVal')?.textContent ?? '',
-        bbc: document.getElementById('bbcLVal')?.textContent ?? ''
+        bbc: document.getElementById('bbcLVal')?.textContent ?? '',
+        samplePeak: document.getElementById('spLVal')?.textContent ?? ''
       });
       if (recording) requestAnimationFrame(record);
     };
@@ -179,6 +187,14 @@ function assessRun(label, { frames, stopTime }) {
     `${nordicFall.toFixed(2)} s`);
   check(`${label}: displayed BBC PPM falls 24 dB in 2.8 s ±0.3 s`, Math.abs(bbcFall - 2.8) <= 0.3,
     `${bbcFall.toFixed(2)} s`);
+
+  const steadySamplePeak = samplePeakDb(before.at(-1).samplePeak);
+  const samplePeakFrames = frames.map((frame) => ({ t: frame.t, value: samplePeakDb(frame.samplePeak) }));
+  const samplePeakFall = fallTime(samplePeakFrames, stopTime, steadySamplePeak, 20);
+  check(`${label}: displayed Sample Peak reads the 0 dBFS tone`, Math.abs(steadySamplePeak) <= 0.05,
+    `${before.at(-1).samplePeak.trim()} dBFS`);
+  check(`${label}: displayed Sample Peak falls 20 dB in 1.7 s ±0.3 s`, Math.abs(samplePeakFall - 1.7) <= 0.3,
+    `${samplePeakFall.toFixed(2)} s`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
