@@ -67,9 +67,10 @@
  *   { type: 'resetPpm', generation }              return the PPM detectors to
  *                                                 their initial state, likewise
  *
- * A quantum without input channels (no active source upstream) is measured
- * as silence: the stream continues, the previous signal's tail is completed
- * with zeros, and no stale history reaches the next signal.
+ * A quantum without input channels (no active source upstream) is silence:
+ * it is measured and written to the display buffers as zeros, so the streams
+ * continue, the previous signal's tail is completed with zeros, and no stale
+ * history or stale snapshot reaches the next signal.
  *
  * Usage:
  *   await ac.audioWorklet.addModule(new URL('./stereo-sampler-worklet.js', import.meta.url));
@@ -446,17 +447,15 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0];
 
-    // Without input channels the upstream graph is silent: measure silence so
-    // the true-peak stream stays continuous and carries no stale history
-    if (!input || input.length < 2) {
-      this._measureTruePeak(this._silence, this._silence);
-      this._measurePpm(this._silence, this._silence);
-      this._measureSamplePeak(this._silence, this._silence);
-      return true;
-    }
-
-    const L = input[0];
-    const R = input[1];
+    // Without input channels the upstream graph is silent. Gecko delivers
+    // such quanta whenever no source upstream is playing, as the Web Audio
+    // specification describes; Blink and WebKit deliver zeros. Either way the
+    // quantum is silence: it enters the display buffers and every measurement
+    // as zeros, so the streams stay continuous and the snapshots after a
+    // pause carry no audio from before it.
+    const silent = !input || input.length < 2;
+    const L = silent ? this._silence : input[0];
+    const R = silent ? this._silence : input[1];
     const blockSize = L.length;
     const bufferSize = this._bufferSize;
 

@@ -99,13 +99,17 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     this._bufferL = new Float32Array(4096);
     this._bufferR = new Float32Array(4096);
     this._writeIndex = 0;
+    this._silence = new Float32Array(128);
   }
 
   process(inputs, outputs, parameters) {
     const input = inputs[0];
-    if (!input || input.length < 2) return true;
 
-    const [L, R] = input;
+    // No input channels (Gecko, while nothing upstream plays) is silence:
+    // record it, or the buffer keeps the last signal and splices it onto the next
+    const silent = !input || input.length < 2;
+    const L = silent ? this._silence : input[0];
+    const R = silent ? this._silence : input[1];
 
     // L and R are GUARANTEED from the same audio render quantum
     for (let i = 0; i < L.length; i++) {

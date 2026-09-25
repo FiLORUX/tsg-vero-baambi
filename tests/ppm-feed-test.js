@@ -15,8 +15,8 @@
  *      and calculateBBCQuasiPeakRC() (Type IIa), whatever the block sizes.
  *   2. Its return times: 20 dB in 1.7 s (Type I), 24 dB in 2.8 s (Type IIa).
  *   3. The stereo-sampler AudioWorklet reads exactly as QuasiPeakDetector,
- *      reports every sample about every 10 ms, measures silent quanta and
- *      resets on request.
+ *      reports every sample about every 10 ms, measures silent quanta,
+ *      writes them to its display buffers as zeros, and resets on request.
  *   4. The main-thread sampler: ballistics handed to the worklet, largest
  *      readings accumulated until consumed, stale reports after a reset
  *      dropped, and the ScriptProcessor fallback on the same arithmetic.
@@ -285,6 +285,35 @@ console.log('\n--- 3. Stereo-sampler worklet ---');
   check('Quanta without input channels are measured as silence: the reading returns',
     silentSamples + silent._ppmSamples === 24000 + 375 * 128 && Math.abs(lastReading + expectedFall) < 1,
     `${lastReading.toFixed(2)} dBFS after 1 s of empty quanta`);
+
+  // The display buffers across a pause. Gecko hands the worklet quanta
+  // without channels while nothing upstream plays, as between two tests of
+  // the verification tool; the first snapshots after the pause once spliced
+  // the louder signal before it onto the TEST tone after it, and a PPM fed
+  // from those buffers read the verification tone up to 6 dB high.
+  const peakDbfs = (samples) => 20 * Math.log10(samples.reduce((peak, x) => Math.max(peak, Math.abs(x)), 0) + 1e-12);
+  const pausing = new Processor({ processorOptions: { bufferSize: 4096, ...PPM_OPTIONS } });
+  const snapshots = [];
+  pausing.port.postMessage = (message) => { if (message.type === 'snapshot') snapshots.push(message); };
+  render(pausing, toneThenSilence(48000, 0.5, 0.5, 10 ** (-6 / 20)));
+  const pauseStart = snapshots.length;
+  for (let quantum = 0; quantum < 188; quantum++) pausing.process([[]]);
+  const duringPause = snapshots.slice(pauseStart);
+  const resumeStart = snapshots.length;
+  render(pausing, toneThenSilence(48000, 0.1, 0.1, 10 ** (-18 / 20)));
+  const pauseTail = duringPause.at(-1);
+  const pauseSilent = pauseTail !== undefined && pauseTail.bufL.every((x) => x === 0) && pauseTail.bufR.every((x) => x === 0);
+  // One snapshot per 2048 samples, as while a signal plays
+  check('Quanta without input channels reach the display buffers as silence: snapshots continue through a pause',
+    duringPause.length >= Math.floor((188 * 128) / 2048) && pauseSilent,
+    `${duringPause.length} snapshots in 0.5 s of empty quanta, the last ${pauseSilent ? 'all zeros' : 'not silent'}`);
+  // A snapshot spans two posting intervals, so the first two after the pause
+  // are the ones that could still reach back before it
+  const afterPause = snapshots.slice(resumeStart, resumeStart + 2);
+  const resumedPeak = Math.max(...afterPause.flatMap((snapshot) => [peakDbfs(snapshot.bufL), peakDbfs(snapshot.bufR)]));
+  check('The snapshots after a pause hold no audio from before it',
+    afterPause.length === 2 && resumedPeak <= -17.99,
+    `peak ${resumedPeak.toFixed(2)} dBFS in ${afterPause.length} snapshots; −6 dBFS before the pause, −18 dBFS after`);
 
   const bare = new Processor({ processorOptions: { bufferSize: 4096 } });
   let bareReports = 0;
