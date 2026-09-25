@@ -2055,8 +2055,48 @@ startMeasureLoop();
 // RENDER LOOP (60 Hz) - Extracted to render-loop.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NOTE: initRenderLoop() must be called AFTER initUIComponents() to ensure
-// UI component references are properly initialised. This is done in init().
+/**
+ * Dependencies of the render loop, shared by browser and Tauri mode.
+ *
+ * Both modes draw the same meters through the same render loop, so they must
+ * hand it the same dependencies; the render loop itself tells the capture
+ * modes apart through captureState. Call after initUIComponents(): the UI
+ * component references are read when this function runs.
+ *
+ * @returns {Object} Argument for initRenderLoop()
+ */
+function renderLoopDependencies() {
+  return {
+    dom: {
+      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
+      bbcCanvas, bbcLVal, bbcRVal,
+      spCanvas, spLVal, spRVal,
+      dbfs, dbL, dbR, tp, tpL, tpR,
+      uptimeEl, statusSummary
+    },
+    meters: {
+      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
+    },
+    uiComponents: {
+      goniometer, correlationMeter, balanceMeterUI,
+      spectrumAnalyserUI, msMeterUI, widthMeterUI,
+      rotationMeterUI, radar, stereoAnalysis,
+      loudnessHistoryStrip
+    },
+    config: {
+      getSampleRate: () => ac.sampleRate,
+      getRadarMaxSeconds: () => radarMaxSeconds,
+      getTpLimit: () => TP_LIMIT
+    },
+    helpers: {
+      layoutXY, layoutLoudness, sampleAnalysers, updateTruePeakMeter,
+      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
+      updateRadarTooltip
+    },
+    captureState: { getActiveCapture: () => activeCapture },
+    TransitionGuard
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVENT BINDINGS
@@ -2680,47 +2720,14 @@ async function initTauriMode() {
   // Setup observers
   setupObservers();
 
-  // Initialise measure loop (used for render timing)
-  initMeasureLoop({
-    lufsMeter,
-    truePeakMeter,
-    ppmMeter,
-    samplePeakMeter,
-    radar,
-    getActiveCapture: () => activeCapture,
-    getTrim: () => 0,
-    getTargetLufs: () => LOUDNESS_TARGET,
-    getTpLimit: () => TP_LIMIT
-  });
+  // The measure loop was initialised and started at module load with its full
+  // dependencies. In Tauri mode it only keeps the elapsed time running; the
+  // engine's packets carry the measurements. Initialising it again here would
+  // replace those dependencies with an incomplete set.
 
-  // Initialise render loop
-  initRenderLoop({
-    dom: {
-      dbfs, dbfsScale, dbL, dbR,
-      tp, tpScale, tpL, tpR,
-      nordicCanvas, nordicScale, nordicLVal, nordicRVal,
-      bbcCanvas, bbcScale, bbcLVal, bbcRVal,
-      spCanvas, spScale, spLVal, spRVal,
-      corr, corrVal,
-      widthMeter, rotationCanvas, msFillM, msFillS, msValueM, msValueS,
-      peakLed, r128Crest, r128Time, uptimeEl
-    },
-    uiComponents: {
-      goniometer,
-      spectrumAnalyserUI,
-      widthMeterUI,
-      rotationMeterUI,
-      msMeterUI,
-      balanceMeterUI,
-      loudnessHistoryStrip
-    },
-    meters: { lufsMeter, truePeakMeter, ppmMeter, samplePeakMeter },
-    getActiveCapture: () => activeCapture,
-    getTargetLufs: () => LOUDNESS_TARGET,
-    getTpLimit: () => TP_LIMIT,
-    getDbfsBufs: () => ({ bufL: null, bufR: null }),
-    getKBufs: () => ({ kBufL: null, kBufR: null })
-  });
+  // Initialise render loop with the same dependencies as browser mode; the
+  // capture state is what tells it that the meters are fed by the engine
+  initRenderLoop(renderLoopDependencies());
 
   // Initialise Tauri bridge with metering callback
   const bridgeInitialised = await tauriBridge.initTauriBridge({
@@ -3203,36 +3210,7 @@ function init() {
   // See docs/PROJECT-A-DRAG-DROP-REMOVAL.md for rationale
 
   // Initialise render loop with dependencies (MUST be after initUIComponents)
-  initRenderLoop({
-    dom: {
-      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
-      bbcCanvas, bbcLVal, bbcRVal,
-      spCanvas, spLVal, spRVal,
-      dbfs, dbL, dbR, tp, tpL, tpR,
-      uptimeEl, statusSummary
-    },
-    meters: {
-      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
-    },
-    uiComponents: {
-      goniometer, correlationMeter, balanceMeterUI,
-      spectrumAnalyserUI, msMeterUI, widthMeterUI,
-      rotationMeterUI, radar, stereoAnalysis,
-      loudnessHistoryStrip
-    },
-    config: {
-      getSampleRate: () => ac.sampleRate,
-      getRadarMaxSeconds: () => radarMaxSeconds,
-      getTpLimit: () => TP_LIMIT
-    },
-    helpers: {
-      layoutXY, layoutLoudness, sampleAnalysers, updateTruePeakMeter,
-      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
-      updateRadarTooltip
-    },
-    captureState: { getActiveCapture: () => activeCapture },
-    TransitionGuard
-  });
+  initRenderLoop(renderLoopDependencies());
 
   // Start render loop
   startRenderLoop();
