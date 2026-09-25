@@ -376,12 +376,15 @@ export function calculateQuasiPeakStereo(leftBuffer, rightBuffer, sampleRate) {
  * ALGORITHM (sample-by-sample with rolling window):
  *   1. Track peak over sliding window (integration time = 5 ms)
  *   2. Apply RC attack toward window peak (quasi-peak for transients)
- *   3. Apply decay only when window peak drops (not during sine dips)
+ *   3. Below the reading, return at 20 dB / 1.7 s, but never below the
+ *      window peak
  *
  * This ensures:
  *   - Continuous tones: window peak stays at true peak → correct level
  *   - Short transients: RC integrates over burst → under-reads per spec
- *   - Decay: only when signal actually drops, not at zero crossings
+ *   - Return: whenever the signal is below the reading, by however little,
+ *     down to the signal's own level; zero crossings inside the window do
+ *     not pull the reading down
  *
  * The state advances one sample per input sample, so the ballistics hold
  * only if every sample is passed exactly once, in order. A rolling analyser
@@ -436,12 +439,12 @@ export function calculateQuasiPeakRC(buffer, sampleRate, state) {
       // Attack: RC charging toward window peak
       envelope += attackCoeff * (windowPeak - envelope);
       peakDb = 20 * Math.log10(envelope + 1e-12);
-    } else if (windowPeak > envelope * 0.5) {
-      // Signal present but below envelope: hold (no decay during continuous signal)
-      // The 0.5 threshold means we hold if signal is within 6 dB of envelope
     } else {
-      // Signal dropped significantly: apply linear dB decay
-      peakDb -= decayDbPerSample;
+      // Return: linear on the dB scale, towards the signal and never below
+      // the window peak. There is no hold margin: a reading a transient
+      // pushed up must fall back to a steady signal however close it is.
+      const windowDb = 20 * Math.log10(windowPeak + 1e-12);
+      peakDb = Math.max(windowDb, peakDb - decayDbPerSample);
       envelope = Math.pow(10, peakDb / 20);
       if (envelope < 1e-6) envelope = 1e-6;
     }
@@ -532,12 +535,12 @@ export function calculateBBCQuasiPeakRC(buffer, sampleRate, state) {
       // Attack: RC charging toward window peak (slower than Type I)
       envelope += attackCoeff * (windowPeak - envelope);
       peakDb = 20 * Math.log10(envelope + 1e-12);
-    } else if (windowPeak > envelope * 0.5) {
-      // Signal present but below envelope: hold (no decay during continuous signal)
-      // The 0.5 threshold means we hold if signal is within 6 dB of envelope
     } else {
-      // Signal dropped significantly: apply linear dB decay (slower than Type I)
-      peakDb -= decayDbPerSample;
+      // Return: linear on the dB scale, towards the signal and never below
+      // the window peak. There is no hold margin: a reading a transient
+      // pushed up must fall back to a steady signal however close it is.
+      const windowDb = 20 * Math.log10(windowPeak + 1e-12);
+      peakDb = Math.max(windowDb, peakDb - decayDbPerSample);
       envelope = Math.pow(10, peakDb / 20);
       if (envelope < 1e-6) envelope = 1e-6;
     }
@@ -696,11 +699,12 @@ export class QuasiPeakDetector {
         // Attack: RC charging towards the window peak
         envelope += attackCoeff * (windowPeak - envelope);
         peakDb = 20 * Math.log10(envelope + 1e-12);
-      } else if (windowPeak > envelope * 0.5) {
-        // Signal within 6 dB of the envelope: hold, no decay at zero crossings
       } else {
-        // Signal has dropped: linear return on the dB scale
-        peakDb -= decayDbPerSample;
+        // Return: linear on the dB scale, towards the signal and never below
+        // the window peak. There is no hold margin: a reading a transient
+        // pushed up must fall back to a steady signal however close it is.
+        const windowDb = 20 * Math.log10(windowPeak + 1e-12);
+        peakDb = Math.max(windowDb, peakDb - decayDbPerSample);
         envelope = Math.pow(10, peakDb / 20);
         if (envelope < 1e-6) envelope = 1e-6;
       }

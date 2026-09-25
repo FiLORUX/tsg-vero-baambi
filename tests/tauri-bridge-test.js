@@ -5,17 +5,20 @@
  *
  * Run: node tests/tauri-bridge-test.js
  *
- * The native engine sends its metering as a fixed binary layout. This test
- * builds a packet from the protocol table below, delivers it through a mocked
- * window.__TAURI__ event API, and checks that the bridge hands every field to
- * the application intact. The engine's own tests check the same offsets from
- * the Rust side, so the two cannot drift apart unnoticed.
+ * The native engine answers the page's read_metering calls with a fixed
+ * binary layout. This test builds packets from the protocol table below,
+ * serves them through a mocked window.__TAURI__ core API, drives the bridge's
+ * per-frame read loop by hand, and checks that every field reaches the
+ * application intact. The engine's own tests check the same offsets from the
+ * Rust side, so the two cannot drift apart unnoticed.
+ *
+ * It also checks the transport rules the bridge owns: an empty answer means
+ * no new audio, one read is in flight at a time, and after resetMeters()
+ * only packets of the new reset generation reach the meters.
  *
  * @module tests/tauri-bridge-test
  * ═══════════════════════════════════════════════════════════════════════════════
  */
-
-import { initTauriBridge, cleanup } from '../src/bridge/tauri-bridge.js';
 
 let passed = 0;
 let failed = 0;
@@ -34,8 +37,8 @@ function test(name, condition, detail = '') {
 // PROTOCOL TABLE (little-endian)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PACKET_SIZE = 4164;
-const HEADER_SIZE = 68;
+const PACKET_SIZE = 4168;
+const HEADER_SIZE = 72;
 const VIS_SAMPLES = 512;
 
 /** Field, type, offset, value written by this test. Floats are exact in f32. */
@@ -55,78 +58,143 @@ const FIELDS = [
   ['spRight', 'f32', 52, -200],
   ['rmsLeft', 'f32', 56, -9.75],
   ['rmsRight', 'f32', 60, -200],
-  ['levelFrames', 'u32', 64, 768]
+  ['levelFrames', 'u32', 64, 768],
+  ['generation', 'u32', 68, 5]
 ];
 
-function buildPacket() {
+/** A packet from the table, with the reset generation overridden if given. */
+function buildPacket(generation = 5) {
   const buffer = new ArrayBuffer(PACKET_SIZE);
   const view = new DataView(buffer);
-  for (const [, type, offset, value] of FIELDS) {
-    if (type === 'f32') view.setFloat32(offset, value, true);
-    else if (type === 'u32') view.setUint32(offset, value, true);
-    else view.setBigUint64(offset, value, true);
+  for (const [name, type, offset, value] of FIELDS) {
+    const written = name === 'generation' ? generation : value;
+    if (type === 'f32') view.setFloat32(offset, written, true);
+    else if (type === 'u32') view.setUint32(offset, written, true);
+    else view.setBigUint64(offset, written, true);
   }
   for (let i = 0; i < VIS_SAMPLES; i++) {
     view.setFloat32(HEADER_SIZE + i * 4, i / 1024, true);
     view.setFloat32(HEADER_SIZE + (VIS_SAMPLES + i) * 4, -i / 1024, true);
   }
-  return new Uint8Array(buffer);
+  return buffer;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MOCKED TAURI EVENT API
+// MOCKED TAURI CORE API AND DISPLAY FRAMES
 // ─────────────────────────────────────────────────────────────────────────────
 
-const listeners = new Map();
+/** Answers the engine will give, in order; an exhausted queue answers empty. */
+const answers = [];
+const invocations = [];
+let heldRead = null;
+
 globalThis.window = {
   __TAURI__: {
-    event: {
-      listen: async (name, callback) => {
-        listeners.set(name, callback);
-        return () => listeners.delete(name);
+    core: {
+      invoke: async (command, args) => {
+        invocations.push({ command, args });
+        if (command !== 'read_metering') return null;
+        if (heldRead) return heldRead.promise;
+        return answers.shift() ?? new ArrayBuffer(0);
       }
     }
   }
 };
 
+// Display frames run only when the test says so
+let frameCallbacks = new Map();
+let nextFrameId = 1;
+globalThis.requestAnimationFrame = (callback) => {
+  frameCallbacks.set(nextFrameId, callback);
+  return nextFrameId++;
+};
+globalThis.cancelAnimationFrame = (id) => frameCallbacks.delete(id);
+
+/** Run one display frame and let the reads it started settle. */
+async function frame() {
+  const due = [...frameCallbacks.values()];
+  frameCallbacks = new Map();
+  for (const callback of due) callback(0);
+  await new Promise((settle) => setTimeout(settle, 0));
+}
+
+const reads = () => invocations.filter(({ command }) => command === 'read_metering').length;
+
+const { initTauriBridge, cleanup, resetMeters } = await import('../src/bridge/tauri-bridge.js');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TESTS
+// ─────────────────────────────────────────────────────────────────────────────
+
 const received = [];
 const initialised = await initTauriBridge({ onMeteringUpdate: (data) => received.push(data) });
 
 console.log('\n--- Bridge initialisation ---');
-test('initTauriBridge() reports success with an event API present', initialised === true);
-test('The bridge listens for metering-bin', listeners.has('metering-bin'));
+test('initTauriBridge() reports success with a core API present', initialised === true);
+test('The bridge schedules its first read for the next display frame', frameCallbacks.size === 1);
 
-// Tauri delivers a Vec<u8> payload as an array of numbers; accept both forms
 console.log('\n--- Packet fields ---');
-const packet = buildPacket();
-listeners.get('metering-bin')({ payload: Array.from(packet) });
-listeners.get('metering-bin')({ payload: packet });
+answers.push(buildPacket());
+await frame();
+test('One read per display frame', reads() === 1, `got ${reads()}`);
+test('One update per packet', received.length === 1, `got ${received.length}`);
 
-test('One update per packet', received.length === 2, `got ${received.length}`);
-
-for (const [index, data] of received.entries()) {
-  const form = index === 0 ? 'number array' : 'Uint8Array';
-  for (const [name, , offset, value] of FIELDS) {
-    test(`${form}: ${name} (offset ${offset})`, data[name] === value, `got ${data[name]}, expected ${value}`);
-  }
-
-  const { samplesLeft, samplesRight } = data;
-  test(
-    `${form}: samples are ${VIS_SAMPLES} per channel`,
-    samplesLeft.length === VIS_SAMPLES && samplesRight.length === VIS_SAMPLES
-  );
-  test(
-    `${form}: left samples start after the header`,
-    samplesLeft[0] === 0 && samplesLeft[1] === 1 / 1024 && samplesLeft[511] === 511 / 1024
-  );
-  test(
-    `${form}: right samples follow the left`,
-    samplesRight[1] === -1 / 1024 && samplesRight[511] === -511 / 1024
-  );
+const [data] = received;
+for (const [name, , offset, value] of FIELDS) {
+  test(`${name} (offset ${offset})`, data?.[name] === value, `got ${data?.[name]}, expected ${value}`);
 }
+test(
+  `Samples are ${VIS_SAMPLES} per channel`,
+  data?.samplesLeft.length === VIS_SAMPLES && data?.samplesRight.length === VIS_SAMPLES
+);
+test(
+  'Left samples start after the header',
+  data?.samplesLeft[0] === 0 && data?.samplesLeft[1] === 1 / 1024 && data?.samplesLeft[511] === 511 / 1024
+);
+test(
+  'Right samples follow the left',
+  data?.samplesRight[1] === -1 / 1024 && data?.samplesRight[511] === -511 / 1024
+);
 
+console.log('\n--- Transport ---');
+await frame();
+test('An empty answer (no new audio) updates nothing', received.length === 1, `got ${received.length}`);
+
+let release;
+heldRead = { promise: new Promise((resolve) => { release = resolve; }) };
+const readsBefore = reads();
+await frame();
+await frame();
+await frame();
+test('A slow read is not overtaken: one read in flight', reads() === readsBefore + 1,
+  `${reads() - readsBefore} reads during three frames`);
+heldRead = null;
+release(buildPacket());
+await frame();
+test('The held read delivers when it completes', received.length === 2, `got ${received.length}`);
+
+console.log('\n--- Reset generations ---');
+received.length = 0;
+const resetDone = resetMeters();
+const request = invocations.findLast(({ command }) => command === 'reset_meters');
+test('resetMeters() asks the engine for the next generation', request?.args?.generation === 6,
+  `requested ${request?.args?.generation}`);
+await resetDone;
+
+answers.push(buildPacket(5));
+await frame();
+test('A packet measured before the reset is dropped', received.length === 0, `got ${received.length}`);
+
+answers.push(buildPacket(6));
+await frame();
+test('A packet of the new generation reaches the meters', received.length === 1 && received[0].generation === 6,
+  `got ${received.map((packet) => packet.generation).join(', ') || 'none'}`);
+
+console.log('\n--- Cleanup ---');
 cleanup();
-test('cleanup() removes the listener', !listeners.has('metering-bin'));
+const readsAtCleanup = reads();
+await frame();
+test('cleanup() stops the read loop', frameCallbacks.size === 0 && reads() === readsAtCleanup);
 
 console.log('\n' + '═'.repeat(50));
 console.log(`Results: \x1b[32m${passed} passed\x1b[0m, \x1b[31m${failed} failed\x1b[0m`);

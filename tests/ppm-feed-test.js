@@ -22,6 +22,8 @@
  *      dropped, and the ScriptProcessor fallback on the same arithmetic.
  *   5. PPMMeter.updateFromReadings() clamps and holds as update() does.
  *   6. The defect: a rolling window fed every frame runs the return fast.
+ *   7. The return reaches a lower steady level however small the drop, so a
+ *      reading a transient pushed up falls back to the signal.
  *
  * @module tests/ppm-feed-test
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -454,6 +456,81 @@ console.log('\n--- 6. Rolling analyser windows against the sample-complete feed 
   const fedTime = fallTime(fedReadings.slice(55), framesPerSecond, fromDb, fromDb - 20);
   check('Sample-complete feed at 60 fps: 20 dB in 1.7 s ±0.3 s', Math.abs(fedTime - 1.7) <= 0.3, `${fedTime.toFixed(2)} s`);
   info(`the rolling 4096-sample window, fed every frame, fell 20 dB in ${windowedTime.toFixed(2)} s`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. RETURN TO A LOWER STEADY LEVEL
+// ─────────────────────────────────────────────────────────────────────────────
+
+console.log('\n--- 7. Return to a lower steady level ---');
+{
+  const sampleRate = 48000;
+
+  /** 1 kHz tone at each level in turn, for the given seconds. */
+  const steps = (...segments) => {
+    const total = segments.reduce((sum, [, seconds]) => sum + Math.round(sampleRate * seconds), 0);
+    const signal = new Float32Array(total);
+    let i = 0;
+    for (const [db, seconds] of segments) {
+      const amplitude = 10 ** (db / 20);
+      for (const end = i + Math.round(sampleRate * seconds); i < end; i++) {
+        signal[i] = amplitude * Math.sin(2 * Math.PI * 1000 * i / sampleRate);
+      }
+    }
+    return signal;
+  };
+
+  /** Readings every millisecond. */
+  const readEveryMs = (detector, signal) => {
+    const readings = [];
+    for (let start = 0; start < signal.length; start += sampleRate / 1000) {
+      detector.process(signal.subarray(start, start + sampleRate / 1000));
+      readings.push(detector.reading);
+    }
+    return readings;
+  };
+
+  for (const [label, ballistics, rate] of [
+    ['Type I', NORDIC_PPM_BALLISTICS, 20 / 1.7],
+    ['Type IIa', BBC_PPM_BALLISTICS, 24 / 2.8]
+  ]) {
+    // A 5 dB drop, inside the 6 dB margin the detectors once held within
+    const readings = readEveryMs(new QuasiPeakDetector({ sampleRate, ballistics }), steps([-12, 1], [-17, 2]));
+    const atDrop = 1000;
+    const after200 = readings[atDrop + 200];
+    const expected200 = -12 - rate * 0.195; // the 5 ms window still holds the old crest
+    check(`${label}: 200 ms after a 5 dB drop the reading is returning at its rate`,
+      Math.abs(after200 - expected200) <= 0.2, `${after200.toFixed(2)} dBFS, expected ${expected200.toFixed(2)}`);
+    const settled = readings.at(-1);
+    check(`${label}: the reading settles at the new level`, Math.abs(settled + 17) <= 0.05,
+      `${settled.toFixed(3)} dBFS after 2 s at −17 dBFS`);
+  }
+
+  // The verification tool's case: leftover louder signal, then TEST level
+  const transient = readEveryMs(new QuasiPeakDetector({ sampleRate }), steps([-12.7, 0.1], [-18, 1.5]));
+  const afterSettle = transient[100 + 1000];
+  check('A reading pushed up by a transient is back at TEST level within the 1 s settle',
+    Math.abs(afterSettle + 18) <= 0.05, `${afterSettle.toFixed(3)} dBFS`);
+
+  // The floor at the window peak keeps steady tones free of ripple
+  const steady = readEveryMs(new QuasiPeakDetector({ sampleRate }), steps([-18, 2])).slice(500);
+  check('A steady 1 kHz tone reads its level without ripple',
+    Math.min(...steady) >= -18.02 && Math.max(...steady) <= -17.98,
+    `${Math.min(...steady).toFixed(3)} to ${Math.max(...steady).toFixed(3)} dBFS`);
+
+  const lowTone = new Float32Array(sampleRate * 2);
+  for (let i = 0; i < lowTone.length; i++) lowTone[i] = 10 ** (-18 / 20) * Math.sin(2 * Math.PI * 40 * i / sampleRate);
+  const low = readEveryMs(new QuasiPeakDetector({ sampleRate }), lowTone).slice(500);
+  check('A 40 Hz tone ripples by less than 0.15 dB between crests',
+    Math.max(...low) - Math.min(...low) < 0.15 && Math.abs(Math.max(...low) + 18) <= 0.02,
+    `${Math.min(...low).toFixed(3)} to ${Math.max(...low).toFixed(3)} dBFS`);
+
+  // The reference function behaves the same
+  const state = {};
+  calculateQuasiPeakRC(steps([-12, 1]), sampleRate, state);
+  calculateQuasiPeakRC(steps([-17, 1]), sampleRate, state);
+  check('calculateQuasiPeakRC() also returns to the lower level', Math.abs(state.peakDb + 17) <= 0.05,
+    `${state.peakDb.toFixed(3)} dBFS`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

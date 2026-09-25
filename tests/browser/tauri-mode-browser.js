@@ -6,8 +6,9 @@
  * Run: npm run test:browser:tauri
  *
  * Loads the application in headless Chromium with a mocked window.__TAURI__
- * and feeds it metering packets in the native engine's binary layout, as the
- * Tauri build does. The engine's level fields describe one signal; the
+ * that answers the page's per-frame read_metering calls with packets in the
+ * native engine's binary layout, gathered between reads as the engine
+ * gathers them. The engine's level fields describe one signal; the
  * display snapshots in the same packets carry another, spliced at every
  * packet. Every level meter must follow the engine:
  *
@@ -97,64 +98,89 @@ function startServer() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function installMockEngine() {
-  const listeners = {};
+  // What the engine has measured since the page's previous read, merged as
+  // the engine merges it: true and sample peak by maximum, energy and frames
+  // by sum, PPM and the display snapshot as the latest
+  let pending = null;
+  let reads = 0;
+
   window.__TAURI__ = {
     core: {
-      invoke: async (command) => (command === 'start_capture'
-        ? { backend: 'Mock', device: 'Mock', sampleRate: 48000, bufferSize: 128, latencyMs: 2.67 }
-        : null)
-    },
-    event: {
-      listen: async (name, callback) => {
-        listeners[name] = callback;
-        return () => delete listeners[name];
+      invoke: async (command) => {
+        if (command === 'start_capture') {
+          return { backend: 'Mock', device: 'Mock', sampleRate: 48000, bufferSize: 128, latencyMs: 2.67 };
+        }
+        if (command === 'read_metering') {
+          reads++;
+          const packet = pending ? pack(pending) : new ArrayBuffer(0);
+          pending = null;
+          return packet;
+        }
+        return null;
       }
     }
   };
 
-  window.__engineReady = () => typeof listeners['metering-bin'] === 'function';
+  window.__engineReady = () => reads > 0;
 
   let snapshotSeed = 1;
 
+  /** Record one block measured by the engine. */
+  function measure({ levelDb, rmsDb, ppmDb, tpDb, spDb, frames, snapshotDb }) {
+    const block = { tpDb, spDb: spDb ?? levelDb, energy: frames * 10 ** (rmsDb / 10), frames, ppmDb, snapshotDb };
+    if (!pending) {
+      pending = block;
+      return;
+    }
+    pending.tpDb = Math.max(pending.tpDb, block.tpDb);
+    pending.spDb = Math.max(pending.spDb, block.spDb);
+    pending.energy += block.energy;
+    pending.frames += block.frames;
+    pending.ppmDb = block.ppmDb;
+    pending.snapshotDb = block.snapshotDb;
+  }
+
   /**
-   * Send one packet in the engine's layout (4164 bytes). The snapshot is a
-   * 997 Hz sine at snapshotDb that starts at an arbitrary phase, so every
-   * join with the previous snapshot is a discontinuity.
+   * One packet in the engine's layout (4168 bytes). The snapshot is a 997 Hz
+   * sine at snapshotDb that starts at an arbitrary phase, so every join with
+   * the previous snapshot is a discontinuity.
    */
-  function emit({ levelDb, rmsDb, ppmDb, tpDb, spDb, frames, snapshotDb }) {
-    const buffer = new ArrayBuffer(4164);
+  function pack({ tpDb, spDb, energy, frames, ppmDb, snapshotDb }) {
+    const buffer = new ArrayBuffer(4168);
     const view = new DataView(buffer);
     const header = [-21, -21, -21, tpDb, tpDb, ppmDb, ppmDb, 1];
     header.forEach((value, i) => view.setFloat32(i * 4, value, true));
     view.setUint32(32, 48000, true);
     view.setUint32(36, 128, true);
     view.setBigUint64(40, BigInt(Date.now()) * 1000n, true);
-    view.setFloat32(48, spDb ?? levelDb, true);
-    view.setFloat32(52, spDb ?? levelDb, true);
+    const rmsDb = 10 * Math.log10(energy / frames);
+    view.setFloat32(48, spDb, true);
+    view.setFloat32(52, spDb, true);
     view.setFloat32(56, rmsDb, true);
     view.setFloat32(60, rmsDb, true);
     view.setUint32(64, frames, true);
+    view.setUint32(68, 0, true);
 
     snapshotSeed = (snapshotSeed * 48271) % 2147483647;
     const phase = (snapshotSeed / 2147483647) * 2 * Math.PI;
     const amplitude = 10 ** (snapshotDb / 20);
     for (let i = 0; i < 512; i++) {
       const sample = amplitude * Math.sin(phase + 2 * Math.PI * 997 * i / 48000);
-      view.setFloat32(68 + i * 4, sample, true);
-      view.setFloat32(68 + 2048 + i * 4, sample, true);
+      view.setFloat32(72 + i * 4, sample, true);
+      view.setFloat32(72 + 2048 + i * 4, sample, true);
     }
-    listeners['metering-bin']({ payload: new Uint8Array(buffer) });
+    return buffer;
   }
 
-  /** Send packets about every 8 ms, as the engine's UI thread does. */
+  /** Measure a block about every 8 ms; the page reads once per frame. */
   window.__runEngine = async (packets, fields) => {
     for (let i = 0; i < packets; i++) {
-      emit(fields);
+      measure(fields);
       await new Promise((resolveTimer) => setTimeout(resolveTimer, 8));
     }
   };
 
-  /** Send packets while recording the Sample Peak readout on every frame. */
+  /** Measure blocks while recording the Sample Peak readout on every frame. */
   window.__runEngineWatchingSamplePeak = async (sequence) => {
     const readings = [];
     let watching = true;
@@ -165,7 +191,7 @@ function installMockEngine() {
     };
     requestAnimationFrame(watch);
     for (const fields of sequence) {
-      emit(fields);
+      measure(fields);
       readings.push(read());
       await new Promise((resolveTimer) => setTimeout(resolveTimer, 8));
     }

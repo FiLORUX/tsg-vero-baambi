@@ -181,8 +181,8 @@ class TruePeakKernel {
  *
  * Same arithmetic as QuasiPeakDetector in src/metering/ppm.js: the rolling
  * integration window's maximum from a monotonic queue, RC attack towards it,
- * hold while the signal stays within 6 dB, otherwise linear return on the dB
- * scale. The coefficients follow quasiPeakCoefficients() there, expression
+ * and below it a linear return on the dB scale that stops at the window
+ * maximum. The coefficients follow quasiPeakCoefficients() there, expression
  * for expression, from the ballistics handed over in processorOptions.
  */
 class QuasiPeakKernel {
@@ -247,10 +247,12 @@ class QuasiPeakKernel {
       if (windowPeak > envelope) {
         envelope += attackCoeff * (windowPeak - envelope);
         peakDb = 20 * Math.log10(envelope + 1e-12);
-      } else if (windowPeak > envelope * 0.5) {
-        // Hold: signal within 6 dB of the envelope
       } else {
-        peakDb -= decayDbPerSample;
+        // Return: linear on the dB scale, towards the signal and never below
+        // the window peak. There is no hold margin: a reading a transient
+        // pushed up must fall back to a steady signal however close it is.
+        const windowDb = 20 * Math.log10(windowPeak + 1e-12);
+        peakDb = Math.max(windowDb, peakDb - decayDbPerSample);
         envelope = Math.pow(10, peakDb / 20);
         if (envelope < 1e-6) envelope = 1e-6;
       }

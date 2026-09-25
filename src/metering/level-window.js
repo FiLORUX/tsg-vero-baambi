@@ -45,10 +45,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Default number of blocks the window can hold. The native engine sends
- * about 120 packets per second, each of hundreds of frames, so a window of a
- * few thousand frames needs a handful; the bound only matters for a source
- * with absurdly small blocks, where the oldest go first.
+ * Default number of blocks the window can hold. The native engine is read
+ * once per display frame, and each packet covers the frames since the
+ * previous read (about 800 at 60 frames per second), so a window of a few
+ * thousand frames needs a handful; the bound only matters for a source with
+ * absurdly small blocks, where the oldest go first.
  * @type {number}
  */
 const DEFAULT_CAPACITY = 256;
