@@ -91,7 +91,9 @@ export const VERIFICATION_TESTS = [
  * - For broadband pink noise, K-weighting adds ~+2 dB overall
  * - Target: −23 LUFS after K-weighting in signal chain
  *
- * Empirically calibrated: 0.042 scale factor yields −23 LUFS ±0.3
+ * Empirically calibrated: 0.0297 scale factor yields −23 LUFS ±0.3 with the
+ * BS.1770-4 channel sum (0.042 was the factor under the earlier L/R average;
+ * summing two equal energies adds 3.01 dB, so the amplitude is 0.042/√2)
  */
 function createLufsTestSignal(ac, masterGain) {
   const bufferSize = 10 * ac.sampleRate;
@@ -113,7 +115,7 @@ function createLufsTestSignal(ac, masterGain) {
       b5 = -0.7616 * b5 - white * 0.0168980;
       const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
       b6 = white * 0.115926;
-      data[i] = pink * 0.042;
+      data[i] = pink * 0.0297;
     }
   }
 

@@ -5,7 +5,7 @@
  *
  * Run: npm run test:browser
  *
- * Drives the real Web Audio pipeline in headless Chromium and checks what the
+ * Drives the real Web Audio pipeline in a headless browser and checks what the
  * Node tests cannot: the AudioWorklet running in a browser's audio thread,
  * real-time delivery to a main thread that stalls, and the application itself.
  *
@@ -24,13 +24,16 @@
  *   5. Remote chain: the probe page through a local broker into the
  *      application's remote mode; then a scripted probe whose level drops,
  *      where the received TPmax must hold while the bar follows the level,
- *      and a switch to a second probe, which must start a new TPmax. The
- *      sample peak travels the same chain: the probe's reading must arrive
- *      and be displayed, and the received bar and hold must follow a drop.
+ *      a switch to a second probe, which must start a new TPmax, and that
+ *      probe going offline, which must clear the displays without errors.
+ *      The sample peak travels the same chain: the probe's reading must
+ *      arrive and be displayed, and the received bar and hold must follow
+ *      a drop.
  *
- * Requirements: the playwright-core dev dependency and a Chromium build
- * (npx playwright-core install chromium), or CHROMIUM_PATH pointing at a
- * Chromium or Chrome executable.
+ * Engines: BROWSER=chromium (default), firefox or webkit, the engine behind
+ * Safari. Requirements: the playwright-core dev dependency and the engine's
+ * Playwright build (npx playwright-core install chromium firefox webkit), or
+ * CHROMIUM_PATH pointing at a Chromium or Chrome executable.
  *
  * @module tests/browser/true-peak-browser
  * @see EBU Tech 3341 Table 1, cases 15–23
@@ -45,7 +48,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { extname, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright-core';
+import { chromium, firefox, webkit } from 'playwright-core';
 import { WebSocket } from 'ws';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -150,7 +153,7 @@ function startServer() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function testOfflineWorklet(page) {
-  console.log('\n--- 1. Offline rendering: stereo-sampler worklet in Chromium against TruePeakDetector ---');
+  console.log('\n--- 1. Offline rendering: stereo-sampler worklet in the browser against TruePeakDetector ---');
 
   const results = await page.evaluate(async () => {
     const tp = await import('/src/metering/true-peak.js');
@@ -454,9 +457,13 @@ async function startBroker() {
 async function openRemoteApplication(browser, origin, brokerUrl, probeSelector) {
   const app = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   app.setDefaultTimeout(60000);
+  // Receiver listeners catch and log their own exceptions, so a failure in a
+  // metrics or probe-list listener surfaces only on the console
   const listenerErrors = [];
+  const messages = [];
   app.on('console', (message) => {
-    if (message.type() === 'error' && /Metrics listener error/.test(message.text())) listenerErrors.push(message.text());
+    messages.push(message.text());
+    if (message.type() === 'error' && /listener error/.test(message.text())) listenerErrors.push(message.text());
   });
   await app.goto(`${origin}/index.html`);
   await app.waitForFunction(() => document.getElementById('stereoSyncMode')?.textContent === 'AudioWorklet');
@@ -465,7 +472,7 @@ async function openRemoteApplication(browser, origin, brokerUrl, probeSelector) 
   await app.waitForSelector(probeSelector);
   await app.click(probeSelector);
   await app.click('#btnStartCapture');
-  return { app, listenerErrors };
+  return { app, listenerErrors, messages };
 }
 
 async function readRemoteTruePeak(app) {
@@ -548,13 +555,15 @@ async function testRemoteChain(browser, origin) {
       }
     }, 100);
 
-    // waitForFunction takes a returned Promise as truthy, so an async predicate
-    // would resolve at once; resolve the module first, then poll synchronously
+    // Poll from Node: an async predicate in waitForFunction resolves at once
+    // in some engines, because the returned Promise itself is truthy
     const waitForBar = async (app, levelDb) => {
-      await app.evaluate(async () => {
-        window.__meterStateUnderTest = (await import('/src/app/meter-state.js')).meterState;
-      });
-      await app.waitForFunction((expected) => window.__meterStateUnderTest.remoteTpL === expected, levelDb);
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline) {
+        if ((await readRemoteTruePeak(app)).bar === levelDb) return;
+        await new Promise((wake) => setTimeout(wake, 50));
+      }
+      throw new Error(`remote bar never reached ${levelDb} dBTP`);
     };
 
     try {
@@ -579,6 +588,22 @@ async function testRemoteChain(browser, origin) {
         `${switched.tpMax} dBTP, display "${switched.text}"`);
       check('Received metrics are applied without listener errors', scripted.listenerErrors.length === 0,
         scripted.listenerErrors[0] ?? 'none');
+
+      // 5c. The selected probe goes offline while capture runs
+      const indexB = sockets.findIndex(([probeId]) => probeId === probeB);
+      const [[, socketB]] = sockets.splice(indexB, 1);
+      socketB.close();
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline && !scripted.messages.some((text) => /Remote displays cleared/.test(text))) {
+        await new Promise((wake) => setTimeout(wake, 50));
+      }
+      const offline = await readRemoteTruePeak(scripted.app);
+      check('An offline probe clears the displays to the end', scripted.messages.some((text) => /Remote displays cleared/.test(text)),
+        `TPmax display "${offline.text}", bar ${offline.bar} dBTP`);
+      check('An offline probe leaves TPmax and the bar at rest', offline.text === '--.- dBTP' && offline.bar === -60,
+        `display "${offline.text}", bar ${offline.bar} dBTP`);
+      check('A probe going offline raises no listener errors', scripted.listenerErrors.length === 0,
+        scripted.listenerErrors[0] ?? 'none');
       await scripted.app.close();
     } finally {
       clearInterval(sender);
@@ -596,18 +621,35 @@ async function testRemoteChain(browser, origin) {
 console.log(`${BOLD}VERO-BAAMBI True-Peak Browser Verification${RESET}`);
 console.log('═══════════════════════════════════════════════════════════════');
 
+/**
+ * Launch options per engine: each needs audio to start without a user gesture.
+ */
+const ENGINES = {
+  chromium: () => chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH || undefined,
+    args: ['--autoplay-policy=no-user-gesture-required']
+  }),
+  firefox: () => firefox.launch({
+    firefoxUserPrefs: { 'media.autoplay.default': 0, 'media.autoplay.blocking_policy': 0 }
+  }),
+  webkit: () => webkit.launch()
+};
+
+const engineName = (process.env.BROWSER || 'chromium').toLowerCase();
+if (!ENGINES[engineName]) {
+  console.error(`Unknown BROWSER "${engineName}"; use chromium, firefox or webkit`);
+  process.exit(2);
+}
+
 const { server, origin } = await startServer();
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_PATH || undefined,
-  args: ['--autoplay-policy=no-user-gesture-required']
-});
+const browser = await ENGINES[engineName]();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   page.setDefaultTimeout(180000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  console.log(`Chromium ${browser.version()}`);
+  console.log(`${engineName} ${browser.version()}`);
 
   await page.goto(`${origin}/__blank`);
   await testOfflineWorklet(page);

@@ -1578,9 +1578,6 @@ async function startRemoteCapture() {
 }
 
 /**
- * Stop remote capture - unsubscribe from probe (but keep connection for UI).
- */
-/**
  * Clear all remote meter displays to idle state.
  * Called when probe goes offline while capture is active.
  */
@@ -1606,11 +1603,11 @@ function clearRemoteDisplays() {
   if (msFillM) { msFillM.style.width = '0%'; }
   if (msFillS) { msFillS.style.width = '0%'; }
 
-  // Width meter
-  if (widthMeterUI) { widthMeterUI.update(0, 0); }
+  // Width meter: empty bar, peak tick at zero
+  if (widthMeterUI) { widthMeterUI.draw(0, 0); }
 
-  // Balance meter
-  if (balanceMeterUI) { balanceMeterUI.update(0); }
+  // Balance meter: centred at once, without smoothing back from the last value
+  if (balanceMeterUI) { balanceMeterUI.reset(); }
 
   // Latency
   if (remoteLatency) { remoteLatency.textContent = '–'; }
@@ -1618,6 +1615,9 @@ function clearRemoteDisplays() {
   console.log('[Bootstrap] Remote displays cleared - probe offline');
 }
 
+/**
+ * Stop remote capture - unsubscribe from probe (but keep connection for UI).
+ */
 function stopRemoteCapture() {
   try {
     // Unsubscribe from current probe but keep connection for probe list
@@ -2978,8 +2978,11 @@ async function initTauriMode() {
 
   // Start native audio capture
   try {
-    const backend = await tauriBridge.startCapture({ bufferSize: 128 });
+    const captureInfo = await tauriBridge.startCapture({ bufferSize: 128 });
+    const backend = captureInfo?.backend ?? String(captureInfo);
     activeCapture = 'tauri';
+    // Measurement is running: the R128 reset (TPmax, LUFS) becomes available
+    if (r128Reset) r128Reset.disabled = false;
     console.log(`[Bootstrap] Started native audio capture with ${backend} backend`);
 
     // Update status display
@@ -3025,7 +3028,6 @@ function bindTauriEvents() {
       resetTruePeakMeter();
       resetPpmMeters();
       resetMeterState();
-      radar?.clear();
       console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
     });
   }
