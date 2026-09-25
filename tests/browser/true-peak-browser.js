@@ -530,10 +530,14 @@ async function testRemoteChain(browser, origin) {
       }
     }, 100);
 
-    const waitForBar = (app, levelDb) => app.waitForFunction(async (expected) => {
-      const { meterState } = await import('/src/app/meter-state.js');
-      return meterState.remoteTpL === expected;
-    }, levelDb);
+    // waitForFunction takes a returned Promise as truthy, so an async predicate
+    // would resolve at once; resolve the module first, then poll synchronously
+    const waitForBar = async (app, levelDb) => {
+      await app.evaluate(async () => {
+        window.__meterStateUnderTest = (await import('/src/app/meter-state.js')).meterState;
+      });
+      await app.waitForFunction((expected) => window.__meterStateUnderTest.remoteTpL === expected, levelDb);
+    };
 
     try {
       const scripted = await openRemoteApplication(browser, origin, url, `[data-probe-id="${probeA}"] input[type=radio]`);
