@@ -208,6 +208,14 @@ On the main thread the reports accumulate until `consumeTruePeaks()` takes them.
 
 The snapshot messages carry `type: 'snapshot'` and keep their previous content.
 
+### 2.5 PPM Detectors in the Sampler
+
+The IEC 60268-10 quasi-peak detectors (Nordic Type I, BBC Type IIa) advance one sample per input sample: a 5 or 10 ms rolling window, an RC attack towards its maximum, and a linear return of 20 dB in 1.7 s or 24 dB in 2.8 s. Those times hold only if every sample reaches the detector exactly once. The snapshot windows cannot provide that: fed to the detector on every frame, a 4096-sample window replays the samples it shares with the previous frame, so at 60 fps the detector processes about five seconds of signal per second and the Nordic PPM fell 20 dB in about 0.3 s.
+
+The sampler therefore runs the detectors itself. In AudioWorklet mode four kernels (Type I and Type IIa, left and right) process each render quantum and post `{ type: 'ppm', nordicLeft, nordicRight, bbcLeft, bbcRight, samples, generation }` about every 10 ms, carrying the largest reading of the interval in dBFS. The ballistics arrive through `processorOptions` from `src/metering/ppm.js`, and the kernel is the arithmetic of `QuasiPeakDetector` there, which in turn reads exactly as `calculateQuasiPeakRC()` and `calculateBBCQuasiPeakRC()`; the rolling-window maximum comes from a monotonic queue, O(1) per sample. In ScriptProcessor mode `QuasiPeakDetector` processes each `onaudioprocess` block on the main thread; a missed block is not measured, and the detectors carry on from their state without a false reading.
+
+`consumePpm()` returns the largest readings since the previous call, so a burst that rose and fell between two frames still reaches the display and its hold; `resetPpm()` returns the detectors to their initial state and drops reports still in flight. Without the sampler the application feeds its own detectors with the analyser samples that are new since the previous frame, counted on `AudioContext.currentTime`. `tests/ppm-feed-test.js` checks the arithmetic, and `tests/browser/ppm-browser.js` times the displayed return in Chromium in both modes.
+
 ## 3. Comparison Matrix
 
 | Aspect | AudioWorklet | ScriptProcessorNode |

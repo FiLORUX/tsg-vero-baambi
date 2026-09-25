@@ -29,7 +29,10 @@ import { CorrelationMeter } from '../ui/correlation-meter.js';
 import { LoudnessRadar } from '../ui/radar.js';
 import { LUFSMeter, formatLUFS } from '../metering/lufs.js';
 import { TruePeakMeter, formatTruePeak, dbTPToAmplitude, TRUE_PEAK_MODE } from '../metering/true-peak.js';
-import { PPMMeter, formatPPM, NORDIC_PPM_MIN_DBFS, NORDIC_PPM_MAX_DBFS } from '../metering/ppm.js';
+import {
+  PPMMeter, formatPPM, QuasiPeakDetector,
+  NORDIC_PPM_MIN_DBFS, NORDIC_PPM_MAX_DBFS, NORDIC_PPM_BALLISTICS, BBC_PPM_BALLISTICS
+} from '../metering/ppm.js';
 import { SamplePeakMeter } from '../metering/sample-peak.js';
 import { LevelWindow } from '../metering/level-window.js';
 import { StereoMeter, formatCorrelation, calculateCorrelation } from '../metering/correlation.js';
@@ -418,6 +421,9 @@ const FFT_SIZE = 4096;
 const bufL = new Float32Array(FFT_SIZE);
 const bufR = new Float32Array(FFT_SIZE);
 
+/** @type {number|null} AudioContext time of the analyser read that last filled bufL/bufR */
+let analyserReadTime = null;
+
 // K-weighted sample buffers for LUFS measurement
 const kBufL = new Float32Array(FFT_SIZE);
 const kBufR = new Float32Array(FFT_SIZE);
@@ -443,6 +449,9 @@ function sampleAnalysers() {
     // Analyser mode: sequential reads with glitch filtering in meters
     analyserL.getFloatTimeDomainData(bufL);
     analyserR.getFloatTimeDomainData(bufR);
+    // The audio clock at the read tells the PPM detectors how many of these
+    // samples are new (see freshAnalyserSamples)
+    analyserReadTime = ac.currentTime;
   }
 }
 
@@ -707,6 +716,99 @@ function updateTruePeakMeter() {
 function resetTruePeakMeter() {
   stereoSamplerModule?.resetTruePeaks?.();
   truePeakMeter.reset();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PPM FEED (IEC 60268-10 TYPE I AND TYPE IIa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Detectors for local metering without the stereo sampler. They receive only
+// the analyser samples they have not seen, so each sample passes once.
+const analyserPpmDetectors = [
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: BBC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: BBC_PPM_BALLISTICS })
+];
+
+/** @type {number|null} AudioContext time up to which those detectors have seen the signal */
+let analyserPpmTime = null;
+
+/** Latest BBC Type IIa reading per channel in dBFS, drawn by the render loop */
+let bbcPpmReading = { left: -60, right: -60 };
+
+/**
+ * Number of samples at the end of bufL/bufR that the analyser-mode PPM
+ * detectors have not seen yet.
+ *
+ * AudioContext.currentTime and the analyser buffer both advance in render
+ * quanta, so the time between two analyser reads is the number of new
+ * samples. More than the analyser window (a stalled or throttled page) is
+ * capped at the window: the samples in between are lost to the analyser.
+ *
+ * @returns {number} Samples to take from the end of the buffers
+ */
+function freshAnalyserSamples() {
+  if (analyserReadTime === null) return 0;
+  const fresh = analyserPpmTime === null
+    ? FFT_SIZE
+    : Math.round((analyserReadTime - analyserPpmTime) * ac.sampleRate);
+  analyserPpmTime = analyserReadTime;
+  return clamp(fresh, 0, FFT_SIZE);
+}
+
+/**
+ * Feed the Nordic PPM meter and the BBC PPM reading with every sample since
+ * the previous call, each exactly once.
+ *
+ * The IEC 60268-10 detectors advance one sample per input sample, so their
+ * 5 and 10 ms integration and their return times (20 dB in 1.7 s, 24 dB in
+ * 2.8 s) hold only if no sample is replayed or skipped. The display buffers
+ * are rolling windows that overlap from frame to frame and cannot feed
+ * them. With the stereo sampler the detectors run on the audio thread (or
+ * on each ScriptProcessor block) and this takes their largest readings since
+ * the previous call; without it, the local detectors take only the analyser
+ * samples that are new. A call with nothing new leaves the readings as they
+ * are. Tauri mode draws the engine's Type I reading instead.
+ */
+function updatePpmMeters() {
+  if (activeCapture === 'tauri') return;
+
+  if (stereoSamplerModule?.hasPpmFeed?.()) {
+    const feed = stereoSamplerModule.consumePpm();
+    if (feed.samples === 0) return;
+    ppmMeter.updateFromReadings(feed.nordicLeft, feed.nordicRight);
+    bbcPpmReading = { left: feed.bbcLeft, right: feed.bbcRight };
+    return;
+  }
+
+  const fresh = freshAnalyserSamples();
+  if (fresh === 0) return;
+  const newestL = bufL.subarray(FFT_SIZE - fresh);
+  const newestR = bufR.subarray(FFT_SIZE - fresh);
+  const [nordicL, nordicR, bbcL, bbcR] = analyserPpmDetectors;
+  ppmMeter.updateFromReadings(nordicL.process(newestL), nordicR.process(newestR));
+  bbcPpmReading = { left: bbcL.process(newestL), right: bbcR.process(newestR) };
+}
+
+/**
+ * Latest BBC Type IIa reading, as updated by updatePpmMeters().
+ *
+ * @returns {{left: number, right: number}} Readings in dBFS
+ */
+function getBbcPpmReading() {
+  return bbcPpmReading;
+}
+
+/**
+ * Return the PPM detectors and the Nordic meter to their initial state,
+ * discarding readings still on their way from the AudioWorklet.
+ */
+function resetPpmMeters() {
+  stereoSamplerModule?.resetPpm?.();
+  analyserPpmDetectors.forEach((detector) => detector.reset());
+  ppmMeter.reset();
+  bbcPpmReading = { left: -60, right: -60 };
 }
 
 /**
@@ -2168,6 +2270,7 @@ function renderLoopDependencies() {
     helpers: {
       layoutXY, layoutLoudness, sampleAnalysers,
       updateTruePeakMeter, updateSamplePeakMeter, measureRms,
+      updatePpmMeters, getBbcPpmReading,
       drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
       updateRadarTooltip
     },
@@ -2870,7 +2973,7 @@ function bindTauriEvents() {
     r128Reset.addEventListener('click', () => {
       lufsMeter?.reset();
       resetTruePeakMeter();
-      ppmMeter?.reset();
+      resetPpmMeters();
       resetMeterState();
       radar?.clear();
       console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
@@ -3007,10 +3110,10 @@ function init() {
 
       // Update meters directly with current buffer data
       // (Bypasses measure-loop which requires activeCapture)
-      // True Peak and PPM use unweighted samples; True Peak takes the
-      // sample-complete feed when the sampler runs
+      // True Peak and PPM use unweighted samples, from the sample-complete
+      // feeds when the sampler runs
       updateTruePeakMeter();
-      ppmMeter.update(bufL, bufR);
+      updatePpmMeters();
 
       // LUFS uses K-weighted samples per ITU-R BS.1770-4
       const energy = lufsMeter.calculateBlockEnergy(kBufL, kBufR);
@@ -3040,7 +3143,7 @@ function init() {
       // has high peak levels that persist due to slow decay (11.76 dB/s)
       lufsMeter.reset();
       resetTruePeakMeter();
-      ppmMeter.reset();
+      resetPpmMeters();
     },
     onStart: () => {
       console.log('[Bootstrap] Meter verification started');
@@ -3051,7 +3154,7 @@ function init() {
       // Reset all meters before verification
       lufsMeter.reset();
       resetTruePeakMeter();
-      ppmMeter.reset();
+      resetPpmMeters();
       resetMeterState();
     },
     onComplete: (results) => {

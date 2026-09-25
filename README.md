@@ -609,6 +609,7 @@ It is **not** intended to replace certified measurement equipment for delivery Q
 npm test                     # all Node.js suites
 npm run test:browser         # true peak in headless Chromium (playwright-core)
 npm run test:browser:tauri   # Tauri mode against a mocked native engine
+npm run test:browser:ppm     # PPM return times as displayed (headless Chromium)
 node tests/metering-verification.js
 ```
 

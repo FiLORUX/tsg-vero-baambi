@@ -53,7 +53,6 @@ import {
 } from './meter-state.js';
 
 import {
-  calculateBBCQuasiPeakRC,
   dbfsToBBCPPM,
   dbfsToPPM,
   NORDIC_PPM_MIN_DBFS
@@ -440,8 +439,11 @@ function renderLoopInternal() {
     isSilentL = ppmDisplayL <= NORDIC_PPM_MIN_DBFS + 1;
     isSilentR = ppmDisplayR <= NORDIC_PPM_MIN_DBFS + 1;
   } else {
-    // Local metering
-    meters.ppmMeter.update(meters.bufL, meters.bufR);
+    // Local metering: the Type I and Type IIa detectors see every sample
+    // once, on the audio thread when the stereo sampler runs; the display
+    // buffers overlap from frame to frame and are not fed to them. This also
+    // updates the BBC reading drawn below.
+    helpers.updatePpmMeters();
     const ppmState = meters.ppmMeter.getState();
     ppmDisplayL = ppmState.dbfsLeft;
     ppmDisplayR = ppmState.dbfsRight;
@@ -584,7 +586,7 @@ function renderLoopInternal() {
   // ─────────────────────────────────────────────────────────────────────────
   // BBC PPM Meter (IEC 60268-10 Type IIa)
   // ─────────────────────────────────────────────────────────────────────────
-  // Sample-by-sample processing with 10 ms rolling window
+  // Sample-by-sample detection with 10 ms rolling window
   // Attack: −2 dB at 10 ms (τ ≈ 6.33 ms) — slower than Nordic
   // Return: 24 dB in 2.8 s (8.57 dB/s) — slower than Nordic
 
@@ -594,14 +596,12 @@ function renderLoopInternal() {
     // Remote: use remoteBbcPpm (derived from TP, sample-level processing not available)
     bbcDisplayL = meterState.remoteBbcPpmL;
     bbcDisplayR = meterState.remoteBbcPpmR;
-  } else if (!isTauriCapture && meters.bufL && meters.bufR && config.sampleRate) {
-    // Local: sample-by-sample quasi-peak detection per IEC 60268-10 Type IIa
-    bbcDisplayL = calculateBBCQuasiPeakRC(meters.bufL, config.sampleRate, meterState.bbcRcStateL);
-    bbcDisplayR = calculateBBCQuasiPeakRC(meters.bufR, config.sampleRate, meterState.bbcRcStateR);
+  } else if (!isTauriCapture) {
+    // Local: Type IIa detector on every sample, read with the Nordic PPM above
+    ({ left: bbcDisplayL, right: bbcDisplayR } = helpers.getBbcPpmReading());
   } else {
-    // Fallback: True Peak values, when buffers are unavailable and in Tauri
-    // mode, where the engine has no Type IIa detector and the spliced display
-    // buffers must not be measured
+    // Tauri: the engine has no Type IIa detector and the spliced display
+    // buffers must not be measured; the True Peak reading stands in
     bbcDisplayL = tpLeft;
     bbcDisplayR = tpRight;
   }

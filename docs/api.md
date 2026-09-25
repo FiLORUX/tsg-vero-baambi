@@ -138,7 +138,11 @@ const meter = new PPMMeter({
 
 ##### `update(leftBuffer, rightBuffer)`
 
-Process audio samples through quasi-peak detector.
+Process audio samples through quasi-peak detector. The detector advances one sample per input sample, so pass consecutive blocks with each sample once: a rolling analyser window fetched every frame replays samples and runs the return several times too fast.
+
+##### `updateFromReadings(readingLeft, readingRight)`
+
+Sample-complete feed: Type I readings in dBFS from detectors that see every sample, such as `consumePpm()` from `src/audio/stereo-sampler.js`. Applies the display clamp and peak hold of `update()`; a non-finite reading leaves its channel unchanged.
 
 ##### `getState()` → `PPMMeterState`
 
@@ -160,6 +164,22 @@ Process audio samples through quasi-peak detector.
 ##### `resetPeakHold()`
 
 Reset peak hold values only.
+
+---
+
+### QuasiPeakDetector
+
+Streaming IEC 60268-10 quasi-peak detector for one channel, Nordic Type I or BBC Type IIa. Feed it consecutive blocks, each sample once; it reads exactly as `calculateQuasiPeakRC()` and `calculateBBCQuasiPeakRC()`, with the rolling-window maximum kept in O(1) per sample.
+
+```javascript
+import { QuasiPeakDetector, BBC_PPM_BALLISTICS } from './src/metering/ppm.js';
+
+const nordic = new QuasiPeakDetector({ sampleRate: 48000 });
+const bbc = new QuasiPeakDetector({ sampleRate: 48000, ballistics: BBC_PPM_BALLISTICS });
+const largest = nordic.process(block); // largest reading during the block, dBFS
+```
+
+`reading` returns the current reading and `reset()` returns to −60 dBFS. `NORDIC_PPM_BALLISTICS` and `BBC_PPM_BALLISTICS` hold the window, attack time constant and return rate; `quasiPeakCoefficients(ballistics, sampleRate)` derives the per-sample coefficients that every detector in the application shares.
 
 ---
 
