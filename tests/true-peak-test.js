@@ -520,7 +520,7 @@ async function testSampleCompleteChain() {
   let lastFrame = -1;
   renderThroughWorklet(Processor, SAMPLE_RATE, padded, padded, (message) => {
     node.port.onmessage({ data: message });
-    delivered += message.samples ?? 0;
+    if (message.type === 'truePeak') delivered += message.samples;
     // The UI consumes once per 16.7 ms frame, except during the stall
     const frame = Math.floor(delivered / 800);
     const stalled = delivered >= stallStart && delivered <= stallEnd;

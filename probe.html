@@ -638,6 +638,20 @@ david@thast.se  ·  +46 700 30 30 60
       analyserR.getFloatTimeDomainData(bufR);
     }
 
+    /**
+     * Largest absolute sample value of a buffer (analyser fallback).
+     * @param {Float32Array} buffer - Channel samples
+     * @returns {number} Linear peak
+     */
+    function peakOf(buffer) {
+      let peak = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        const abs = Math.abs(buffer[i]);
+        if (abs > peak) peak = abs;
+      }
+      return peak;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // SOURCE CAPTURE
     // ─────────────────────────────────────────────────────────────────────────
@@ -989,6 +1003,10 @@ david@thast.se  ·  +46 700 30 30 60
       packetCount = 0;
       lastPacketCountReset = Date.now();
 
+      // The first packet carries sample peaks from its own interval only,
+      // not from the time nothing was transmitted
+      if (stereoSampler.hasSamplePeakFeed()) stereoSampler.consumeSamplePeaks();
+
       metricsInterval = setInterval(() => {
         try {
           if (!ac || !analyserL || !analyserR) return;
@@ -1021,6 +1039,16 @@ david@thast.se  ·  +46 700 30 30 60
           } else {
             ppmMeter.update(bufL, bufR);
           }
+
+          // Sample peak: the largest sample magnitude since the previous
+          // transmission, from the sampler, which measures every sample. The
+          // analyser window covers only 85 of every 100 ms; it remains the
+          // fallback only. Silence is sent as −Infinity (null in JSON)
+          const samplePeak = stereoSampler.hasSamplePeakFeed()
+            ? stereoSampler.consumeSamplePeaks()
+            : { left: peakOf(bufL), right: peakOf(bufR) };
+          const samplePeakDbL = samplePeak.left > 0 ? 20 * Math.log10(samplePeak.left) : -Infinity;
+          const samplePeakDbR = samplePeak.right > 0 ? 20 * Math.log10(samplePeak.right) : -Infinity;
 
           // Update other meters (they use update() + getState() API)
           stereoMeter.update(bufL, bufR);
@@ -1091,6 +1119,10 @@ david@thast.se  ·  +46 700 30 30 60
                 ppm: {
                   left: ppm.dbfsLeft,
                   right: ppm.dbfsRight
+                },
+                samplePeak: {
+                  left: samplePeakDbL,
+                  right: samplePeakDbR
                 },
                 rms: {
                   left: rmsDbL,

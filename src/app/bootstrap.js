@@ -58,7 +58,7 @@ import { initMeasureLoop, startMeasureLoop, stopMeasureLoop, pauseMeasurement, r
 // Render loop (60 Hz) - extracted from bootstrap
 import { initRenderLoop, startRenderLoop, stopRenderLoop, triggerImmediateRender } from './render-loop.js';
 // Shared meter state between measureLoop and renderLoop
-import { meterState, resetMeterState, resetRemoteMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, NORDIC_PPM_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
+import { meterState, resetMeterState, resetRemoteMeterState, MEASURE_INTERVAL_MS, TP_PEAK_HOLD_SEC, NORDIC_PPM_PEAK_HOLD_SEC, SP_PEAK_HOLD_SEC, FRAME_HOLD_THRESHOLD } from './meter-state.js';
 // Drag-and-drop system removed (see docs/PROJECT-A-DRAG-DROP-REMOVAL.md)
 // Fixed layout provides consistent UX for broadcast monitoring
 // Transition guard for EBU pulse blanking - extracted from bootstrap
@@ -1921,7 +1921,7 @@ function handleRemoteMetrics(probeId, metrics) {
   // ─────────────────────────────────────────────────────────────────────────
   // Values arrive as JSON, where −Infinity (silence, no data yet) becomes null.
   // Number.isFinite rejects null; the global isFinite would coerce it to 0.
-  const { lufs, truePeak, ppm, rms, stereo, visualization } = metrics;
+  const { lufs, truePeak, ppm, samplePeak, rms, stereo, visualization } = metrics;
 
   if (lufs) {
     // Momentary LUFS
@@ -2090,6 +2090,35 @@ function handleRemoteMetrics(probeId, metrics) {
   if (rms) {
     meterState.remoteRmsL = rms.left ?? -60;
     meterState.remoteRmsR = rms.right ?? -60;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SAMPLE PEAK STATE
+  // ─────────────────────────────────────────────────────────────────────────
+  // The largest sample magnitude since the probe's previous transmission,
+  // measured on every sample. Silence arrives as null (JSON has no −∞).
+  if (samplePeak) {
+    const spL = Number.isFinite(samplePeak.left) ? samplePeak.left : -60;
+    const spR = Number.isFinite(samplePeak.right) ? samplePeak.right : -60;
+    meterState.remoteSpL = spL;
+    meterState.remoteSpR = spR;
+
+    // Sample Peak hold (3 s), as for the other remote bars
+    const now = performance.now() / 1000;
+    if (spL > meterState.spPeakHoldL) {
+      meterState.spPeakHoldL = spL;
+      meterState.spPeakTimeL = now;
+    } else if (now - meterState.spPeakTimeL > SP_PEAK_HOLD_SEC) {
+      meterState.spPeakHoldL = spL;
+      meterState.spPeakTimeL = now;
+    }
+    if (spR > meterState.spPeakHoldR) {
+      meterState.spPeakHoldR = spR;
+      meterState.spPeakTimeR = now;
+    } else if (now - meterState.spPeakTimeR > SP_PEAK_HOLD_SEC) {
+      meterState.spPeakHoldR = spR;
+      meterState.spPeakTimeR = now;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────

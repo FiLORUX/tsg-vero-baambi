@@ -216,6 +216,10 @@ The sampler therefore runs the detectors itself. In AudioWorklet mode four kerne
 
 `consumePpm()` returns the largest readings since the previous call, so a burst that rose and fell between two frames still reaches the display and its hold; `resetPpm()` returns the detectors to their initial state and drops reports still in flight. Without the sampler the application feeds its own detectors with the analyser samples that are new since the previous frame, counted on `AudioContext.currentTime`. `tests/ppm-feed-test.js` checks the arithmetic, and `tests/browser/ppm-browser.js` times the displayed return in Chromium in both modes.
 
+### 2.6 Sample Peak in the Sampler
+
+The sampler also takes the largest absolute sample value of every sample, on the true peak's cadence: the worklet posts `{ type: 'samplePeak', left, right, samples }` about every 10 ms, and the ScriptProcessor fallback measures each block. `consumeSamplePeaks()` returns the maxima since the previous call. A single-sample peak therefore reaches a consumer on any schedule; the probe page, which transmits every 100 ms while the analyser window spans 85 ms, sends the sample peak of every sample to remote receivers. No reset is needed: the reports carry no state beyond their own interval.
+
 ## 3. Comparison Matrix
 
 | Aspect | AudioWorklet | ScriptProcessorNode |

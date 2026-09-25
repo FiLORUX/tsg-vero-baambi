@@ -53,6 +53,10 @@
  *                                                 readings (dBFS) during the
  *                                                 `samples` samples since the
  *                                                 previous ppm message
+ *   { type: 'samplePeak', left, right, samples }  largest sample magnitudes
+ *                                                 (linear) of the `samples`
+ *                                                 samples since the previous
+ *                                                 samplePeak message
  *
  * Messages from the main thread:
  *   { type: 'resetTruePeak', generation }         discard the maxima gathered
@@ -318,6 +322,12 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     this._ppmSamples = 0;
     this._ppmGeneration = 0;
 
+    // Sample peak of every sample, on the same cadence. It carries no state
+    // beyond the pending maxima, so it needs no reset generation.
+    this._samplePeakL = 0;
+    this._samplePeakR = 0;
+    this._samplePeakSamples = 0;
+
     this.port.onmessage = (event) => {
       if (event.data?.type === 'resetTruePeak') {
         this._truePeakMaxL = 0;
@@ -331,6 +341,39 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
         this._ppmGeneration = event.data.generation;
       }
     };
+  }
+
+  /**
+   * Measure the sample peak of one quantum per channel and post the maxima
+   * when due.
+   *
+   * @param {Float32Array} L - Left channel samples
+   * @param {Float32Array} R - Right channel samples
+   */
+  _measureSamplePeak(L, R) {
+    let peakL = this._samplePeakL;
+    let peakR = this._samplePeakR;
+    for (let i = 0; i < L.length; i++) {
+      const absL = L[i] < 0 ? -L[i] : L[i];
+      const absR = R[i] < 0 ? -R[i] : R[i];
+      if (absL > peakL) peakL = absL;
+      if (absR > peakR) peakR = absR;
+    }
+    this._samplePeakL = peakL;
+    this._samplePeakR = peakR;
+    this._samplePeakSamples += L.length;
+
+    if (this._samplePeakSamples >= this._truePeakPostInterval) {
+      this.port.postMessage({
+        type: 'samplePeak',
+        left: this._samplePeakL,
+        right: this._samplePeakR,
+        samples: this._samplePeakSamples
+      });
+      this._samplePeakL = 0;
+      this._samplePeakR = 0;
+      this._samplePeakSamples = 0;
+    }
   }
 
   /**
@@ -406,6 +449,7 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     if (!input || input.length < 2) {
       this._measureTruePeak(this._silence, this._silence);
       this._measurePpm(this._silence, this._silence);
+      this._measureSamplePeak(this._silence, this._silence);
       return true;
     }
 
@@ -422,10 +466,11 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
       this._writeIndex = (this._writeIndex + 1) % bufferSize;
     }
 
-    // True peak and quasi-peak readings of every sample, accumulated until
-    // the next truePeak and ppm messages
+    // True peak, quasi-peak readings and sample peak of every sample,
+    // accumulated until the next truePeak, ppm and samplePeak messages
     this._measureTruePeak(L, R);
     this._measurePpm(L, R);
+    this._measureSamplePeak(L, R);
 
     this._samplesSincePost += blockSize;
 

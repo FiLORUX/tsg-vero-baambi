@@ -653,7 +653,8 @@ function renderLoopInternal() {
   let spDisplayL, spDisplayR;
 
   if (isRemoteCapture) {
-    // Remote: use sample peak values from meterState
+    // Remote: the probe's largest sample since its previous transmission;
+    // holds are updated by handleRemoteMetrics
     spDisplayL = meterState.remoteSpL;
     spDisplayR = meterState.remoteSpR;
   } else {

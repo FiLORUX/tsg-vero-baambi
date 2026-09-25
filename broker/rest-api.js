@@ -305,6 +305,7 @@ function handleProbeInfo(res, probeId) {
         lufs: normalised.lufs,
         truePeak: normalised.truePeak,
         ppm: normalised.ppm,
+        samplePeak: normalised.samplePeak,
         stereo: normalised.stereo,
         rms: normalised.rms
       } : null
@@ -487,11 +488,11 @@ function handlePrometheusMetrics(res) {
  *   - Rich (probe.html):        { metrics: { lufs: {...}, ... }, visualization: {...} }
  *
  * @param {Object} payload - Raw metrics payload
- * @returns {{ lufs: Object|null, truePeak: Object|null, ppm: Object|null, stereo: Object|null, rms: Object|null }}
+ * @returns {{ lufs: Object|null, truePeak: Object|null, ppm: Object|null, samplePeak: Object|null, stereo: Object|null, rms: Object|null }}
  */
 function normalisePayload(payload) {
   if (!payload) {
-    return { lufs: null, truePeak: null, ppm: null, stereo: null, rms: null };
+    return { lufs: null, truePeak: null, ppm: null, samplePeak: null, stereo: null, rms: null };
   }
 
   // Detect format: if payload.metrics exists, it's the rich format
@@ -501,6 +502,7 @@ function normalisePayload(payload) {
     lufs: source.lufs || null,
     truePeak: source.truePeak || null,
     ppm: source.ppm || null,
+    samplePeak: source.samplePeak || null,
     stereo: source.stereo || null,
     rms: source.rms || null
   };

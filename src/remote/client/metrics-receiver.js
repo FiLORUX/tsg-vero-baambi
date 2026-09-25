@@ -87,6 +87,7 @@ const PROBE_STALE_TIMEOUT_MS = 5000;
  * @property {import('../types.js').LUFSMetrics} lufs
  * @property {import('../types.js').TruePeakMetrics} truePeak
  * @property {import('../types.js').PPMMetrics} ppm
+ * @property {import('../types.js').SamplePeakMetrics|null} [samplePeak] - Sample peak since the previous packet
  * @property {import('../types.js').StereoMetrics} stereo
  * @property {Object} [rms] - RMS levels in dBFS
  * @property {Object} [visualization] - Pre-computed visualization data
@@ -542,6 +543,7 @@ export class MetricsReceiver {
       lufs: metricsData.lufs || createEmptyLUFS(),
       truePeak: metricsData.truePeak || createEmptyTruePeak(),
       ppm: metricsData.ppm || createEmptyPPM(),
+      samplePeak: metricsData.samplePeak || null,
       stereo: metricsData.stereo || createEmptyStereo(),
       rms: metricsData.rms || null,
       visualization: payload.visualization || null,

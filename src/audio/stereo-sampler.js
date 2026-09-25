@@ -27,8 +27,9 @@
  * Both modes provide guaranteed L/R synchronisation from the same audio block.
  *
  * Both modes also measure every sample: the ITU-R BS.1770-4 true peak
- * (consumeTruePeaks) and the IEC 60268-10 quasi-peak readings of the Nordic
- * Type I and BBC Type IIa detectors (consumePpm). The display buffers are
+ * (consumeTruePeaks), the IEC 60268-10 quasi-peak readings of the Nordic
+ * Type I and BBC Type IIa detectors (consumePpm) and the sample peak
+ * (consumeSamplePeaks). The display buffers are
  * rolling windows that overlap from one frame to the next; a detector that
  * advances sample by sample must not be fed from them.
  *
@@ -85,6 +86,16 @@ let totalPpmSamples = 0;
 
 /** @type {number} PPM reset generation; worklet reports from an earlier generation are dropped */
 let ppmGeneration = 0;
+
+/** @type {number} Largest sample magnitude (linear) per channel since the last consumeSamplePeaks() */
+let pendingSampleL = 0;
+let pendingSampleR = 0;
+
+/** @type {number} Samples measured since the last consumeSamplePeaks() */
+let pendingSampleSamples = 0;
+
+/** @type {number} Samples measured for sample peak since initialisation */
+let totalSampleSamples = 0;
 
 /** @type {QuasiPeakDetector[]|null} Main-thread PPM detectors in ScriptProcessor mode */
 let ppmDetectors = null;
@@ -207,6 +218,8 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
       if (data.generation === peakGeneration) {
         accumulateTruePeak(data.left, data.right, data.samples);
       }
+    } else if (data.type === 'samplePeak') {
+      accumulateSamplePeak(data.left, data.right, data.samples);
     } else if (data.type === 'ppm') {
       if (data.generation === ppmGeneration) {
         accumulatePpm(data.nordicLeft, data.nordicRight, data.bbcLeft, data.bbcRight, data.samples);
@@ -294,6 +307,7 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
       ppmDetectors[3].process(inputR),
       inputL.length
     );
+    accumulateSamplePeak(blockPeak(inputL), blockPeak(inputR), inputL.length);
 
     // Copy to our buffers (they're the same size: 4096)
     syncedBufL.set(inputL);
@@ -316,6 +330,37 @@ function accumulateTruePeak(left, right, samples) {
   if (right > pendingPeakR) pendingPeakR = right;
   pendingPeakSamples += samples;
   totalPeakSamples += samples;
+}
+
+/**
+ * Largest absolute sample value of a block.
+ *
+ * @param {Float32Array} block - Channel samples
+ * @returns {number} Linear peak; NaN samples are ignored
+ * @private
+ */
+function blockPeak(block) {
+  let peak = 0;
+  for (let i = 0; i < block.length; i++) {
+    const abs = Math.abs(block[i]);
+    if (abs > peak) peak = abs;
+  }
+  return peak;
+}
+
+/**
+ * Fold one sample-peak report into the pending maxima.
+ *
+ * @param {number} left - Left channel peak, linear
+ * @param {number} right - Right channel peak, linear
+ * @param {number} samples - Samples covered by the report
+ * @private
+ */
+function accumulateSamplePeak(left, right, samples) {
+  if (left > pendingSampleL) pendingSampleL = left;
+  if (right > pendingSampleR) pendingSampleR = right;
+  pendingSampleSamples += samples;
+  totalSampleSamples += samples;
 }
 
 /**
@@ -379,6 +424,38 @@ export function consumeTruePeaks() {
   pendingPeakL = 0;
   pendingPeakR = 0;
   pendingPeakSamples = 0;
+  return result;
+}
+
+/**
+ * Whether the sampler measures the sample peak of every sample.
+ *
+ * True in AudioWorklet and ScriptProcessor mode. When false, a caller must
+ * fall back to the analyser windows, which leave gaps when they are read
+ * less often than they are long.
+ *
+ * @returns {boolean}
+ */
+export function hasSamplePeakFeed() {
+  return samplingMode === 'worklet' || samplingMode === 'scriptprocessor';
+}
+
+/**
+ * Take the largest sample magnitudes of all samples measured since the
+ * previous call.
+ *
+ * Reports accumulate between calls, so a consumer on any schedule (a render
+ * frame, a 10 Hz network transmission, a throttled tab) receives the peak of
+ * every sample once. Zero peaks with zero samples mean nothing new has been
+ * measured.
+ *
+ * @returns {{left: number, right: number, samples: number}} Linear peaks and sample count
+ */
+export function consumeSamplePeaks() {
+  const result = { left: pendingSampleL, right: pendingSampleR, samples: pendingSampleSamples };
+  pendingSampleL = 0;
+  pendingSampleR = 0;
+  pendingSampleSamples = 0;
   return result;
 }
 
@@ -482,7 +559,8 @@ export function getSamplerStats() {
     scriptProcessorActive: scriptProcessorNode !== null,
     lastTimestamp,
     truePeakSamples: totalPeakSamples,
-    ppmSamples: totalPpmSamples
+    ppmSamples: totalPpmSamples,
+    samplePeakSamples: totalSampleSamples
   };
 }
 
@@ -519,4 +597,8 @@ export function disposeStereoSampler() {
   pendingPpmSamples = 0;
   totalPpmSamples = 0;
   ppmDetectors = null;
+  pendingSampleL = 0;
+  pendingSampleR = 0;
+  pendingSampleSamples = 0;
+  totalSampleSamples = 0;
 }

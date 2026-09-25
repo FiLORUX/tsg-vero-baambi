@@ -24,7 +24,9 @@
  *   5. Remote chain: the probe page through a local broker into the
  *      application's remote mode; then a scripted probe whose level drops,
  *      where the received TPmax must hold while the bar follows the level,
- *      and a switch to a second probe, which must start a new TPmax.
+ *      and a switch to a second probe, which must start a new TPmax. The
+ *      sample peak travels the same chain: the probe's reading must arrive
+ *      and be displayed, and the received bar and hold must follow a drop.
  *
  * Requirements: the playwright-core dev dependency and a Chromium build
  * (npx playwright-core install chromium), or CHROMIUM_PATH pointing at a
@@ -477,6 +479,17 @@ async function readRemoteTruePeak(app) {
   });
 }
 
+async function readRemoteSamplePeak(app) {
+  return app.evaluate(async () => {
+    const { meterState } = await import('/src/app/meter-state.js');
+    return {
+      text: document.getElementById('spLVal')?.textContent.trim(),
+      bar: meterState.remoteSpL,
+      hold: meterState.spPeakHoldL
+    };
+  });
+}
+
 async function testRemoteChain(browser, origin) {
   console.log('\n--- 5. Remote chain: probe → broker → application ---');
 
@@ -498,6 +511,10 @@ async function testRemoteChain(browser, origin) {
     const probeMode = await probe.evaluate(async () => (await import('/src/audio/stereo-sampler.js')).getSamplingMode());
     check('Probe page measures through the AudioWorklet sampler', probeMode === 'worklet', probeMode);
     assertEbu(`Probe 1 kHz at −20 dBFS received as TPmax (probe shows ${probeDisplay})`, received.tpMax, -20.0);
+    const receivedSamplePeak = await readRemoteSamplePeak(remote.app);
+    check('Probe sample peak of every sample received and displayed',
+      Math.abs(receivedSamplePeak.bar + 20) <= 0.05 && receivedSamplePeak.text === '\u221220.0',
+      `${receivedSamplePeak.bar.toFixed(3)} dBFS, display "${receivedSamplePeak.text}"`);
     check('Received metrics are applied without listener errors', remote.listenerErrors.length === 0,
       remote.listenerErrors[0] ?? 'none');
     await remote.app.close();
@@ -523,7 +540,8 @@ async function testRemoteChain(browser, origin) {
             timestamp: Date.now(),
             metrics: {
               lufs: { momentary: levelDb - 3, shortTerm: levelDb - 3, integrated: levelDb - 3, lra: null },
-              truePeak: { left: levelDb, right: levelDb, max: levelDb }
+              truePeak: { left: levelDb, right: levelDb, max: levelDb },
+              samplePeak: { left: levelDb - 1, right: levelDb - 1 }
             }
           }
         }));
@@ -548,6 +566,10 @@ async function testRemoteChain(browser, origin) {
       check('Bar follows the received level down to −40 dBTP', after.bar === -40, `${after.bar} dBTP`);
       check('TPmax holds −20 dBTP after the level has dropped', after.tpMax === -20 && after.text === '-20.0 dBTP',
         `${after.tpMax} dBTP, display "${after.text}"`);
+      const samplePeakAfter = await readRemoteSamplePeak(scripted.app);
+      check('Sample Peak bar follows the received level down to −41 dBFS, its hold keeps −21 dBFS',
+        samplePeakAfter.bar === -41 && samplePeakAfter.hold === -21 && samplePeakAfter.text === '\u221241.0',
+        `bar ${samplePeakAfter.bar}, hold ${samplePeakAfter.hold}, display "${samplePeakAfter.text}"`);
 
       await scripted.app.click(`[data-probe-id="${probeB}"] input[type=radio]`);
       await waitForBar(scripted.app, -30);

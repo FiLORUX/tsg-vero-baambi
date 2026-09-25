@@ -90,6 +90,15 @@ export const METRICS_SCHEMA_VERSION = 1;
  */
 
 /**
+ * @typedef {Object} SamplePeakMetrics
+ * @property {number} left - Largest left sample magnitude since the previous packet in dBFS
+ * @property {number} right - Largest right sample magnitude since the previous packet in dBFS
+ *
+ * Measured on every sample, so a peak between two packets is not lost.
+ * Silence is −Infinity, which JSON transmits as null.
+ */
+
+/**
  * @typedef {Object} StereoMetrics
  * @property {number} correlation - Phase correlation (-1 to +1)
  * @property {number} balance - L/R balance (-1 = full left, +1 = full right)
@@ -118,6 +127,7 @@ export const METRICS_SCHEMA_VERSION = 1;
  * @property {LUFSMetrics} lufs - EBU R128 loudness metrics
  * @property {TruePeakMetrics} truePeak - ITU-R BS.1770 true peak
  * @property {PPMMetrics} ppm - IEC 60268-10 PPM levels
+ * @property {SamplePeakMetrics} [samplePeak] - Sample peak (IEC 60268-18 / AES17)
  * @property {StereoMetrics} stereo - Stereo field analysis
  * @property {boolean} isActive - Whether probe is receiving audio
  * @property {string} [inputDevice] - Input device name if available
