@@ -228,4 +228,14 @@ export class BalanceMeter {
       this.valueEl.textContent = balanceStr;
     }
   }
+
+  /**
+   * Return the meter to centre at once.
+   * Discards the smoothing state, so a meter whose source has gone away
+   * reads centred immediately instead of gliding back from its last value.
+   */
+  reset() {
+    this.monoDevHold = 0;
+    this.drawValue(0);
+  }
 }

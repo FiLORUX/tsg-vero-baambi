@@ -24,7 +24,8 @@
  *   5. Remote chain: the probe page through a local broker into the
  *      application's remote mode; then a scripted probe whose level drops,
  *      where the received TPmax must hold while the bar follows the level,
- *      and a switch to a second probe, which must start a new TPmax.
+ *      a switch to a second probe, which must start a new TPmax, and that
+ *      probe going offline, which must clear the displays without errors.
  *
  * Engines: BROWSER=chromium (default), firefox or webkit, the engine behind
  * Safari. Requirements: the playwright-core dev dependency and the engine's
@@ -453,9 +454,13 @@ async function startBroker() {
 async function openRemoteApplication(browser, origin, brokerUrl, probeSelector) {
   const app = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   app.setDefaultTimeout(60000);
+  // Receiver listeners catch and log their own exceptions, so a failure in a
+  // metrics or probe-list listener surfaces only on the console
   const listenerErrors = [];
+  const messages = [];
   app.on('console', (message) => {
-    if (message.type() === 'error' && /Metrics listener error/.test(message.text())) listenerErrors.push(message.text());
+    messages.push(message.text());
+    if (message.type() === 'error' && /listener error/.test(message.text())) listenerErrors.push(message.text());
   });
   await app.goto(`${origin}/index.html`);
   await app.waitForFunction(() => document.getElementById('stereoSyncMode')?.textContent === 'AudioWorklet');
@@ -464,7 +469,7 @@ async function openRemoteApplication(browser, origin, brokerUrl, probeSelector) 
   await app.waitForSelector(probeSelector);
   await app.click(probeSelector);
   await app.click('#btnStartCapture');
-  return { app, listenerErrors };
+  return { app, listenerErrors, messages };
 }
 
 async function readRemoteTruePeak(app) {
@@ -559,6 +564,22 @@ async function testRemoteChain(browser, origin) {
       check('Switching probe starts a new TPmax', switched.tpMax === -30 && switched.text === '-30.0 dBTP',
         `${switched.tpMax} dBTP, display "${switched.text}"`);
       check('Received metrics are applied without listener errors', scripted.listenerErrors.length === 0,
+        scripted.listenerErrors[0] ?? 'none');
+
+      // 5c. The selected probe goes offline while capture runs
+      const indexB = sockets.findIndex(([probeId]) => probeId === probeB);
+      const [[, socketB]] = sockets.splice(indexB, 1);
+      socketB.close();
+      const deadline = Date.now() + 30000;
+      while (Date.now() < deadline && !scripted.messages.some((text) => /Remote displays cleared/.test(text))) {
+        await new Promise((wake) => setTimeout(wake, 50));
+      }
+      const offline = await readRemoteTruePeak(scripted.app);
+      check('An offline probe clears the displays to the end', scripted.messages.some((text) => /Remote displays cleared/.test(text)),
+        `TPmax display "${offline.text}", bar ${offline.bar} dBTP`);
+      check('An offline probe leaves TPmax and the bar at rest', offline.text === '--.- dBTP' && offline.bar === -60,
+        `display "${offline.text}", bar ${offline.bar} dBTP`);
+      check('A probe going offline raises no listener errors', scripted.listenerErrors.length === 0,
         scripted.listenerErrors[0] ?? 'none');
       await scripted.app.close();
     } finally {

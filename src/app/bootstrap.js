@@ -1407,9 +1407,6 @@ async function startRemoteCapture() {
 }
 
 /**
- * Stop remote capture - unsubscribe from probe (but keep connection for UI).
- */
-/**
  * Clear all remote meter displays to idle state.
  * Called when probe goes offline while capture is active.
  */
@@ -1435,11 +1432,11 @@ function clearRemoteDisplays() {
   if (msFillM) { msFillM.style.width = '0%'; }
   if (msFillS) { msFillS.style.width = '0%'; }
 
-  // Width meter
-  if (widthMeterUI) { widthMeterUI.update(0, 0); }
+  // Width meter: empty bar, peak tick at zero
+  if (widthMeterUI) { widthMeterUI.draw(0, 0); }
 
-  // Balance meter
-  if (balanceMeterUI) { balanceMeterUI.update(0); }
+  // Balance meter: centred at once, without smoothing back from the last value
+  if (balanceMeterUI) { balanceMeterUI.reset(); }
 
   // Latency
   if (remoteLatency) { remoteLatency.textContent = '–'; }
@@ -1447,6 +1444,9 @@ function clearRemoteDisplays() {
   console.log('[Bootstrap] Remote displays cleared - probe offline');
 }
 
+/**
+ * Stop remote capture - unsubscribe from probe (but keep connection for UI).
+ */
 function stopRemoteCapture() {
   try {
     // Unsubscribe from current probe but keep connection for probe list
