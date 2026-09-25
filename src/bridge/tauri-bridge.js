@@ -27,6 +27,9 @@ const tauriBridge = {
   bufferSize: null,
   latencyMs: null,
   listeners: [],
+  // Reset generation of the readings being shown; adopted from the first
+  // packet, then advanced by resetMeters()
+  generation: null,
   // Pre-allocated buffers for binary parsing (avoids GC pressure)
   _samplesLeft: new Float32Array(512),
   _samplesRight: new Float32Array(512),
@@ -35,7 +38,7 @@ const tauriBridge = {
 // ─────────────────────────────────────────────────────────────────────────────
 // BINARY IPC PROTOCOL
 // ─────────────────────────────────────────────────────────────────────────────
-// Binary format (little-endian, 4144 bytes total):
+// Binary format (little-endian, 4148 bytes total):
 //   0-3:    lufs_m (f32)
 //   4-7:    lufs_s (f32)
 //   8-11:   lufs_i (f32)
@@ -47,11 +50,12 @@ const tauriBridge = {
 //   32-35:  sample_rate (u32)
 //   36-39:  buffer_size (u32)
 //   40-47:  timestamp_us (u64)
-//   48-2095:   samples_left (512 × f32)
-//   2096-4143: samples_right (512 × f32)
+//   48-51:  generation (u32)  reset generation of every field in the packet
+//   52-2099:   samples_left (512 × f32)
+//   2100-4147: samples_right (512 × f32)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BINARY_HEADER_SIZE = 48;
+const BINARY_HEADER_SIZE = 52;
 const VIS_SAMPLES = 512;
 
 /**
@@ -81,6 +85,9 @@ function parseBinaryMeteringData(data) {
   // Timestamp for latency measurement (BigInt for u64)
   const timestampUs = view.getBigUint64(40, true);
 
+  // Reset generation the readings belong to
+  const generation = view.getUint32(48, true);
+
   // Sample arrays - create views directly into buffer (zero-copy)
   const samplesLeft = new Float32Array(buffer, BINARY_HEADER_SIZE, VIS_SAMPLES);
   const samplesRight = new Float32Array(buffer, BINARY_HEADER_SIZE + VIS_SAMPLES * 4, VIS_SAMPLES);
@@ -97,6 +104,7 @@ function parseBinaryMeteringData(data) {
     sampleRate,
     bufferSize,
     timestampUs,
+    generation,
     samplesLeft,
     samplesRight,
   };
@@ -151,6 +159,11 @@ export async function initTauriBridge(callbacks = {}) {
     const rawData = event.payload;
     const uint8 = rawData instanceof Uint8Array ? rawData : new Uint8Array(rawData);
     const data = parseBinaryMeteringData(uint8);
+
+    // After a reset, packets measured before it may still be on their way;
+    // only readings of the current generation reach the meters
+    tauriBridge.generation ??= data.generation;
+    if (data.generation !== tauriBridge.generation) return;
 
     // Call the callback with parsed metering data
     if (callbacks.onMeteringUpdate) {
@@ -245,6 +258,30 @@ export async function stopCapture() {
 
   tauriBridge.currentBackend = null;
   console.log('[TauriBridge] Stopped capture');
+}
+
+/**
+ * Reset the native measurement (the R128 reset).
+ *
+ * The new generation takes effect at once, before the engine confirms, so
+ * packets measured before the reset are dropped even while the request is
+ * still on its way to the engine.
+ *
+ * @returns {Promise<void>}
+ */
+export async function resetMeters() {
+  if (!isTauri()) {
+    return;
+  }
+
+  const tauriCore = getTauriCore();
+  if (!tauriCore) {
+    console.error('[TauriBridge] Tauri core API not available');
+    return;
+  }
+
+  tauriBridge.generation = ((tauriBridge.generation ?? 0) + 1) >>> 0;
+  await tauriCore.invoke('reset_meters', { generation: tauriBridge.generation });
 }
 
 /**

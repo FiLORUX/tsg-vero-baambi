@@ -2791,6 +2791,10 @@ function bindTauriEvents() {
   // R128 reset button
   if (r128Reset) {
     r128Reset.addEventListener('click', () => {
+      // The engine owns loudness, true peak and PPM; readings measured before
+      // the reset are dropped from here on
+      tauriBridge.resetMeters()
+        .catch((error) => console.error('[Bootstrap] Engine reset failed:', error));
       lufsMeter?.reset();
       resetTruePeakMeter();
       ppmMeter?.reset();
