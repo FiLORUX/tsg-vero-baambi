@@ -242,7 +242,10 @@ try {
     .map(({ t, text }) => ({ t, value: readoutDb(text) }))
     .filter(({ value }) => Number.isFinite(value));
   const highest = Math.max(...readings.map(({ value }) => value));
-  const start = readings.find(({ value }) => value <= -2);
+  // The return is timed from the peak on: readings taken before the peak
+  // reached the display still show the −18 dBFS tone
+  const peakIndex = readings.findIndex(({ value }) => value === highest);
+  const start = readings.find(({ value }, i) => i > peakIndex && value <= -2);
   const end = readings.find(({ t, value }) => start && t > start.t && value <= -14);
   const fall = start && end ? (end.t - start.t) / 1000 : NaN;
   const last = readings.at(-1).value;
