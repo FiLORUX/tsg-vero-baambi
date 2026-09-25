@@ -6,6 +6,9 @@
  * - 38 Hz: −3 dB (high-pass rolloff)
  * - 1 kHz: ~0 dB (flat in passband)
  * - 4 kHz: +4 dB (high-shelf boost)
+ *
+ * Also pins the absolute loudness scale: the BS.1770-4 §4 channel summation
+ * (single-channel and stereo 997 Hz sines) and EBU Tech 3341 test cases 1 and 2.
  */
 
 import { applyKWeightingOffline, BS1770_COEFFICIENTS_48K } from '../src/metering/k-weighting.js';
@@ -89,120 +92,106 @@ function testKWeightingResponse() {
 }
 
 /**
- * Test LUFS calculation with K-weighted signal.
+ * Run a K-weighted stereo signal through a fresh LUFSMeter and return its readings.
+ *
+ * @param {Float32Array} left
+ * @param {Float32Array} right
+ * @returns {{ momentary: number, shortTerm: number, integrated: number }}
  */
-function testLUFSCalculation() {
-  console.log('\\n═══════════════════════════════════════════════════════════════════════════');
-  console.log('LUFS CALCULATION TEST');
-  console.log('═══════════════════════════════════════════════════════════════════════════\\n');
-
+function measureStereo(left, right) {
   const meter = new LUFSMeter({ sampleRate: SAMPLE_RATE, blockSize: BLOCK_SIZE });
+  const kLeft = applyKWeightingOffline(left, SAMPLE_RATE);
+  const kRight = applyKWeightingOffline(right, SAMPLE_RATE);
 
-  // 997 Hz sine at 0 dBFS (per IEC 61606 calibration)
-  // After K-weighting and LUFS calculation, should yield approximately -3.01 LUFS
-  const sine997 = generateSine(997, 1.0, SAMPLE_RATE * 3);
-  const kWeighted997 = applyKWeightingOffline(sine997, SAMPLE_RATE);
-
-  // Push blocks to LUFS meter
-  for (let i = 0; i < kWeighted997.length; i += BLOCK_SIZE) {
-    const blockL = kWeighted997.slice(i, i + BLOCK_SIZE);
-    const blockR = kWeighted997.slice(i, i + BLOCK_SIZE);
-    if (blockL.length === BLOCK_SIZE) {
-      const energy = meter.calculateBlockEnergy(blockL, blockR);
-      meter.pushBlock(energy);
-    }
+  for (let i = 0; i + BLOCK_SIZE <= kLeft.length; i += BLOCK_SIZE) {
+    const energy = meter.calculateBlockEnergy(
+      kLeft.slice(i, i + BLOCK_SIZE),
+      kRight.slice(i, i + BLOCK_SIZE)
+    );
+    meter.pushBlock(energy);
   }
 
-  const readings = meter.getReadings();
-  const expected = -3.01;
-  const tolerance = 0.5;
-  const error = Math.abs(readings.integrated - expected);
-  const passed = error <= tolerance;
-
-  console.log(`  997 Hz @ 0 dBFS → ${readings.integrated.toFixed(2)} LUFS (expected ${expected} ±${tolerance})`);
-  console.log(`  Status: ${passed ? '✓ PASS' : '✗ FAIL'}\\n`);
-
-  return passed;
+  return meter.getReadings();
 }
 
 /**
- * Test pink noise LUFS level.
+ * Test the BS.1770-4 channel summation with the 997 Hz reference sine.
+ *
+ * ITU-R BS.1770-4 §4: a 0 dBFS sine applied to one channel (L, C or R) reads
+ * −3.01 LKFS. The same sine applied in phase to both L and R doubles the
+ * summed energy (Σ Gᵢ·zᵢ) and therefore reads 0.0 LKFS.
  */
-function testPinkNoiseLUFS() {
+function testLUFSCalculation() {
   console.log('\\n═══════════════════════════════════════════════════════════════════════════');
-  console.log('PINK NOISE LUFS TEST (Verification Signal Level)');
+  console.log('LUFS CHANNEL SUMMATION TEST (ITU-R BS.1770-4 §4)');
   console.log('═══════════════════════════════════════════════════════════════════════════\\n');
 
-  const meter = new LUFSMeter({ sampleRate: SAMPLE_RATE, blockSize: BLOCK_SIZE });
+  const tolerance = 0.1;
+  const sine997 = generateSine(997, 1.0, SAMPLE_RATE * 3);
+  const silence = new Float32Array(sine997.length);
 
-  // Generate pink noise using Paul Kellet algorithm with 0.035 scale factor
-  const duration = SAMPLE_RATE * 10;
-  const pinkL = new Float32Array(duration);
-  const pinkR = new Float32Array(duration);
+  const cases = [
+    { desc: '997 Hz @ 0 dBFS, left channel only', left: sine997, right: silence, expected: -3.01 },
+    { desc: '997 Hz @ 0 dBFS, both channels in phase', left: sine997, right: sine997, expected: 0.0 },
+  ];
 
-  // Generate for L channel
-  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-  for (let i = 0; i < duration; i++) {
-    const white = Math.random() * 2 - 1;
-    b0 = 0.99886 * b0 + white * 0.0555179;
-    b1 = 0.99332 * b1 + white * 0.0750759;
-    b2 = 0.96900 * b2 + white * 0.1538520;
-    b3 = 0.86650 * b3 + white * 0.3104856;
-    b4 = 0.55000 * b4 + white * 0.5329522;
-    b5 = -0.7616 * b5 - white * 0.0168980;
-    const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-    b6 = white * 0.115926;
-    pinkL[i] = pink * 0.042;
+  let allPassed = true;
+
+  for (const c of cases) {
+    const readings = measureStereo(c.left, c.right);
+    const error = Math.abs(readings.integrated - c.expected);
+    const passed = error <= tolerance;
+    if (!passed) allPassed = false;
+
+    console.log(`  ${c.desc} → ${readings.integrated.toFixed(2)} LUFS (expected ${c.expected.toFixed(2)} ±${tolerance})`);
+    console.log(`  Status: ${passed ? '✓ PASS' : '✗ FAIL'}\\n`);
   }
 
-  // Generate for R channel (independent noise)
-  b0 = 0; b1 = 0; b2 = 0; b3 = 0; b4 = 0; b5 = 0; b6 = 0;
-  for (let i = 0; i < duration; i++) {
-    const white = Math.random() * 2 - 1;
-    b0 = 0.99886 * b0 + white * 0.0555179;
-    b1 = 0.99332 * b1 + white * 0.0750759;
-    b2 = 0.96900 * b2 + white * 0.1538520;
-    b3 = 0.86650 * b3 + white * 0.3104856;
-    b4 = 0.55000 * b4 + white * 0.5329522;
-    b5 = -0.7616 * b5 - white * 0.0168980;
-    const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
-    b6 = white * 0.115926;
-    pinkR[i] = pink * 0.042;
+  return allPassed;
+}
+
+/**
+ * EBU Tech 3341 minimum requirements, test cases 1 and 2.
+ *
+ * A stereo 1 kHz sine at −23.0 dBFS (per-channel peak level), applied in phase
+ * to both channels for 20 s, shall read M, S and I = −23.0 ±0.1 LUFS. Case 2
+ * repeats the measurement at −33.0 dBFS. Sines are deterministic, so these
+ * cases pin the absolute level without any tuned scale factor.
+ */
+function testEbuTech3341Levels() {
+  console.log('\\n═══════════════════════════════════════════════════════════════════════════');
+  console.log('EBU TECH 3341 LEVEL TEST (cases 1 and 2)');
+  console.log('═══════════════════════════════════════════════════════════════════════════\\n');
+
+  const tolerance = 0.1;
+  const durationSamples = SAMPLE_RATE * 20;
+  const cases = [
+    { id: 1, levelDbfs: -23.0 },
+    { id: 2, levelDbfs: -33.0 },
+  ];
+
+  let allPassed = true;
+
+  for (const c of cases) {
+    const amplitude = Math.pow(10, c.levelDbfs / 20);
+    const sine = generateSine(1000, amplitude, durationSamples);
+    const readings = measureStereo(sine, sine);
+
+    const results = [
+      ['M', readings.momentary],
+      ['S', readings.shortTerm],
+      ['I', readings.integrated],
+    ];
+    const passed = results.every(([, value]) => Math.abs(value - c.levelDbfs) <= tolerance);
+    if (!passed) allPassed = false;
+
+    const summary = results.map(([name, value]) => `${name} = ${value.toFixed(2)}`).join(', ');
+    console.log(`  Case ${c.id}: stereo 1 kHz @ ${c.levelDbfs.toFixed(1)} dBFS → ${summary} LUFS`);
+    console.log(`  Expected: ${c.levelDbfs.toFixed(1)} ±${tolerance} LUFS on M, S and I`);
+    console.log(`  Status: ${passed ? '✓ PASS' : '✗ FAIL'}\\n`);
   }
 
-  // Apply K-weighting
-  const kWeightedL = applyKWeightingOffline(pinkL, SAMPLE_RATE);
-  const kWeightedR = applyKWeightingOffline(pinkR, SAMPLE_RATE);
-
-  // Push blocks to LUFS meter
-  for (let i = 0; i < kWeightedL.length; i += BLOCK_SIZE) {
-    const blockL = kWeightedL.slice(i, i + BLOCK_SIZE);
-    const blockR = kWeightedR.slice(i, i + BLOCK_SIZE);
-    if (blockL.length === BLOCK_SIZE) {
-      const energy = meter.calculateBlockEnergy(blockL, blockR);
-      meter.pushBlock(energy);
-    }
-  }
-
-  const readings = meter.getReadings();
-  const expected = -23.0;
-  const tolerance = 0.5;
-  const error = Math.abs(readings.integrated - expected);
-  const passed = error <= tolerance;
-
-  console.log(`  Pink noise (0.042 scale) → ${readings.integrated.toFixed(2)} LUFS`);
-  console.log(`  Expected: ${expected} ±${tolerance} LUFS`);
-  console.log(`  Status: ${passed ? '✓ PASS' : '✗ FAIL'}\\n`);
-
-  if (!passed) {
-    // Calculate adjustment needed
-    const adjustment = expected - readings.integrated;
-    const adjustmentFactor = Math.pow(10, adjustment / 20);
-    const newScale = 0.042 * adjustmentFactor;
-    console.log(`  Suggested scale factor adjustment: ${newScale.toFixed(4)}`);
-  }
-
-  return passed;
+  return allPassed;
 }
 
 // Run all tests
@@ -214,7 +203,7 @@ console.log('╚═════════════════════�
 const results = {
   kWeighting: testKWeightingResponse(),
   lufs: testLUFSCalculation(),
-  pinkNoise: testPinkNoiseLUFS(),
+  ebu3341: testEbuTech3341Levels(),
 };
 
 console.log('\\n═══════════════════════════════════════════════════════════════════════════');
@@ -223,8 +212,8 @@ console.log('══════════════════════�
 
 const allPassed = Object.values(results).every(r => r);
 console.log(`  K-weighting frequency response: ${results.kWeighting ? '✓ PASS' : '✗ FAIL'}`);
-console.log(`  LUFS calculation (997 Hz ref):  ${results.lufs ? '✓ PASS' : '✗ FAIL'}`);
-console.log(`  Pink noise calibration:         ${results.pinkNoise ? '✓ PASS' : '✗ FAIL'}`);
+console.log(`  Channel summation (BS.1770-4):  ${results.lufs ? '✓ PASS' : '✗ FAIL'}`);
+console.log(`  EBU Tech 3341 cases 1 and 2:    ${results.ebu3341 ? '✓ PASS' : '✗ FAIL'}`);
 console.log('');
 console.log(`  Overall: ${allPassed ? '✓ ALL TESTS PASSED' : '✗ SOME TESTS FAILED'}`);
 console.log('');

@@ -86,11 +86,9 @@ export const meterState = {
   nordicPeakTimeL: 0,
   nordicPeakTimeR: 0,
 
-  // BBC PPM Type IIa (IEC 60268-10)
-  // Ballistics: −2 dB at 10 ms (τ = 6.33 ms), 24 dB in 2.8 s return
-  // Uses RC detector state for sample-by-sample processing
-  bbcRcStateL: { envelope: 0, peakDb: -60 },
-  bbcRcStateR: { envelope: 0, peakDb: -60 },
+  // BBC PPM Type IIa (IEC 60268-10) peak hold
+  // Ballistics: −2 dB at 10 ms (τ = 6.33 ms), 24 dB in 2.8 s return; the
+  // detectors run in the PPM feed (updatePpmMeters in bootstrap)
   bbcPeakHoldL: -60,
   bbcPeakHoldR: -60,
   bbcPeakTimeL: 0,
@@ -223,8 +221,6 @@ export function resetMeterState() {
   meterState.nordicPeakTimeL = 0;
   meterState.nordicPeakTimeR = 0;
 
-  meterState.bbcRcStateL = { envelope: 0, peakDb: -60 };
-  meterState.bbcRcStateR = { envelope: 0, peakDb: -60 };
   meterState.bbcPeakHoldL = -60;
   meterState.bbcPeakHoldR = -60;
   meterState.bbcPeakTimeL = 0;

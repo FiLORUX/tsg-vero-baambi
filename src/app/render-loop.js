@@ -53,8 +53,9 @@ import {
 } from './meter-state.js';
 
 import {
-  calculateBBCQuasiPeakRC,
-  dbfsToBBCPPM
+  dbfsToBBCPPM,
+  dbfsToPPM,
+  NORDIC_PPM_MIN_DBFS
 } from '../metering/ppm.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,7 +266,10 @@ function renderLoopInternal() {
     meterState.holdBufR.set(meters.bufR);
   }
 
-  // Remote mode check (Tauri uses buffers like local, not pre-computed values like remote)
+  // Remote mode takes pre-computed values from the probe. Tauri mode draws the
+  // stereo displays from its spliced display buffers like local metering, but
+  // takes every level meter from the engine: the joins between snapshots are
+  // discontinuities, and consecutive snapshots overlap or leave gaps.
   const isRemoteCapture = activeCapture === 'remote';
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -417,23 +421,29 @@ function renderLoopInternal() {
   // Nordic PPM Meter
   // ─────────────────────────────────────────────────────────────────────────
   const nowSec = now / 1000;
-  // isRemoteCapture is already defined at the top of renderFrame
 
   let ppmDisplayL, ppmDisplayR, ppmL, ppmR, isSilentL, isSilentR;
 
-  if (isRemoteCapture) {
-    // Use remote values from meterState (set by handleRemoteMetrics)
+  if (isRemoteCapture || isTauriCapture) {
+    // Readings measured at the source, in dBFS within the display range: the
+    // probe's PPMMeter, or the Rust engine's Type I detector, which runs on
+    // every sample. The Tauri display buffers must not be re-measured: the
+    // detector integrates sample by sample, so overlapping snapshots would
+    // replay samples and run its clock fast, and each join is a step.
+    // Peak holds are updated per packet by the metrics handlers.
     ppmDisplayL = meterState.remoteNordicPpmL;
     ppmDisplayR = meterState.remoteNordicPpmR;
-    // Convert dBFS to PPM scale for display (PPM = dBFS + offset)
-    ppmL = ppmDisplayL + 9; // Approximate Nordic PPM offset
-    ppmR = ppmDisplayR + 9;
-    isSilentL = ppmDisplayL <= -59;
-    isSilentR = ppmDisplayR <= -59;
-    // Peak holds are already updated by handleRemoteMetrics
+    // Scale and silence threshold as PPMMeter.getState() in local metering
+    ppmL = dbfsToPPM(ppmDisplayL);
+    ppmR = dbfsToPPM(ppmDisplayR);
+    isSilentL = ppmDisplayL <= NORDIC_PPM_MIN_DBFS + 1;
+    isSilentR = ppmDisplayR <= NORDIC_PPM_MIN_DBFS + 1;
   } else {
-    // Local metering
-    meters.ppmMeter.update(meters.bufL, meters.bufR);
+    // Local metering: the Type I and Type IIa detectors see every sample
+    // once, on the audio thread when the stereo sampler runs; the display
+    // buffers overlap from frame to frame and are not fed to them. This also
+    // updates the BBC reading drawn below.
+    helpers.updatePpmMeters();
     const ppmState = meters.ppmMeter.getState();
     ppmDisplayL = ppmState.dbfsLeft;
     ppmDisplayR = ppmState.dbfsRight;
@@ -485,14 +495,9 @@ function renderLoopInternal() {
     dbfsL = meterState.remoteRmsL;
     dbfsR = meterState.remoteRmsR;
   } else {
-    // Local RMS calculation
-    let rmsL = 0, rmsR = 0;
-    for (let i = 0; i < meters.bufL.length; i++) {
-      rmsL += meters.bufL[i] * meters.bufL[i];
-      rmsR += meters.bufR[i] * meters.bufR[i];
-    }
-    rmsL = Math.sqrt(rmsL / meters.bufL.length);
-    rmsR = Math.sqrt(rmsR / meters.bufR.length);
+    // RMS of the latest analyser window: the display buffers locally, the
+    // engine's per-packet energy in Tauri mode (see measureRms in bootstrap)
+    const { left: rmsL, right: rmsR } = helpers.measureRms();
 
     // Smoothing
     const dt = Math.max(0.001, (now - meterState.lastRmsTs) / 1000);
@@ -581,7 +586,7 @@ function renderLoopInternal() {
   // ─────────────────────────────────────────────────────────────────────────
   // BBC PPM Meter (IEC 60268-10 Type IIa)
   // ─────────────────────────────────────────────────────────────────────────
-  // Sample-by-sample processing with 10 ms rolling window
+  // Sample-by-sample detection with 10 ms rolling window
   // Attack: −2 dB at 10 ms (τ ≈ 6.33 ms) — slower than Nordic
   // Return: 24 dB in 2.8 s (8.57 dB/s) — slower than Nordic
 
@@ -591,12 +596,12 @@ function renderLoopInternal() {
     // Remote: use remoteBbcPpm (derived from TP, sample-level processing not available)
     bbcDisplayL = meterState.remoteBbcPpmL;
     bbcDisplayR = meterState.remoteBbcPpmR;
-  } else if (meters.bufL && meters.bufR && config.sampleRate) {
-    // Local: sample-by-sample quasi-peak detection per IEC 60268-10 Type IIa
-    bbcDisplayL = calculateBBCQuasiPeakRC(meters.bufL, config.sampleRate, meterState.bbcRcStateL);
-    bbcDisplayR = calculateBBCQuasiPeakRC(meters.bufR, config.sampleRate, meterState.bbcRcStateR);
+  } else if (!isTauriCapture) {
+    // Local: Type IIa detector on every sample, read with the Nordic PPM above
+    ({ left: bbcDisplayL, right: bbcDisplayR } = helpers.getBbcPpmReading());
   } else {
-    // Fallback: use True Peak values if buffers unavailable
+    // Tauri: the engine has no Type IIa detector and the spliced display
+    // buffers must not be measured; the True Peak reading stands in
     bbcDisplayL = tpLeft;
     bbcDisplayR = tpRight;
   }
@@ -652,8 +657,10 @@ function renderLoopInternal() {
     spDisplayL = meterState.remoteSpL;
     spDisplayR = meterState.remoteSpR;
   } else {
-    // Local metering
-    meters.samplePeakMeter.update(meters.bufL, meters.bufR);
+    // Sample peak of the latest analyser window: the display buffers locally,
+    // the engine's per-packet peaks in Tauri mode (see updateSamplePeakMeter
+    // in bootstrap), so a peak that falls between two snapshots still counts
+    helpers.updateSamplePeakMeter();
     const spState = meters.samplePeakMeter.getState();
     spDisplayL = spState.dbfsLeft;
     spDisplayR = spState.dbfsRight;

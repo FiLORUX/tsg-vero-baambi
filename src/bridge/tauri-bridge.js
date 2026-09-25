@@ -48,24 +48,36 @@ const tauriBridge = {
 // the largest true peak since the previous read, so no peak is lost. An empty
 // answer means no new audio block has been measured since the previous read.
 //
-// Binary format (little-endian, 4148 bytes total):
+// Binary format (little-endian, 4168 bytes total):
 //   0-3:    lufs_m (f32)
 //   4-7:    lufs_s (f32)
 //   8-11:   lufs_i (f32)
-//   12-15:  tp_left (f32)   largest true peak since the previous packet (dBTP)
-//   16-19:  tp_right (f32)  largest true peak since the previous packet (dBTP)
-//   20-23:  ppm_left (f32)
-//   24-27:  ppm_right (f32)
+//   12-15:  tp_left (f32)       largest true peak since the previous packet (dBTP)
+//   16-19:  tp_right (f32)      largest true peak since the previous packet (dBTP)
+//   20-23:  ppm_left (f32)      Nordic PPM reading (dBFS)
+//   24-27:  ppm_right (f32)     Nordic PPM reading (dBFS)
 //   28-31:  correlation (f32)
 //   32-35:  sample_rate (u32)
 //   36-39:  buffer_size (u32)
 //   40-47:  timestamp_us (u64)
-//   48-51:  generation (u32)  reset generation of every field in the packet
-//   52-2099:   samples_left (512 × f32)
-//   2100-4147: samples_right (512 × f32)
+//   48-51:  sp_left (f32)       largest sample magnitude since the previous packet (dBFS)
+//   52-55:  sp_right (f32)      largest sample magnitude since the previous packet (dBFS)
+//   56-59:  rms_left (f32)      RMS of the samples since the previous packet (dBFS)
+//   60-63:  rms_right (f32)     RMS of the samples since the previous packet (dBFS)
+//   64-67:  level_frames (u32)  stereo frames covered by sp_* and rms_*
+//   68-71:  generation (u32)    reset generation of every reading in the packet
+//   72-2119:   samples_left (512 × f32)
+//   2120-4167: samples_right (512 × f32)
+//
+// Consecutive packets' level fields cover consecutive, non-overlapping runs of
+// samples. The sample arrays are the most recent display snapshot, which
+// overlaps the previous packet's or leaves a gap after it: they serve
+// visualisation, not measurement.
+//
+// Layout contract: pack_metering_binary() in tsg-vero-baambi-tauri/src-tauri/src/audio/engine.rs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BINARY_HEADER_SIZE = 52;
+const BINARY_HEADER_SIZE = 72;
 const VIS_SAMPLES = 512;
 
 /**
@@ -95,8 +107,15 @@ function parseBinaryMeteringData(data) {
   // Timestamp for latency measurement (BigInt for u64)
   const timestampUs = view.getBigUint64(40, true);
 
+  // Sample peak and RMS of every sample since the previous packet
+  const spLeft = view.getFloat32(48, true);
+  const spRight = view.getFloat32(52, true);
+  const rmsLeft = view.getFloat32(56, true);
+  const rmsRight = view.getFloat32(60, true);
+  const levelFrames = view.getUint32(64, true);
+
   // Reset generation the readings belong to
-  const generation = view.getUint32(48, true);
+  const generation = view.getUint32(68, true);
 
   // Sample arrays - create views directly into buffer (zero-copy)
   const samplesLeft = new Float32Array(buffer, BINARY_HEADER_SIZE, VIS_SAMPLES);
@@ -114,6 +133,11 @@ function parseBinaryMeteringData(data) {
     sampleRate,
     bufferSize,
     timestampUs,
+    spLeft,
+    spRight,
+    rmsLeft,
+    rmsRight,
+    levelFrames,
     generation,
     samplesLeft,
     samplesRight,

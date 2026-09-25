@@ -250,7 +250,7 @@ export class LUFSMeter {
    *
    * @param {Float32Array} leftBuffer - K-weighted left channel
    * @param {Float32Array} rightBuffer - K-weighted right channel
-   * @returns {number} Combined mean square energy
+   * @returns {number} Channel-summed mean square energy (Σ Gᵢ·zᵢ)
    */
   calculateBlockEnergy(leftBuffer, rightBuffer) {
     // Guard: invalid or empty buffers
@@ -267,11 +267,14 @@ export class LUFSMeter {
       energyR += rightBuffer[i] * rightBuffer[i];
     }
 
-    // Mean square, then average L+R (equal weighting for stereo)
+    // Mean square per channel, then the BS.1770-4 channel sum Σ Gᵢ·zᵢ with
+    // Gᵢ = 1.0 for left and right. Summing rather than averaging is what makes
+    // a stereo sine at −23 dBFS read −23.0 LUFS (EBU Tech 3341 test case 1)
+    // and a single-channel 0 dBFS sine read −3.01 LKFS (BS.1770-4 §4).
     const msL = energyL / length;
     const msR = energyR / length;
 
-    return (msL + msR) / 2;
+    return msL + msR;
   }
 
   /**

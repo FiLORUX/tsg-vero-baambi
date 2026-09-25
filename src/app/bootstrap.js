@@ -29,8 +29,12 @@ import { CorrelationMeter } from '../ui/correlation-meter.js';
 import { LoudnessRadar } from '../ui/radar.js';
 import { LUFSMeter, formatLUFS } from '../metering/lufs.js';
 import { TruePeakMeter, formatTruePeak, dbTPToAmplitude, TRUE_PEAK_MODE } from '../metering/true-peak.js';
-import { PPMMeter, formatPPM } from '../metering/ppm.js';
+import {
+  PPMMeter, formatPPM, QuasiPeakDetector,
+  NORDIC_PPM_MIN_DBFS, NORDIC_PPM_MAX_DBFS, NORDIC_PPM_BALLISTICS, BBC_PPM_BALLISTICS
+} from '../metering/ppm.js';
 import { SamplePeakMeter } from '../metering/sample-peak.js';
+import { LevelWindow } from '../metering/level-window.js';
 import { StereoMeter, formatCorrelation, calculateCorrelation } from '../metering/correlation.js';
 import { createStereoKWeightingFilters } from '../metering/k-weighting.js';
 // Centralised state management
@@ -77,6 +81,7 @@ import { CalibrationEngine, applyActiveProfilesOnStartup } from '../calibration/
 // Loudness history strip
 import { LoudnessHistoryStrip } from '../ui/loudness-history.js';
 import { pruneHistory, needsPruning } from '../utils/history-pruner.js';
+import { calculateRMS } from '../utils/math.js';
 // Tauri bridge for native audio backend (ASIO/JACK/CoreAudio)
 import * as tauriBridge from '../bridge/index.js';
 // Stereo sampler (dual-mode L/R sync) - loaded dynamically for file:// compatibility
@@ -416,6 +421,9 @@ const FFT_SIZE = 4096;
 const bufL = new Float32Array(FFT_SIZE);
 const bufR = new Float32Array(FFT_SIZE);
 
+/** @type {number|null} AudioContext time of the analyser read that last filled bufL/bufR */
+let analyserReadTime = null;
+
 // K-weighted sample buffers for LUFS measurement
 const kBufL = new Float32Array(FFT_SIZE);
 const kBufR = new Float32Array(FFT_SIZE);
@@ -441,6 +449,9 @@ function sampleAnalysers() {
     // Analyser mode: sequential reads with glitch filtering in meters
     analyserL.getFloatTimeDomainData(bufL);
     analyserR.getFloatTimeDomainData(bufR);
+    // The audio clock at the read tells the PPM detectors how many of these
+    // samples are new (see freshAnalyserSamples)
+    analyserReadTime = ac.currentTime;
   }
 }
 
@@ -460,6 +471,10 @@ const truePeakMeter = new TruePeakMeter({
 });
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
 const samplePeakMeter = new SamplePeakMeter();
+
+// Tauri mode: the engine's per-packet sample peak and energy, gathered into
+// the window the local sample-peak and dBFS meters measure (FFT_SIZE samples)
+const tauriLevelWindow = new LevelWindow({ windowFrames: FFT_SIZE });
 const stereoMeter = new StereoMeter();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -701,6 +716,146 @@ function updateTruePeakMeter() {
 function resetTruePeakMeter() {
   stereoSamplerModule?.resetTruePeaks?.();
   truePeakMeter.reset();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PPM FEED (IEC 60268-10 TYPE I AND TYPE IIa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Detectors for local metering without the stereo sampler. They receive only
+// the analyser samples they have not seen, so each sample passes once.
+const analyserPpmDetectors = [
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: BBC_PPM_BALLISTICS }),
+  new QuasiPeakDetector({ sampleRate: ac.sampleRate, ballistics: BBC_PPM_BALLISTICS })
+];
+
+/** @type {number|null} AudioContext time up to which those detectors have seen the signal */
+let analyserPpmTime = null;
+
+/** Latest BBC Type IIa reading per channel in dBFS, drawn by the render loop */
+let bbcPpmReading = { left: -60, right: -60 };
+
+/**
+ * Number of samples at the end of bufL/bufR that the analyser-mode PPM
+ * detectors have not seen yet.
+ *
+ * AudioContext.currentTime and the analyser buffer both advance in render
+ * quanta, so the time between two analyser reads is the number of new
+ * samples. More than the analyser window (a stalled or throttled page) is
+ * capped at the window: the samples in between are lost to the analyser.
+ *
+ * @returns {number} Samples to take from the end of the buffers
+ */
+function freshAnalyserSamples() {
+  if (analyserReadTime === null) return 0;
+  const fresh = analyserPpmTime === null
+    ? FFT_SIZE
+    : Math.round((analyserReadTime - analyserPpmTime) * ac.sampleRate);
+  analyserPpmTime = analyserReadTime;
+  return clamp(fresh, 0, FFT_SIZE);
+}
+
+/**
+ * Feed the Nordic PPM meter and the BBC PPM reading with every sample since
+ * the previous call, each exactly once.
+ *
+ * The IEC 60268-10 detectors advance one sample per input sample, so their
+ * 5 and 10 ms integration and their return times (20 dB in 1.7 s, 24 dB in
+ * 2.8 s) hold only if no sample is replayed or skipped. The display buffers
+ * are rolling windows that overlap from frame to frame and cannot feed
+ * them. With the stereo sampler the detectors run on the audio thread (or
+ * on each ScriptProcessor block) and this takes their largest readings since
+ * the previous call; without it, the local detectors take only the analyser
+ * samples that are new. A call with nothing new leaves the readings as they
+ * are. Tauri mode draws the engine's Type I reading instead.
+ */
+function updatePpmMeters() {
+  if (activeCapture === 'tauri') return;
+
+  if (stereoSamplerModule?.hasPpmFeed?.()) {
+    const feed = stereoSamplerModule.consumePpm();
+    if (feed.samples === 0) return;
+    ppmMeter.updateFromReadings(feed.nordicLeft, feed.nordicRight);
+    bbcPpmReading = { left: feed.bbcLeft, right: feed.bbcRight };
+    return;
+  }
+
+  const fresh = freshAnalyserSamples();
+  if (fresh === 0) return;
+  const newestL = bufL.subarray(FFT_SIZE - fresh);
+  const newestR = bufR.subarray(FFT_SIZE - fresh);
+  const [nordicL, nordicR, bbcL, bbcR] = analyserPpmDetectors;
+  ppmMeter.updateFromReadings(nordicL.process(newestL), nordicR.process(newestR));
+  bbcPpmReading = { left: bbcL.process(newestL), right: bbcR.process(newestR) };
+}
+
+/**
+ * Latest BBC Type IIa reading, as updated by updatePpmMeters().
+ *
+ * @returns {{left: number, right: number}} Readings in dBFS
+ */
+function getBbcPpmReading() {
+  return bbcPpmReading;
+}
+
+/**
+ * Return the PPM detectors and the Nordic meter to their initial state,
+ * discarding readings still on their way from the AudioWorklet.
+ */
+function resetPpmMeters() {
+  stereoSamplerModule?.resetPpm?.();
+  analyserPpmDetectors.forEach((detector) => detector.reset());
+  ppmMeter.reset();
+  bbcPpmReading = { left: -60, right: -60 };
+}
+
+/**
+ * Feed the Sample Peak meter with the latest FFT_SIZE samples.
+ *
+ * Locally the display buffers are that window. In Tauri mode they are spliced
+ * from the engine's 512-sample snapshots, which overlap or leave gaps, so a
+ * peak in a gap would never be seen; the window is instead rebuilt from the
+ * engine's per-packet peaks, which cover every sample exactly once.
+ */
+function updateSamplePeakMeter() {
+  if (activeCapture === 'tauri') {
+    const { peakLeft, peakRight } = tauriLevelWindow.getState();
+    samplePeakMeter.updateFromPeaks(peakLeft, peakRight);
+  } else {
+    samplePeakMeter.update(bufL, bufR);
+  }
+}
+
+/**
+ * RMS of the latest FFT_SIZE samples per channel, linear.
+ *
+ * Same window and sources as updateSamplePeakMeter(): the display buffers
+ * locally, the engine's per-packet energy in Tauri mode, where the spliced
+ * buffers would count overlapped samples twice and gap samples not at all.
+ *
+ * @returns {{left: number, right: number}} RMS amplitude per channel
+ */
+function measureRms() {
+  if (activeCapture === 'tauri') {
+    const { rmsLeft, rmsRight } = tauriLevelWindow.getState();
+    return { left: rmsLeft, right: rmsRight };
+  }
+  return { left: calculateRMS(bufL), right: calculateRMS(bufR) };
+}
+
+/**
+ * Clamp a Nordic PPM reading to the meter's display range, as
+ * PPMMeter.getState() does in local metering.
+ *
+ * @param {number} dbfs - PPM reading in dBFS
+ * @returns {number} Reading within NORDIC_PPM_MIN_DBFS to NORDIC_PPM_MAX_DBFS
+ */
+function clampNordicPpm(dbfs) {
+  return Number.isFinite(dbfs)
+    ? clamp(dbfs, NORDIC_PPM_MIN_DBFS, NORDIC_PPM_MAX_DBFS)
+    : NORDIC_PPM_MIN_DBFS;
 }
 
 /**
@@ -1559,9 +1714,16 @@ function renderRemoteProbeList(probes) {
  * @param {number} data.lufsI - Integrated LUFS
  * @param {number} data.tpLeft - Largest left True Peak since the previous packet (dBTP)
  * @param {number} data.tpRight - Largest right True Peak since the previous packet (dBTP)
- * @param {number} data.ppmLeft - PPM left (dBFS)
- * @param {number} data.ppmRight - PPM right (dBFS)
+ * @param {number} data.ppmLeft - Nordic PPM reading left (dBFS)
+ * @param {number} data.ppmRight - Nordic PPM reading right (dBFS)
  * @param {number} data.correlation - Stereo correlation (-1 to +1)
+ * @param {number} data.spLeft - Largest left sample magnitude since the previous packet (dBFS)
+ * @param {number} data.spRight - Largest right sample magnitude since the previous packet (dBFS)
+ * @param {number} data.rmsLeft - Left RMS of the samples since the previous packet (dBFS)
+ * @param {number} data.rmsRight - Right RMS of the samples since the previous packet (dBFS)
+ * @param {number} data.levelFrames - Frames covered by the sample peak and RMS fields
+ * @param {Float32Array} data.samplesLeft - Latest 512-sample display snapshot, left
+ * @param {Float32Array} data.samplesRight - Latest 512-sample display snapshot, right
  */
 function handleTauriMeteringUpdate(data) {
   // Only process if Tauri capture is active
@@ -1646,8 +1808,16 @@ function handleTauriMeteringUpdate(data) {
   // ─────────────────────────────────────────────────────────────────────────
   // PPM (Nordic Type I)
   // ─────────────────────────────────────────────────────────────────────────
-  const ppmL = data.ppmLeft ?? -60;
-  const ppmR = data.ppmRight ?? -60;
+  // The engine runs the Type I detector on every sample and reports its
+  // reading when the packet leaves. A PPM reading is already a ballistic
+  // envelope that falls by at most 20 dB in 1.7 s, so a packet interval of
+  // 8 to 16 ms costs at most 0.1 to 0.2 dB and nothing needs carrying over
+  // between packets. The reading is clamped to the display range, as
+  // PPMMeter.getState() does locally, so bar, text and hold behave as in
+  // local metering. The render loop draws these values; the hold is kept
+  // here, once per packet.
+  const ppmL = clampNordicPpm(data.ppmLeft);
+  const ppmR = clampNordicPpm(data.ppmRight);
   meterState.remoteNordicPpmL = ppmL;
   meterState.remoteNordicPpmR = ppmR;
 
@@ -1675,6 +1845,15 @@ function handleTauriMeteringUpdate(data) {
   // CORRELATION
   // ─────────────────────────────────────────────────────────────────────────
   meterState.remoteCorrelation = data.correlation ?? 0;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SAMPLE PEAK AND RMS
+  // ─────────────────────────────────────────────────────────────────────────
+  // Levels of every sample since the previous packet, gathered into the span
+  // the local meters measure; the render loop reads the window through
+  // updateSamplePeakMeter() and measureRms(). A packet without frames
+  // carries no signal and is ignored by the window.
+  tauriLevelWindow.pushDb(data.spLeft, data.spRight, data.rmsLeft, data.rmsRight, data.levelFrames);
 
   // ─────────────────────────────────────────────────────────────────────────
   // VISUALISATION SAMPLES (for goniometer, spectrum, stereo analysis)
@@ -2055,8 +2234,50 @@ startMeasureLoop();
 // RENDER LOOP (60 Hz) - Extracted to render-loop.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NOTE: initRenderLoop() must be called AFTER initUIComponents() to ensure
-// UI component references are properly initialised. This is done in init().
+/**
+ * Dependencies of the render loop, shared by browser and Tauri mode.
+ *
+ * Both modes draw the same meters through the same render loop, so they must
+ * hand it the same dependencies; the render loop itself tells the capture
+ * modes apart through captureState. Call after initUIComponents(): the UI
+ * component references are read when this function runs.
+ *
+ * @returns {Object} Argument for initRenderLoop()
+ */
+function renderLoopDependencies() {
+  return {
+    dom: {
+      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
+      bbcCanvas, bbcLVal, bbcRVal,
+      spCanvas, spLVal, spRVal,
+      dbfs, dbL, dbR, tp, tpL, tpR,
+      uptimeEl, statusSummary
+    },
+    meters: {
+      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
+    },
+    uiComponents: {
+      goniometer, correlationMeter, balanceMeterUI,
+      spectrumAnalyserUI, msMeterUI, widthMeterUI,
+      rotationMeterUI, radar, stereoAnalysis,
+      loudnessHistoryStrip
+    },
+    config: {
+      getSampleRate: () => ac.sampleRate,
+      getRadarMaxSeconds: () => radarMaxSeconds,
+      getTpLimit: () => TP_LIMIT
+    },
+    helpers: {
+      layoutXY, layoutLoudness, sampleAnalysers,
+      updateTruePeakMeter, updateSamplePeakMeter, measureRms,
+      updatePpmMeters, getBbcPpmReading,
+      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
+      updateRadarTooltip
+    },
+    captureState: { getActiveCapture: () => activeCapture },
+    TransitionGuard
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EVENT BINDINGS
@@ -2645,45 +2866,6 @@ function setupObservers() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Dependencies of the render loop, shared by browser and Tauri mode so that
- * both draw through the same helpers and configuration.
- *
- * @returns {Object} Argument for initRenderLoop()
- */
-function renderLoopDependencies() {
-  return {
-    dom: {
-      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
-      bbcCanvas, bbcLVal, bbcRVal,
-      spCanvas, spLVal, spRVal,
-      dbfs, dbL, dbR, tp, tpL, tpR,
-      uptimeEl, statusSummary
-    },
-    meters: {
-      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
-    },
-    uiComponents: {
-      goniometer, correlationMeter, balanceMeterUI,
-      spectrumAnalyserUI, msMeterUI, widthMeterUI,
-      rotationMeterUI, radar, stereoAnalysis,
-      loudnessHistoryStrip
-    },
-    config: {
-      getSampleRate: () => ac.sampleRate,
-      getRadarMaxSeconds: () => radarMaxSeconds,
-      getTpLimit: () => TP_LIMIT
-    },
-    helpers: {
-      layoutXY, layoutLoudness, sampleAnalysers, updateTruePeakMeter,
-      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
-      updateRadarTooltip
-    },
-    captureState: { getActiveCapture: () => activeCapture },
-    TransitionGuard
-  };
-}
-
-/**
  * Initialise VERO-BAAMBI in Tauri mode with native audio backend.
  * This bypasses Web Audio API entirely, using ASIO/JACK/CoreAudio via Rust.
  */
@@ -2719,12 +2901,13 @@ async function initTauriMode() {
   // Setup observers
   setupObservers();
 
-  // The measure loop was initialised at module load with the full dependency
-  // set; with activeCapture === 'tauri' it only advances the elapsed-time
-  // display, because the Rust engine supplies LUFS and true peak
+  // The measure loop was initialised and started at module load with its full
+  // dependencies. In Tauri mode it only keeps the elapsed time running; the
+  // engine's packets carry the measurements. Initialising it again here would
+  // replace those dependencies with an incomplete set.
 
-  // Initialise render loop with the same dependencies as browser mode; in
-  // Tauri mode it skips the analysers and draws what the Rust engine sends
+  // Initialise render loop with the same dependencies as browser mode; the
+  // capture state is what tells it that the meters are fed by the engine
   initRenderLoop(renderLoopDependencies());
 
   // Initialise Tauri bridge with metering callback
@@ -2797,8 +2980,7 @@ function bindTauriEvents() {
         .catch((error) => console.error('[Bootstrap] Engine reset failed:', error));
       lufsMeter?.reset();
       resetTruePeakMeter();
-      ppmMeter?.reset();
-      // Also clears the radar history, which lives in meterState
+      resetPpmMeters();
       resetMeterState();
       console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
     });
@@ -2934,10 +3116,10 @@ function init() {
 
       // Update meters directly with current buffer data
       // (Bypasses measure-loop which requires activeCapture)
-      // True Peak and PPM use unweighted samples; True Peak takes the
-      // sample-complete feed when the sampler runs
+      // True Peak and PPM use unweighted samples, from the sample-complete
+      // feeds when the sampler runs
       updateTruePeakMeter();
-      ppmMeter.update(bufL, bufR);
+      updatePpmMeters();
 
       // LUFS uses K-weighted samples per ITU-R BS.1770-4
       const energy = lufsMeter.calculateBlockEnergy(kBufL, kBufR);
@@ -2967,7 +3149,7 @@ function init() {
       // has high peak levels that persist due to slow decay (11.76 dB/s)
       lufsMeter.reset();
       resetTruePeakMeter();
-      ppmMeter.reset();
+      resetPpmMeters();
     },
     onStart: () => {
       console.log('[Bootstrap] Meter verification started');
@@ -2978,7 +3160,7 @@ function init() {
       // Reset all meters before verification
       lufsMeter.reset();
       resetTruePeakMeter();
-      ppmMeter.reset();
+      resetPpmMeters();
       resetMeterState();
     },
     onComplete: (results) => {
