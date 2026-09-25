@@ -3265,10 +3265,10 @@
                   <option value="ppm-seq" data-type="ppm-seq" data-routing="stereo">Programme Peak Sequence · −40 → +12 PPM (3s steps)</option>
                 </optgroup>
                 <optgroup label="Intersample Peak Demo">
-                  <option value="isp-none" data-type="sine" data-freq="1000" data-db="0" data-routing="stereo">1 kHz @ 0 dBFS · No ISP (TP ≈ 0)                      0 dBFS</option>
-                  <option value="isp-mild" data-type="sine" data-freq="12000" data-db="0" data-routing="stereo">12 kHz @ 0 dBFS · Mild ISP (TP +0.3)                  0 dBFS</option>
-                  <option value="isp-moderate" data-type="sine" data-freq="18000" data-db="-0.5" data-routing="stereo">18 kHz @ −0.5 dBFS · Moderate ISP (TP +0.5)           −0.5 dBFS</option>
-                  <option value="isp-max" data-type="isp-max" data-db="0" data-routing="stereo">Alternating ±1 · Maximum ISP (TP +3.01)               0 dBFS</option>
+                  <option value="isp-none" data-type="sine" data-freq="1000" data-db="0" data-routing="stereo">1 kHz @ 0 dBFS · No ISP (TP 0.0 dBTP)                  0 dBFS</option>
+                  <option value="isp-mild" data-type="isp-tone" data-divisor="8" data-phase="67.5" data-db="0" data-routing="stereo">6 kHz (fs/8) @ 67.5° · Mild ISP (TP 0.0 dBTP)          −0.7 dBFS</option>
+                  <option value="isp-moderate" data-type="isp-tone" data-divisor="6" data-phase="60" data-db="0" data-routing="stereo">8 kHz (fs/6) @ 60° · Moderate ISP (TP 0.0 dBTP)        −1.2 dBFS</option>
+                  <option value="isp-max" data-type="isp-max" data-db="0" data-routing="stereo">12 kHz (fs/4) @ 45° · Maximum ISP (TP +3.0 dBTP)       0 dBFS</option>
                 </optgroup>
                 <optgroup label="Phase & Polarity Tests">
                   <option value="phase-corr" data-type="sine" data-freq="1000" data-db="-18" data-routing="stereo">1 kHz · L=R (correlated)                              −18 dBFS</option>

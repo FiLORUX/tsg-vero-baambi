@@ -30,7 +30,7 @@ The self-test runs five automated tests using internal reference signals:
 
 - **Signal isolation**: Test signals bypass external sources entirely; they connect directly to the analysis gain stage
 - **Meter state**: The verification reads actual meter output, not calculated expectations. This validates the complete signal chain including K-weighting, ballistics, and interpolation.
-- **ISP detection**: The intersample peak test uses a clipped sine wave. Clipping creates discontinuities that produce genuine Gibbs phenomenon overshoot, detectable by both Hermite and polyphase algorithms.
+- **ISP detection**: The intersample peak test uses a clipped sine wave. Clipping creates discontinuities that produce genuine Gibbs phenomenon overshoot, which the Annex 2 polyphase filter reconstructs.
 - **PPM reset**: Between tests, all meters are reset. This prevents the slow PPM decay (11.76 dB/s per IEC 60268-10) from carrying residual levels between tests.
 
 ---
@@ -41,11 +41,20 @@ The self-test runs five automated tests using internal reference signals:
 
 ```bash
 node tests/metering-verification.js
+node tests/true-peak-test.js
 ```
 
-Tests pure mathematical functions: dB conversions, RMS calculation, correlation, Hermite interpolation, PPM decay rate.
+The first tests pure mathematical functions: dB conversions, RMS calculation, correlation, true-peak sanity, PPM decay rate. The second synthesises EBU Tech 3341 Table 1 cases 15 to 23 and asserts the +0.2/−0.4 dB true-peak tolerance.
 
 ### Browser Tests
+
+```bash
+npm run test:browser
+```
+
+Drives the real Web Audio pipeline in a headless browser (needs the `playwright-core` dev dependency and the engine's Playwright build, `npx playwright-core install chromium firefox webkit`, or `CHROMIUM_PATH`): the stereo-sampler AudioWorklet against `TruePeakDetector` bit for bit at 44.1, 48, 96 and 192 kHz; EBU Tech 3341 cases 15 to 23 in real time with the main thread blocked for one second across the signal; the four Intersample Peak Demo presets through the application's generator, measure loop and TPmax display; the built-in Meter Verification Tool; and the remote chain, from the probe page through a local broker into the application's remote mode, including a scripted probe whose level drops while the received TPmax must hold, a switch to a second probe that must start a new TPmax, and that probe going offline, which must clear the displays without listener errors.
+
+`BROWSER=firefox` or `BROWSER=webkit` runs the same suite in Gecko or in WebKit, the engine behind Safari; Chromium is the default. On a headless Linux host, Firefox and WebKit need a running audio server (for example PulseAudio with a null sink) before an `AudioContext` will start. All true-peak checks pass in all three engines. The one failure, in Firefox only, is the PPM Alignment check of the built-in verification tool, which reads 5.3 to 6.0 there and fails identically before the true-peak work.
 
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 
@@ -75,27 +84,55 @@ For accurate verification, you need:
 
 ### Test Procedure: True Peak
 
-1. **Generate intersample peak test signal**: Two frequencies near Nyquist that constructively interfere
-2. **Compare sample peak vs True Peak**: True Peak should exceed sample peak
-3. **Known intersample over**: Use +3 dBTP test signal; verify detection
+Use the generator's **Intersample Peak Demo** presets. Each has a fixed phase against the sample grid, so both the sample peak and the true peak are known exactly:
 
-#### True Peak Algorithm Modes
+| Preset | Signal | Sample peak | True peak | Reads |
+|--------|--------|-------------|-----------|-------|
+| No ISP | 1 kHz, 0 dBFS | 0.0 dBFS | 0.0 dBTP | 0.0 dBTP |
+| Mild ISP | fs/8 at 67.5° | −0.7 dBFS | 0.0 dBTP | −0.0 dBTP |
+| Moderate ISP | fs/6 at 60° | −1.2 dBFS | 0.0 dBTP | −0.3 dBTP |
+| Maximum ISP | fs/4 at 45°, samples +1, +1, −1, −1 | 0.0 dBFS | +3.0 dBTP | +3.1 dBTP |
 
-VERO-BAAMBI offers two True Peak detection algorithms:
+Reset R128 after selecting a preset: switching presets starts the new waveform abruptly, and that onset has a genuinely higher true peak (up to +3.2 dBTP for Maximum ISP).
 
-| Mode | Algorithm | Accuracy | CPU Cost | Use Case |
-|------|-----------|----------|----------|----------|
-| `hermite` | Catmull-Rom spline | ±0.5 dB typical | ~24 FLOPs/sample | Real-time monitoring (default) |
-| `polyphase` | ITU-R BS.1770-4 Annex 2 FIR | <0.1 dB | ~48 FLOPs/sample | Laboratory-grade measurement |
+#### True Peak Algorithm
 
-**Polyphase Implementation:**
-- 4-phase × 12-tap FIR filter (48-tap prototype at 4× oversampling)
-- Coefficients derived from ITU-R BS.1770-4 Annex 2
-- DC gain normalised to unity per phase
-- Compliant with EBU Tech 3341 Section 3.5
+VERO-BAAMBI measures true peak with a single method, the ITU-R BS.1770-4 Annex 2 polyphase FIR:
 
-**Mode Selection:**
-The algorithm mode is stored in application state (`truePeakMode`) and persists across sessions. Both algorithms produce identical results for low-frequency signals; differences manifest primarily near Nyquist where the polyphase filter's flat frequency response provides superior accuracy.
+| Property | Value |
+|----------|-------|
+| Filter | 48-tap FIR interpolation filter from the Annex 2 table, four 12-tap branches |
+| Over-sampling | 4× up to 48 kHz, 2× (branches 0 and 2) above; the Tech 3341 cases, which scale with fs, pass at 48, 96 and 192 kHz |
+| Conformance | EBU Tech 3341 Table 1 cases 15 to 23 within +0.2/−0.4 dB (`node tests/true-peak-test.js`) |
+| Feed | Every sample, in the stereo-sampler AudioWorklet; independent of frame rate, dropped frames and background-tab throttling. The ScriptProcessor fallback measures on the main thread and skips, without splicing, any block a stalled thread misses. Analyser windows only without a sampler; the Rust engine's per-sample peaks in Tauri mode |
+| Ballistics | TPmax, peak hold and the over indication from the unsmoothed peak; the bar rises instantly and falls 20 dB in 1.7 s |
+| Cost | 48 multiply-accumulates per input sample and channel at 4× |
+
+The synthesised Tech 3341 signals were cross-checked against two independent implementations that pass the official EBU files:
+
+| Case | VERO-BAAMBI | libebur128 1.2.6 | FFmpeg 6.1 `ebur128` | Required |
+|------|-------------|------------------|----------------------|----------|
+| 15 | −6.22 | −6.02 | −6.0 | −6.0 +0.2/−0.4 |
+| 16 | −5.98 | −6.05 | −6.0 | −6.0 +0.2/−0.4 |
+| 17 | −6.31 | −6.01 | −6.0 | −6.0 +0.2/−0.4 |
+| 18 | −6.03 | −6.02 | −6.0 | −6.0 +0.2/−0.4 |
+| 19 | +3.03 | +2.95 | +3.0 | +3.0 +0.2/−0.4 |
+| 20 | −0.15 | −0.13 | −0.1 | 0.0 +0.2/−0.4 |
+| 21 | −0.08 | −0.08 | −0.1 | 0.0 +0.2/−0.4 |
+| 22 | −0.20 | −0.18 | −0.1 | 0.0 +0.2/−0.4 |
+| 23 | −0.08 | −0.08 | −0.1 | 0.0 +0.2/−0.4 |
+
+The lower readings of cases 15 and 17 are the passband ripple of the tabulated Annex 2 filter, which the EBU tolerance explicitly includes.
+
+To check the official files, download the [EBU loudness test set](https://tech.ebu.ch/publications/ebu_loudness_test_set), unpack it and run:
+
+```bash
+npm run test:ebu-files -- /path/to/ebu-loudness-test-set
+```
+
+The test finds cases 15 to 23 by their Tech 3341 number in the file name, reads 16-, 24- and 32-bit PCM or float WAV, and asserts the +0.2/−0.4 dB tolerance.
+
+The `truePeakMode` key in application state remains for persisted settings; `polyphase` is its only value.
 
 ### Test Procedure: PPM Ballistics
 
@@ -191,6 +228,6 @@ For rigorous validation against broadcast standards:
 2. **Timing precision**: Browser scheduling introduces ±2ms jitter
 3. **Bit depth**: Web Audio operates in 32-bit float internally
 4. **Multi-channel**: Stereo only; no 5.1/7.1 support
-5. **True Peak polyphase mode**: Higher computational cost (~2× versus Hermite); use for verification rather than continuous monitoring on constrained devices
+5. **True Peak near Nyquist**: the Annex 2 filter rolls off above 20 kHz and 4× over-sampling under-reads a tone at fs/2 by up to 0.69 dB (Annex 2 Attachment 1); programme content at those frequencies is far below full scale
 
 For regulatory compliance or delivery QC, verify against certified hardware.

@@ -68,10 +68,8 @@ export const DEFAULT_STATE = Object.freeze({
   truePeakLimit: -1.0,
 
   // True Peak algorithm mode
-  // 'polyphase': ITU-R BS.1770-4 Annex 2 compliant FIR filter (laboratory-grade).
-  //   Default — a compliance meter must not under-read against the −1 dBTP limit.
-  // 'hermite': Fast Catmull-Rom interpolation; ~1 dB low on Nyquist-region
-  //   inter-sample peaks, so opt-in only where CPU is scarce and exactness isn't.
+  // 'polyphase': ITU-R BS.1770-4 Annex 2 polyphase FIR, the meter's only method.
+  //   The key is kept so persisted settings keep loading; other values are ignored.
   truePeakMode: 'polyphase',
 
   // Monitor settings
@@ -353,7 +351,7 @@ export class StateStore {
  * @property {string|null} deviceLabel - Human-readable device name
  * @property {number} targetLufs - Loudness target in LUFS
  * @property {number} truePeakLimit - True Peak limit in dBTP
- * @property {string} truePeakMode - True Peak algorithm: 'hermite' or 'polyphase'
+ * @property {string} truePeakMode - True Peak algorithm; 'polyphase' is the only value
  * @property {number} browserMonitorLevel - Browser monitor volume (0-100)
  * @property {boolean} browserMonitorMuted - Browser monitor mute state
  * @property {number} browserTrim - Browser input trim in dB

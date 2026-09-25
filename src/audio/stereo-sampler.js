@@ -31,6 +31,8 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
+import { TruePeakDetector, interpolationBranches } from '../metering/true-peak.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +53,19 @@ const DEFAULT_BUFFER_SIZE = 4096;
 // ─────────────────────────────────────────────────────────────────────────────
 // SAMPLER STATE
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** @type {number} Largest true peak (linear) per channel since the last consumeTruePeaks() */
+let pendingPeakL = 0;
+let pendingPeakR = 0;
+
+/** @type {number} Samples measured since the last consumeTruePeaks() */
+let pendingPeakSamples = 0;
+
+/** @type {number} Samples measured since initialisation (coverage diagnostics) */
+let totalPeakSamples = 0;
+
+/** @type {number} Reset generation; worklet reports from an earlier generation are dropped */
+let peakGeneration = 0;
 
 /** @type {'worklet'|'scriptprocessor'|null} Current sampling mode */
 let samplingMode = null;
@@ -136,8 +151,8 @@ export async function initStereoSampler(audioContext, sourceL, sourceR, options 
  * @private
  */
 async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSize) {
-  // Load worklet module
-  await audioContext.audioWorklet.addModule('./src/audio/stereo-sampler-worklet.js');
+  // Load worklet module relative to this file, independent of the page URL
+  await audioContext.audioWorklet.addModule(new URL('./stereo-sampler-worklet.js', import.meta.url));
 
   // Create merger to combine L/R into stereo for worklet
   const merger = audioContext.createChannelMerger(2);
@@ -151,7 +166,9 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
     channelCount: 2,
     channelCountMode: 'explicit',
     processorOptions: {
-      bufferSize: bufferSize
+      bufferSize,
+      // Annex 2 branches for this context's rate; the worklet measures every sample
+      truePeakBranches: interpolationBranches(audioContext.sampleRate)
     }
   });
 
@@ -160,10 +177,18 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
 
   // Handle messages from worklet
   workletNode.port.onmessage = (event) => {
-    syncedBufL = event.data.bufL;
-    syncedBufR = event.data.bufR;
-    lastTimestamp = event.data.timestamp;
-    dataReady = true;
+    const data = event.data;
+    if (data.type === 'truePeak') {
+      // Reports measured before the latest reset were already in flight
+      if (data.generation === peakGeneration) {
+        accumulateTruePeak(data.left, data.right, data.samples);
+      }
+    } else if (data.type === 'snapshot') {
+      syncedBufL = data.bufL;
+      syncedBufR = data.bufR;
+      lastTimestamp = data.timestamp;
+      dataReady = true;
+    }
   };
 }
 
@@ -202,10 +227,27 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
   scriptProcessorNode.connect(silentGain);
   silentGain.connect(audioContext.destination);
 
+  // True peak of every sample. onaudioprocess delivers consecutive blocks
+  // while the main thread keeps up; a block it misses is detected from
+  // playbackTime and the filter history is cleared, so two unrelated blocks
+  // are never joined and read as a peak. Samples in a missed block are not
+  // measured, which is why the AudioWorklet is preferred.
+  const detectorL = new TruePeakDetector(audioContext.sampleRate);
+  const detectorR = new TruePeakDetector(audioContext.sampleRate);
+  const halfSample = 0.5 / audioContext.sampleRate;
+  let expectedPlaybackTime = null;
+
   // Process audio - L/R are GUARANTEED from same audio block
   scriptProcessorNode.onaudioprocess = (event) => {
     const inputL = event.inputBuffer.getChannelData(0);
     const inputR = event.inputBuffer.getChannelData(1);
+
+    if (expectedPlaybackTime !== null && Math.abs(event.playbackTime - expectedPlaybackTime) > halfSample) {
+      detectorL.reset();
+      detectorR.reset();
+    }
+    expectedPlaybackTime = event.playbackTime + inputL.length / audioContext.sampleRate;
+    accumulateTruePeak(detectorL.process(inputL), detectorR.process(inputR), inputL.length);
 
     // Copy to our buffers (they're the same size: 4096)
     syncedBufL.set(inputL);
@@ -215,9 +257,65 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
   };
 }
 
+/**
+ * Fold one true-peak report into the pending maxima.
+ *
+ * @param {number} left - Left channel peak, linear
+ * @param {number} right - Right channel peak, linear
+ * @param {number} samples - Samples covered by the report
+ * @private
+ */
+function accumulateTruePeak(left, right, samples) {
+  if (left > pendingPeakL) pendingPeakL = left;
+  if (right > pendingPeakR) pendingPeakR = right;
+  pendingPeakSamples += samples;
+  totalPeakSamples += samples;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC API
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Whether the sampler measures true peak on every sample.
+ *
+ * True in AudioWorklet and ScriptProcessor mode. When false, a caller must
+ * fall back to measuring analyser windows.
+ *
+ * @returns {boolean}
+ */
+export function hasTruePeakFeed() {
+  return samplingMode === 'worklet' || samplingMode === 'scriptprocessor';
+}
+
+/**
+ * Discard the true-peak maxima measured so far, including reports already on
+ * their way from the AudioWorklet, so a new measurement starts at this call.
+ */
+export function resetTruePeaks() {
+  peakGeneration++;
+  pendingPeakL = 0;
+  pendingPeakR = 0;
+  pendingPeakSamples = 0;
+  workletNode?.port.postMessage({ type: 'resetTruePeak', generation: peakGeneration });
+}
+
+/**
+ * Take the true-peak maxima of all samples measured since the previous call.
+ *
+ * Reports accumulate between calls, so a consumer that runs late (dropped
+ * frames, a throttled background tab) still receives the peak of every
+ * sample. Zero peaks with zero samples mean nothing new has been measured.
+ *
+ * @returns {{left: number, right: number, samples: number}} Linear peaks and sample count
+ */
+export function consumeTruePeaks() {
+  const result = { left: pendingPeakL, right: pendingPeakR, samples: pendingPeakSamples };
+  pendingPeakL = 0;
+  pendingPeakR = 0;
+  pendingPeakSamples = 0;
+  return result;
+}
 
 /**
  * Get current sampling mode.
@@ -266,7 +364,8 @@ export function getSamplerStats() {
     bufferSize: currentBufferSize,
     workletActive: workletNode !== null,
     scriptProcessorActive: scriptProcessorNode !== null,
-    lastTimestamp: lastTimestamp
+    lastTimestamp,
+    truePeakSamples: totalPeakSamples
   };
 }
 
@@ -284,13 +383,19 @@ export function getBufferSize() {
  */
 export function disposeStereoSampler() {
   if (workletNode) {
+    workletNode.port.onmessage = null;
     workletNode.disconnect();
     workletNode = null;
   }
   if (scriptProcessorNode) {
+    scriptProcessorNode.onaudioprocess = null;
     scriptProcessorNode.disconnect();
     scriptProcessorNode = null;
   }
   samplingMode = null;
   dataReady = false;
+  pendingPeakL = 0;
+  pendingPeakR = 0;
+  pendingPeakSamples = 0;
+  totalPeakSamples = 0;
 }

@@ -76,6 +76,7 @@ export const SignalType = Object.freeze({
   PPM_SEQ: 'ppm-seq',
   LISSAJOUS: 'lissajous',
   VECTOR_TEXT: 'vector-text',
+  ISP_TONE: 'isp-tone',
   ISP_MAX: 'isp-max'
 });
 
@@ -666,7 +667,8 @@ export class SourceController {
       hi = 20000,
       phase = 0,
       ratio = '1:1',
-      duration = 20
+      duration = 20,
+      divisor = 4
     } = config;
 
     const amplitude = dbToLinear(db);
@@ -683,7 +685,7 @@ export class SourceController {
     this._applyRouting(routing);
 
     // Create signal based on type
-    await this._createSignal(type, { freq, db, lo, hi, phase, ratio, duration, routing, amplitude });
+    await this._createSignal(type, { freq, db, lo, hi, phase, ratio, duration, routing, amplitude, divisor });
 
     // Connect to merger
     this._genLeftGain.connect(this._genMerger, 0, 0);
@@ -753,7 +755,8 @@ export class SourceController {
       hi = 20000,
       phase = 0,
       ratio = '1:1',
-      duration = 20
+      duration = 20,
+      divisor = 4
     } = config;
 
     const amplitude = dbToLinear(db);
@@ -767,7 +770,7 @@ export class SourceController {
     this._genMerger = this.context.createChannelMerger(2);
 
     this._applyRouting(routing);
-    await this._createSignal(type, { freq, db, lo, hi, phase, ratio, duration, routing, amplitude });
+    await this._createSignal(type, { freq, db, lo, hi, phase, ratio, duration, routing, amplitude, divisor });
 
     // Reconnect
     this._genLeftGain.connect(this._genMerger, 0, 0);
@@ -890,7 +893,7 @@ export class SourceController {
    * @private
    */
   async _createSignal(type, params) {
-    const { freq, amplitude, lo, hi, phase, ratio, duration, routing } = params;
+    const { freq, amplitude, lo, hi, phase, ratio, duration, routing, divisor } = params;
 
     switch (type) {
       case SignalType.SINE:
@@ -927,6 +930,10 @@ export class SourceController {
         await this._createVectorTextSignal(amplitude);
         break;
 
+      case SignalType.ISP_TONE:
+        this._createIspToneSignal(divisor, phase);
+        break;
+
       case SignalType.ISP_MAX:
         this._createISPMaxSignal();
         break;
@@ -952,23 +959,62 @@ export class SourceController {
   }
 
   /**
-   * Create maximum intersample peak signal.
-   * Generates alternating ±1 samples (Nyquist frequency).
-   * This causes maximum ISP of +3.01 dBTP when reconstructed.
+   * Create a sine at fs/divisor with a fixed phase against the sample grid.
+   *
+   * An OscillatorNode starts at phase zero on a render-quantum boundary, so a
+   * sine at fs/4, fs/6 or fs/8 would land samples on its crests and show no
+   * inter-sample peak at all. A looped buffer holding a whole number of
+   * periods fixes the phase, which makes both the sample peak and the true
+   * peak exactly known: the EBU Tech 3341 geometry (cases 16 to 18).
+   *
+   * @param {number} divisor - Frequency as fs/divisor (integer, 2 or more)
+   * @param {number} phaseDegrees - Phase of the first sample in degrees
+   * @private
+   */
+  _createIspToneSignal(divisor, phaseDegrees) {
+    const period = Math.max(2, Math.round(divisor));
+    const bufferLength = period * Math.floor(this.context.sampleRate / period);
+    const buffer = this.context.createBuffer(2, bufferLength, this.context.sampleRate);
+    const phase = (phaseDegrees * Math.PI) / 180;
+
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < bufferLength; i++) {
+        data[i] = Math.sin((2 * Math.PI * i) / period + phase);
+      }
+    }
+
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    source.connect(this._genGain);
+    source.start();
+    this._genSourceNodes.push(source);
+
+    this._genGain.connect(this._genLeftGain);
+    this._genGain.connect(this._genRightGain);
+  }
+
+  /**
+   * Create the maximum inter-sample peak signal for a sample-peak-limited
+   * waveform: the repeating pattern +1, +1, −1, −1.
+   *
+   * This is a sine at fs/4 with amplitude √2 sampled at 45°: every sample
+   * sits at 0 dBFS while the reconstructed waveform peaks at +3.01 dBTP
+   * (EBU Tech 3341 case 19 at full scale). Alternating ±1 would instead be a
+   * tone exactly at fs/2 whose samples fall on its crests (0 dBTP), and which
+   * any practical interpolation filter attenuates.
    * @private
    */
   _createISPMaxSignal() {
-    // Create a short buffer with alternating +1/-1 samples
-    // This is the Nyquist frequency - the highest possible frequency
-    // When band-limited reconstruction is applied, peaks exceed sample values
-    const bufferLength = this.context.sampleRate; // 1 second buffer
+    const bufferLength = 4 * Math.floor(this.context.sampleRate / 4); // whole periods, about 1 s
     const buffer = this.context.createBuffer(2, bufferLength, this.context.sampleRate);
 
     for (let ch = 0; ch < 2; ch++) {
       const data = buffer.getChannelData(ch);
       for (let i = 0; i < bufferLength; i++) {
-        // Alternating +1, -1, +1, -1...
-        data[i] = (i % 2 === 0) ? 1.0 : -1.0;
+        data[i] = (i % 4) < 2 ? 1.0 : -1.0;
       }
     }
 

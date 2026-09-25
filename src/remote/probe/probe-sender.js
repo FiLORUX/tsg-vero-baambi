@@ -325,6 +325,7 @@ export class ProbeSender {
     this.stop();
     this.#client = null;
     this.#statusListeners.clear();
+    this.#collector.dispose();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -453,6 +454,9 @@ export class ProbeSender {
    */
   #startSendLoop() {
     if (this.#sendInterval) return;
+
+    // Peaks from before this (re)start were never meant for the receiver
+    this.#collector.resetTruePeakTracking();
 
     const intervalMs = Math.round(1000 / this.#updateRate);
 

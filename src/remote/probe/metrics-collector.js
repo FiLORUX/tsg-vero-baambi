@@ -114,6 +114,12 @@ export class MetricsCollector {
   /** @type {string|null} */
   #inputDeviceName = null;
 
+  /** @type {import('../../metering/true-peak.js').TruePeakReader|null} */
+  #truePeakReader = null;
+
+  /** @type {Object|null} Meter the reader belongs to */
+  #truePeakReaderMeter = null;
+
   /**
    * Create a new metrics collector.
    *
@@ -215,6 +221,7 @@ export class MetricsCollector {
    */
   setSources(sources) {
     this.#sources = { ...this.#sources, ...sources };
+    this.#attachTruePeakReader(this.#sources.truePeakMeter);
   }
 
   /**
@@ -222,6 +229,37 @@ export class MetricsCollector {
    */
   clearSources() {
     this.#sources = {};
+    this.#attachTruePeakReader(null);
+  }
+
+  /**
+   * Discard peaks gathered while nothing was transmitted, so the first packet
+   * after a start or reconnection carries only what follows it.
+   */
+  resetTruePeakTracking() {
+    this.#truePeakReader?.take();
+  }
+
+  /**
+   * Release the peak reader. Call when the collector is no longer used.
+   */
+  dispose() {
+    this.#attachTruePeakReader(null);
+  }
+
+  /**
+   * Follow the configured True Peak meter with a dedicated peak reader, so
+   * every peak since the previous collection is transmitted even though the
+   * bar reading has begun to fall by the time collect() runs.
+   *
+   * @param {Object|null} meter - TruePeakMeter or null
+   * @private
+   */
+  #attachTruePeakReader(meter) {
+    if (meter === this.#truePeakReaderMeter) return;
+    this.#truePeakReader?.close();
+    this.#truePeakReader = typeof meter?.createPeakReader === 'function' ? meter.createPeakReader() : null;
+    this.#truePeakReaderMeter = meter ?? null;
   }
 
   /**
@@ -305,10 +343,14 @@ export class MetricsCollector {
 
     try {
       const state = meter.getState();
+      // Bar reading, raised to any higher peak since the previous collection
+      const since = this.#truePeakReader?.take() ?? { left: -Infinity, right: -Infinity };
+      const left = Math.max(state.dbtpLeft, since.left);
+      const right = Math.max(state.dbtpRight, since.right);
       return {
-        left: this.#sanitiseLevel(state.dbtpLeft),
-        right: this.#sanitiseLevel(state.dbtpRight),
-        max: this.#sanitiseLevel(Math.max(state.dbtpLeft, state.dbtpRight))
+        left: this.#sanitiseLevel(left),
+        right: this.#sanitiseLevel(right),
+        max: this.#sanitiseLevel(Math.max(left, right))
       };
     } catch (error) {
       console.warn('[MetricsCollector] True Peak collection error:', error);

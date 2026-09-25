@@ -15,12 +15,9 @@
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
-// Production true-peak functions — tested directly so a defect in the shipping
+// Production true-peak detector, tested directly so a defect in the shipping
 // code cannot hide behind a local reimplementation (as it did historically).
-import {
-  calculateTruePeak as prodHermite,
-  calculateTruePeakPolyphase as prodPolyphase
-} from '../src/metering/true-peak.js';
+import { calculateTruePeak } from '../src/metering/true-peak.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST UTILITIES
@@ -245,44 +242,6 @@ function calculateCorrelation(left, right) {
 }
 
 /**
- * Test Hermite interpolation for True Peak.
- */
-function testHermiteInterpolation() {
-  console.log('\n--- Hermite Interpolation ---');
-
-  // Test that Hermite interpolation at integer points returns original values
-  const y0 = 0.2;
-  const y1 = 0.8;
-  const y2 = 0.6;
-  const y3 = 0.3;
-
-  // At t=0, should return y1
-  const atZero = hermite(y0, y1, y2, y3, 0);
-  assertClose('Hermite at t=0', atZero, y1, 0.001);
-
-  // At t=1, should return y2
-  const atOne = hermite(y0, y1, y2, y3, 1);
-  assertClose('Hermite at t=1', atOne, y2, 0.001);
-
-  // Midpoint should be smooth interpolation
-  const atHalf = hermite(y0, y1, y2, y3, 0.5);
-  const linearMid = (y1 + y2) / 2;
-  // Hermite typically overshoots linear interpolation for these values
-  console.log(`  Hermite at t=0.5: ${atHalf.toFixed(4)} (linear would be ${linearMid.toFixed(4)})`);
-}
-
-/**
- * Hermite interpolation.
- */
-function hermite(y0, y1, y2, y3, t) {
-  const c0 = y1;
-  const c1 = 0.5 * (y2 - y0);
-  const c2 = y0 - 2.5 * y1 + 2 * y2 - 0.5 * y3;
-  const c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2);
-  return ((c3 * t + c2) * t + c1) * t + c0;
-}
-
-/**
  * Test PPM decay rate calculation.
  */
 function testPpmDecay() {
@@ -331,253 +290,65 @@ function testKWeightingResponse() {
 }
 
 /**
- * Test True Peak intersample detection.
- * Verifies 4× oversampling with Hermite interpolation.
+ * Test the true-peak detector (ITU-R BS.1770-4 Annex 2) through the shipping
+ * `calculateTruePeak`. The EBU Tech 3341 conformance cases 15 to 23 live in
+ * tests/true-peak-test.js; this section keeps the broad sanity checks.
  */
-function testTruePeakIntersample() {
-  console.log('\n--- True Peak Intersample Detection ---');
+function testTruePeak() {
+  console.log('\n--- True Peak (ITU-R BS.1770-4 Annex 2) ---');
 
-  // Test 1: Full-scale sine should read ~0 dBTP
   const sampleRate = 48000;
-  const fullScaleSine = generateSine(sampleRate, 1000, 1.0, 0.1);
-  const tpFullScale = calculateTruePeakLocal(fullScaleSine);
-  assertClose('Full-scale sine True Peak', tpFullScale, 0.0, 0.3, ' dBTP');
 
-  // Test 2: -6 dBFS sine should read ~-6 dBTP
+  // Level linearity: 1 kHz sines at 0, -6 and -18 dBFS
+  const fullScaleSine = generateSine(sampleRate, 1000, 1.0, 0.1);
+  assertClose('Full-scale 1 kHz sine', calculateTruePeak(fullScaleSine, sampleRate), 0.0, 0.1, ' dBTP');
+
   const halfScaleSine = generateSine(sampleRate, 1000, 0.5, 0.1);
-  const tpHalfScale = calculateTruePeakLocal(halfScaleSine);
-  assertClose('-6 dBFS sine True Peak', tpHalfScale, -6.0, 0.5, ' dBTP');
+  assertClose('-6 dBFS 1 kHz sine', calculateTruePeak(halfScaleSine, sampleRate), -6.02, 0.1, ' dBTP');
 
-  // Test 3: Intersample peak detection
-  // High-frequency signal near Nyquist should show intersample peak > sample peak
-  const nearNyquist = generateSine(sampleRate, 22000, 0.7, 0.01);
+  const sine18 = generateSine(sampleRate, 1000, Math.pow(10, -18 / 20), 0.1);
+  assertClose('-18 dBFS 1 kHz sine', calculateTruePeak(sine18, sampleRate), -18.0, 0.1, ' dBTP');
 
-  // Sample peak
-  let samplePeak = 0;
-  for (let i = 0; i < nearNyquist.length; i++) {
-    const abs = Math.abs(nearNyquist[i]);
-    if (abs > samplePeak) samplePeak = abs;
-  }
-  const samplePeakDb = 20 * Math.log10(samplePeak + 1e-12);
-
-  // True peak with interpolation
-  const truePeakDb = calculateTruePeakLocal(nearNyquist);
-
-  console.log(`  Near-Nyquist signal: Sample peak=${samplePeakDb.toFixed(1)} dBFS, True peak=${truePeakDb.toFixed(1)} dBTP`);
-
-  // True peak should be >= sample peak (interpolation catches peaks between samples)
-  if (truePeakDb >= samplePeakDb - 0.5) {
-    pass('Intersample peak detection', 'True Peak >= Sample Peak', 'True Peak >= Sample Peak');
-  } else {
-    fail('Intersample peak detection', truePeakDb.toFixed(1), `>= ${samplePeakDb.toFixed(1)}`);
-  }
-}
-
-/**
- * Test polyphase FIR True Peak (ITU-R BS.1770-4 Annex 2).
- * Verifies 4× oversampling with 48-tap polyphase filter.
- */
-function testTruePeakPolyphase() {
-  console.log('\n--- True Peak Polyphase FIR (ITU-R BS.1770-4) ---');
-
-  const sampleRate = 48000;
-
-  // Test 1: Full-scale 1 kHz sine should read ~0 dBTP
-  // At 1 kHz, both Hermite and polyphase should agree closely
-  const fullScaleSine = generateSine(sampleRate, 1000, 1.0, 0.1);
-  const tpPolyphase = calculateTruePeakPolyphaseLocal(fullScaleSine);
-  assertClose('Polyphase: full-scale 1 kHz sine', tpPolyphase, 0.0, 0.1, ' dBTP');
-
-  // Test 2: -18 dBFS sine should read ~-18 dBTP
-  const amplitude18 = Math.pow(10, -18 / 20);
-  const sine18 = generateSine(sampleRate, 1000, amplitude18, 0.1);
-  const tp18 = calculateTruePeakPolyphaseLocal(sine18);
-  assertClose('Polyphase: -18 dBFS 1 kHz sine', tp18, -18.0, 0.1, ' dBTP');
-
-  // Test 3: Polyphase vs Hermite agreement at low frequency
-  // Both methods should produce nearly identical results for 1 kHz
-  const tpHermite = calculateTruePeakLocal(fullScaleSine);
-  const diff1k = Math.abs(tpPolyphase - tpHermite);
-  assertClose('Hermite/Polyphase agreement at 1 kHz', diff1k, 0.0, 0.2, ' dB');
-
-  // Test 4: Near-Nyquist signal
-  // Polyphase should be more accurate than Hermite for high frequencies
-  const nearNyquist = generateSine(sampleRate, 22000, 1.0, 0.05);
-  const tpNyquistPoly = calculateTruePeakPolyphaseLocal(nearNyquist);
-  const tpNyquistHerm = calculateTruePeakLocal(nearNyquist);
-
-  // True peak of full-scale sine at any frequency should be 0 dBTP
-  // Polyphase should be closer to 0 than Hermite
-  console.log(`  22 kHz full-scale: Hermite=${tpNyquistHerm.toFixed(2)} dBTP, Polyphase=${tpNyquistPoly.toFixed(2)} dBTP`);
-
-  const polyError = Math.abs(tpNyquistPoly - 0);
-  const hermError = Math.abs(tpNyquistHerm - 0);
-  if (polyError <= hermError + 0.1) {
-    pass('Polyphase accuracy at Nyquist', `${polyError.toFixed(2)} dB error`, `<= Hermite (${hermError.toFixed(2)} dB)`);
-  } else {
-    fail('Polyphase accuracy at Nyquist', `${polyError.toFixed(2)} dB error`, `<= Hermite (${hermError.toFixed(2)} dB)`);
-  }
-
-  // Test 5: Guard clause - empty buffer
-  const emptyResult = calculateTruePeakPolyphaseLocal(new Float32Array(0));
-  if (emptyResult === -Infinity) {
-    pass('Polyphase guard: empty buffer', '-Infinity', '-Infinity');
-  } else {
-    fail('Polyphase guard: empty buffer', emptyResult, '-Infinity');
-  }
-
-  // Test 6: Guard clause - null buffer
-  const nullResult = calculateTruePeakPolyphaseLocal(null);
-  if (nullResult === -Infinity) {
-    pass('Polyphase guard: null buffer', '-Infinity', '-Infinity');
-  } else {
-    fail('Polyphase guard: null buffer', nullResult, '-Infinity');
-  }
-
-  // Test 7: Short buffer fallback (< 12 samples)
-  const shortBuffer = new Float32Array([0.5, -0.5, 0.3, -0.3]);
-  const shortResult = calculateTruePeakPolyphaseLocal(shortBuffer);
-  const expectedShort = 20 * Math.log10(0.5 + 1e-9);
-  assertClose('Polyphase: short buffer fallback', shortResult, expectedShort, 0.1, ' dBTP');
-}
-
-/**
- * Regression test against the SHIPPING true-peak code (not a local copy).
- *
- * The canonical BS.1770 worst case — a full-scale sine at Fs/4 sampled at 45° —
- * has a true peak of 0.0 dBTP but a sample peak of only −3.01 dBTP. A correct 4×
- * meter must recover it; a half-band filter silently degrades to sample-peak.
- * The earlier polyphase filter did exactly that (read −3.01), and it shipped
- * because the tests only exercised local reimplementations. This guards the
- * production `calculateTruePeakPolyphase` directly so that cannot recur.
- */
-function testTruePeakProduction() {
-  console.log('\n--- True Peak (production code, BS.1770 worst case) ---');
-  const fs = 48000;
+  // Inter-sample peak: a full-scale sine at fs/4 sampled at 45° lands every
+  // sample on ±0.707 (sample peak -3.01 dBFS) while the waveform peaks at
+  // 0 dBTP between the samples. A sample-peak meter cannot see this.
   const N = 8192;
-
-  // Full-scale sine at Fs/4, 45° phase → samples land at ±0.707, peak between.
   const worst = new Float32Array(N);
   for (let n = 0; n < N; n++) {
-    worst[n] = Math.sin((2 * Math.PI * (fs / 4) * n) / fs + Math.PI / 4);
+    worst[n] = Math.sin((2 * Math.PI * (sampleRate / 4) * n) / sampleRate + Math.PI / 4);
   }
-  const poly = prodPolyphase(worst);
-  const herm = prodHermite(worst);
-  console.log(
-    `  Fs/4 @45°: sample-peak=-3.01, Hermite=${herm.toFixed(2)}, Polyphase=${poly.toFixed(2)} dBTP (truth 0.0)`
-  );
+  let samplePeak = 0;
+  for (let n = 0; n < N; n++) samplePeak = Math.max(samplePeak, Math.abs(worst[n]));
+  const samplePeakDb = 20 * Math.log10(samplePeak);
+  const truePeakDb = calculateTruePeak(worst, sampleRate);
+  console.log(`  fs/4 @ 45°: sample peak=${samplePeakDb.toFixed(2)} dBFS, true peak=${truePeakDb.toFixed(2)} dBTP (truth 0.0)`);
+  assertClose('fs/4 @ 45° inter-sample peak recovered', truePeakDb, 0.0, 0.3, ' dBTP');
 
-  if (poly >= -0.5) {
-    pass('Production polyphase recovers Fs/4 ISP', `${poly.toFixed(2)} dBTP`, '>= -0.5 dBTP');
+  // Near Nyquist: Annex 2 Attachment 1 bounds the geometric under-read of a
+  // 4x meter at 0.69 dB for a tone at fs/2, and the tabulated filter rolls
+  // off above 20 kHz. A conforming meter therefore reads a little below the
+  // amplitude here, never above it.
+  const nearNyquist = generateSine(sampleRate, 22000, 1.0, 0.05);
+  const tpNyquist = calculateTruePeak(nearNyquist, sampleRate);
+  console.log(`  22 kHz full-scale: ${tpNyquist.toFixed(2)} dBTP`);
+  if (tpNyquist <= 0.2 && tpNyquist >= -1.0) {
+    pass('22 kHz within the Annex 2 under-read bound', tpNyquist.toFixed(2), '-1.0 to +0.2', ' dBTP');
   } else {
-    fail('Production polyphase recovers Fs/4 ISP', `${poly.toFixed(2)} dBTP`, '>= -0.5 dBTP');
-  }
-  assertClose('Production polyphase: Fs/4 accuracy', poly, 0.0, 0.3, ' dBTP');
-
-  // Low-frequency sanity on the shipping code.
-  const oneK = new Float32Array(N);
-  for (let n = 0; n < N; n++) oneK[n] = Math.sin((2 * Math.PI * 1000 * n) / fs);
-  assertClose('Production polyphase: 1 kHz full-scale', prodPolyphase(oneK), 0.0, 0.1, ' dBTP');
-}
-
-/**
- * Polyphase FIR coefficients (ITU-R BS.1770-4 Annex 2).
- * 4 phases × 12 taps = 48-tap prototype filter.
- * Normalised to unity DC gain per phase for amplitude-preserving interpolation.
- */
-const POLYPHASE_COEFFICIENTS = (() => {
-  const RAW_PHASE_1 = [
-    0.0017089843750, -0.0291748046875, -0.0189208984375, 0.1099853515625,
-    0.2926025390625, 0.4061279296875, 0.2926025390625, 0.1099853515625,
-    -0.0189208984375, -0.0291748046875, 0.0017089843750, 0
-  ];
-  const RAW_PHASE_2 = [
-    0.0018310546875, -0.0180664062500, 0.0438232421875, -0.0931396484375,
-    0.3141357421875, 0.5000000000000, 0.3141357421875, -0.0931396484375,
-    0.0438232421875, -0.0180664062500, 0.0018310546875, 0
-  ];
-  const norm1 = 1.0 / RAW_PHASE_1.reduce((a, b) => a + b, 0);
-  const norm2 = 1.0 / RAW_PHASE_2.reduce((a, b) => a + b, 0);
-
-  return [
-    new Float64Array([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]),
-    new Float64Array(RAW_PHASE_1.map(c => c * norm1)),
-    new Float64Array(RAW_PHASE_2.map(c => c * norm2)),
-    new Float64Array(RAW_PHASE_1.slice().reverse().map(c => c * norm1))
-  ];
-})();
-
-/**
- * Local polyphase True Peak calculation (mirrors src/metering/true-peak.js).
- */
-function calculateTruePeakPolyphaseLocal(buffer) {
-  if (!buffer || buffer.length === 0) return -Infinity;
-
-  const n = buffer.length;
-  const TAPS = 12;
-  const PHASES = 4;
-
-  if (n < TAPS) {
-    let maxAbs = 0;
-    for (let i = 0; i < n; i++) {
-      const abs = Math.abs(buffer[i]);
-      if (abs > maxAbs) maxAbs = abs;
-    }
-    return 20 * Math.log10(maxAbs + 1e-9);
+    fail('22 kHz within the Annex 2 under-read bound', tpNyquist.toFixed(2), '-1.0 to +0.2', ' dBTP');
   }
 
-  let maxAbs = 0;
-
-  for (let i = TAPS - 1; i < n; i++) {
-    for (let phase = 0; phase < PHASES; phase++) {
-      const coeffs = POLYPHASE_COEFFICIENTS[phase];
-      let sum = 0;
-      for (let k = 0; k < TAPS; k++) {
-        sum += buffer[i - k] * coeffs[k];
-      }
-      const abs = Math.abs(sum);
-      if (abs > maxAbs) maxAbs = abs;
-    }
+  // Guard clauses
+  if (calculateTruePeak(new Float32Array(0)) === -Infinity) {
+    pass('Guard: empty buffer', '-Infinity', '-Infinity');
+  } else {
+    fail('Guard: empty buffer', calculateTruePeak(new Float32Array(0)), '-Infinity');
   }
 
-  return 20 * Math.log10(maxAbs + 1e-9);
-}
-
-/**
- * Local True Peak calculation (mirrors src/metering/true-peak.js)
- */
-function calculateTruePeakLocal(buffer) {
-  let maxAbs = 0;
-  const n = buffer.length;
-
-  if (n < 4) {
-    for (let i = 0; i < n; i++) {
-      const abs = Math.abs(buffer[i]);
-      if (abs > maxAbs) maxAbs = abs;
-    }
-    return 20 * Math.log10(maxAbs + 1e-9);
+  if (calculateTruePeak(null) === -Infinity) {
+    pass('Guard: null buffer', '-Infinity', '-Infinity');
+  } else {
+    fail('Guard: null buffer', calculateTruePeak(null), '-Infinity');
   }
-
-  for (let i = 1; i < n - 2; i++) {
-    const p0 = buffer[i - 1];
-    const p1 = buffer[i];
-    const p2 = buffer[i + 1];
-    const p3 = buffer[i + 2];
-
-    const abs1 = Math.abs(p1);
-    if (abs1 > maxAbs) maxAbs = abs1;
-
-    const t1 = Math.abs(hermite(p0, p1, p2, p3, 0.25));
-    if (t1 > maxAbs) maxAbs = t1;
-
-    const t2 = Math.abs(hermite(p0, p1, p2, p3, 0.50));
-    if (t2 > maxAbs) maxAbs = t2;
-
-    const t3 = Math.abs(hermite(p0, p1, p2, p3, 0.75));
-    if (t3 > maxAbs) maxAbs = t3;
-  }
-
-  return 20 * Math.log10(maxAbs + 1e-9);
 }
 
 /**
@@ -759,12 +530,9 @@ console.log('For full audio tests, open tools/verify-audio.html in a browser\n')
 testDbConversions();
 testRmsCalculation();
 testCorrelation();
-testHermiteInterpolation();
 testPpmDecay();
 testKWeightingResponse();
-testTruePeakIntersample();
-testTruePeakPolyphase();
-testTruePeakProduction();
+testTruePeak();
 testLufsIntegration();
 testPpmBallistics();
 testStereoWidthBalance();

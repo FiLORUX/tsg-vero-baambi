@@ -28,7 +28,7 @@ import { Goniometer } from '../ui/goniometer.js';
 import { CorrelationMeter } from '../ui/correlation-meter.js';
 import { LoudnessRadar } from '../ui/radar.js';
 import { LUFSMeter, formatLUFS } from '../metering/lufs.js';
-import { TruePeakMeter, formatTruePeak, TRUE_PEAK_MODE } from '../metering/true-peak.js';
+import { TruePeakMeter, formatTruePeak, dbTPToAmplitude, TRUE_PEAK_MODE } from '../metering/true-peak.js';
 import { PPMMeter, formatPPM } from '../metering/ppm.js';
 import { SamplePeakMeter } from '../metering/sample-peak.js';
 import { StereoMeter, formatCorrelation, calculateCorrelation } from '../metering/correlation.js';
@@ -455,6 +455,7 @@ function sampleKWeightedAnalysers() {
 
 const lufsMeter = new LUFSMeter({ sampleRate: ac.sampleRate, blockSize: FFT_SIZE });
 const truePeakMeter = new TruePeakMeter({
+  sampleRate: ac.sampleRate,
   mode: appState.get('truePeakMode') || TRUE_PEAK_MODE.POLYPHASE
 });
 const ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate, detectorMode: 'rc' });
@@ -670,6 +671,51 @@ function loudnessColour(lufs) {
 // State: selectedMode = UI selection, activeCapture = currently running source
 let selectedInputMode = 'browser'; // 'browser', 'external', 'generator'
 let activeCapture = null; // null, 'browser', 'external', 'generator'
+
+/**
+ * Feed the True Peak meter from the most complete source available.
+ *
+ * With the stereo sampler running, the meter receives the true peak of every
+ * sample since the previous call, measured off the UI thread's schedule:
+ * dropped frames and background-tab throttling cannot hide an inter-sample
+ * over. A frame in which no new samples were measured leaves the meter
+ * untouched, so the bar does not dip between reports. Without the sampler the
+ * meter measures the analyser window. In Tauri mode the Rust engine's peaks
+ * arrive through handleTauriMeteringUpdate instead.
+ */
+function updateTruePeakMeter() {
+  if (activeCapture === 'tauri') return;
+  if (stereoSamplerModule?.hasTruePeakFeed?.()) {
+    const { left, right, samples } = stereoSamplerModule.consumeTruePeaks();
+    if (samples > 0) truePeakMeter.updateFromPeaks(left, right);
+  } else {
+    truePeakMeter.update(bufL, bufR);
+  }
+}
+
+/**
+ * Reset the True Peak meter and discard peaks measured before the reset,
+ * including reports still on their way from the AudioWorklet, so a new
+ * measurement starts from the samples that follow it.
+ */
+function resetTruePeakMeter() {
+  stereoSamplerModule?.resetTruePeaks?.();
+  truePeakMeter.reset();
+}
+
+/**
+ * Clear the remote TPmax. A different probe, or the switch from local to
+ * remote metering, starts a new programme whose maximum must not inherit the
+ * previous source's.
+ */
+function resetRemoteTruePeakMax() {
+  meterState.tpMaxL = -Infinity;
+  meterState.tpMaxR = -Infinity;
+  if (r128TpMax) {
+    r128TpMax.textContent = ' --.- dBTP';
+    r128TpMax.style.color = '';
+  }
+}
 
 // Generator monitor and EBU pulse state
 let monitorMuted = false;
@@ -1317,9 +1363,10 @@ async function startRemoteCapture() {
     remoteReceiver.unsubscribe(selectedRemoteProbeId);
   }
 
-  // Subscribe to selected probe
+  // Subscribe to selected probe; its TPmax starts afresh
   selectedRemoteProbeId = selectedProbeId;
   remoteReceiver.subscribe(selectedProbeId);
+  resetRemoteTruePeakMax();
 
   // Store probe info in appState for calibration wizard
   const selectedProbe = remoteReceiver.probes.find(p => p.id === selectedProbeId);
@@ -1360,9 +1407,6 @@ async function startRemoteCapture() {
 }
 
 /**
- * Stop remote capture - unsubscribe from probe (but keep connection for UI).
- */
-/**
  * Clear all remote meter displays to idle state.
  * Called when probe goes offline while capture is active.
  */
@@ -1388,11 +1432,11 @@ function clearRemoteDisplays() {
   if (msFillM) { msFillM.style.width = '0%'; }
   if (msFillS) { msFillS.style.width = '0%'; }
 
-  // Width meter
-  if (widthMeterUI) { widthMeterUI.update(0, 0); }
+  // Width meter: empty bar, peak tick at zero
+  if (widthMeterUI) { widthMeterUI.draw(0, 0); }
 
-  // Balance meter
-  if (balanceMeterUI) { balanceMeterUI.update(0); }
+  // Balance meter: centred at once, without smoothing back from the last value
+  if (balanceMeterUI) { balanceMeterUI.reset(); }
 
   // Latency
   if (remoteLatency) { remoteLatency.textContent = '–'; }
@@ -1400,6 +1444,9 @@ function clearRemoteDisplays() {
   console.log('[Bootstrap] Remote displays cleared - probe offline');
 }
 
+/**
+ * Stop remote capture - unsubscribe from probe (but keep connection for UI).
+ */
 function stopRemoteCapture() {
   try {
     // Unsubscribe from current probe but keep connection for probe list
@@ -1483,7 +1530,8 @@ function renderRemoteProbeList(probes) {
         remoteReceiver.unsubscribe(selectedRemoteProbeId);
       }
 
-      // Subscribe to new probe
+      // Subscribe to new probe; a different probe starts a new TPmax
+      if (selectedRemoteProbeId !== probeId) resetRemoteTruePeakMax();
       selectedRemoteProbeId = probeId;
       remoteReceiver.subscribe(probeId);
 
@@ -1509,8 +1557,8 @@ function renderRemoteProbeList(probes) {
  * @param {number} data.lufsM - Momentary LUFS
  * @param {number} data.lufsS - Short-term LUFS
  * @param {number} data.lufsI - Integrated LUFS
- * @param {number} data.tpLeft - True Peak left (dBTP)
- * @param {number} data.tpRight - True Peak right (dBTP)
+ * @param {number} data.tpLeft - Largest left True Peak since the previous packet (dBTP)
+ * @param {number} data.tpRight - Largest right True Peak since the previous packet (dBTP)
  * @param {number} data.ppmLeft - PPM left (dBFS)
  * @param {number} data.ppmRight - PPM right (dBFS)
  * @param {number} data.correlation - Stereo correlation (-1 to +1)
@@ -1576,45 +1624,23 @@ function handleTauriMeteringUpdate(data) {
   // ─────────────────────────────────────────────────────────────────────────
   // TRUE PEAK
   // ─────────────────────────────────────────────────────────────────────────
+  // Each packet carries the largest true peak since the previous one,
+  // measured by the Rust engine on every sample. The shared meter adds bar
+  // ballistics, hold and TPmax; the render loop draws it as in local mode.
   const tpL = data.tpLeft ?? -60;
   const tpR = data.tpRight ?? -60;
-  meterState.remoteTpL = tpL;
-  meterState.remoteTpR = tpR;
+  truePeakMeter.updateFromPeaks(dbTPToAmplitude(tpL), dbTPToAmplitude(tpR));
 
-  // Cumulative max for R128 TPmax display
-  if (tpL > meterState.tpMaxL) meterState.tpMaxL = tpL;
-  if (tpR > meterState.tpMaxR) meterState.tpMaxR = tpR;
-
-  // Update TPmax display
+  // TPmax since reset for the R128 display and the session export
+  const tpState = truePeakMeter.getState();
+  meterState.tpMaxL = tpState.dbtpMaxLeft;
+  meterState.tpMaxR = tpState.dbtpMaxRight;
   if (r128TpMax) {
-    const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
-    if (isFinite(tpMax) && tpMax > -100) {
+    const tpMax = tpState.dbtpMax;
+    if (Number.isFinite(tpMax) && tpMax > -100) {
       r128TpMax.textContent = formatTruePeak(tpMax);
       r128TpMax.style.color = tpMax > TP_LIMIT ? 'var(--hot)' : '';
     }
-  }
-
-  // Peak hold for bar meters (3s hold)
-  if (tpL > meterState.tpPeakHoldL) {
-    meterState.tpPeakHoldL = tpL;
-    meterState.tpPeakTimeL = now;
-  } else if (now - meterState.tpPeakTimeL > TP_PEAK_HOLD_SEC) {
-    meterState.tpPeakHoldL = tpL;
-    meterState.tpPeakTimeL = now;
-  }
-  if (tpR > meterState.tpPeakHoldR) {
-    meterState.tpPeakHoldR = tpR;
-    meterState.tpPeakTimeR = now;
-  } else if (now - meterState.tpPeakTimeR > TP_PEAK_HOLD_SEC) {
-    meterState.tpPeakHoldR = tpR;
-    meterState.tpPeakTimeR = now;
-  }
-
-  // Peak indicator for radar
-  const currentTruePeak = Math.max(tpL, tpR);
-  if (currentTruePeak >= TP_LIMIT) {
-    meterState.peakIndicatorOn = true;
-    meterState.peakIndicatorLastTrigger = performance.now();
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1714,13 +1740,15 @@ function handleRemoteMetrics(probeId, metrics) {
   // ─────────────────────────────────────────────────────────────────────────
   // LUFS DISPLAY
   // ─────────────────────────────────────────────────────────────────────────
+  // Values arrive as JSON, where −Infinity (silence, no data yet) becomes null.
+  // Number.isFinite rejects null; the global isFinite would coerce it to 0.
   const { lufs, truePeak, ppm, rms, stereo, visualization } = metrics;
 
   if (lufs) {
     // Momentary LUFS
     if (lufsM) {
       const m = lufs.momentary;
-      if (isFinite(m) && m > -100) {
+      if (Number.isFinite(m) && m > -100) {
         lufsM.textContent = formatLUFS(m);
         lufsM.style.color = loudnessColourBase(m);
         lufsM.dataset.v = m;
@@ -1733,7 +1761,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // Short-term LUFS
     if (lufsS) {
       const s = lufs.shortTerm;
-      if (isFinite(s) && s > -100) {
+      if (Number.isFinite(s) && s > -100) {
         lufsS.textContent = formatLUFS(s);
         lufsS.style.color = loudnessColourBase(s);
         meterState.shortTermLufs = s;
@@ -1747,7 +1775,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // Integrated LUFS
     if (lufsI) {
       const i = lufs.integrated;
-      if (isFinite(i) && i > -100) {
+      if (Number.isFinite(i) && i > -100) {
         lufsI.textContent = formatLUFS(i);
         lufsI.style.color = loudnessColourBase(i);
         meterState.integratedLufs = i;
@@ -1761,7 +1789,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // LRA
     if (lraEl) {
       const lra = lufs.lra;
-      if (isFinite(lra) && lra >= 0) {
+      if (Number.isFinite(lra) && lra >= 0) {
         // Fixed-width format: pad to 4 chars (e.g., " 5.2" or "12.3")
         lraEl.textContent = lra.toFixed(1).padStart(4, ' ') + ' LU';
       } else {
@@ -1773,7 +1801,7 @@ function handleRemoteMetrics(probeId, metrics) {
     // RADAR HISTORY (short-term LUFS over time)
     // ─────────────────────────────────────────────────────────────────────────
     const st = lufs.shortTerm;
-    if (isFinite(st) && st > -100) {
+    if (Number.isFinite(st) && st > -100) {
       const now = Date.now();
       const cutoff = now - (radarMaxSeconds * 1000);
       // Efficient pruning using binary search + splice (O(log n) instead of O(n²))
@@ -1789,8 +1817,13 @@ function handleRemoteMetrics(probeId, metrics) {
   // TRUE PEAK DISPLAY
   // ─────────────────────────────────────────────────────────────────────────
   if (truePeak && r128TpMax) {
-    const tpMax = Math.max(truePeak.left ?? -Infinity, truePeak.right ?? -Infinity);
-    if (isFinite(tpMax) && tpMax > -100) {
+    // TPmax is the maximum since the last local reset. Each transmission
+    // carries the largest level since the previous one, so the running
+    // maximum of the received values is the true-peak maximum.
+    if ((truePeak.left ?? -Infinity) > meterState.tpMaxL) meterState.tpMaxL = truePeak.left;
+    if ((truePeak.right ?? -Infinity) > meterState.tpMaxR) meterState.tpMaxR = truePeak.right;
+    const tpMax = Math.max(meterState.tpMaxL, meterState.tpMaxR);
+    if (Number.isFinite(tpMax) && tpMax > -100) {
       r128TpMax.textContent = formatTruePeak(tpMax);
       // Colour coding: red if over limit
       const TP_LIMIT = appState.get('truePeakLimit') ?? -1;
@@ -2071,7 +2104,7 @@ function bindEvents() {
         updatePauseButtonState(false);
       }
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
       // Reset history strip
       if (loudnessHistoryStrip) loudnessHistoryStrip.reset();
@@ -2452,7 +2485,7 @@ function bindEvents() {
       }
       // Reset R128 when target changes (like original resetR128)
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
       // Update display with fixed-width placeholders
       if (lufsM) lufsM.textContent = ' --.- LUFS';
@@ -2612,6 +2645,45 @@ function setupObservers() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Dependencies of the render loop, shared by browser and Tauri mode so that
+ * both draw through the same helpers and configuration.
+ *
+ * @returns {Object} Argument for initRenderLoop()
+ */
+function renderLoopDependencies() {
+  return {
+    dom: {
+      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
+      bbcCanvas, bbcLVal, bbcRVal,
+      spCanvas, spLVal, spRVal,
+      dbfs, dbL, dbR, tp, tpL, tpR,
+      uptimeEl, statusSummary
+    },
+    meters: {
+      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
+    },
+    uiComponents: {
+      goniometer, correlationMeter, balanceMeterUI,
+      spectrumAnalyserUI, msMeterUI, widthMeterUI,
+      rotationMeterUI, radar, stereoAnalysis,
+      loudnessHistoryStrip
+    },
+    config: {
+      getSampleRate: () => ac.sampleRate,
+      getRadarMaxSeconds: () => radarMaxSeconds,
+      getTpLimit: () => TP_LIMIT
+    },
+    helpers: {
+      layoutXY, layoutLoudness, sampleAnalysers, updateTruePeakMeter,
+      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
+      updateRadarTooltip
+    },
+    captureState: { getActiveCapture: () => activeCapture },
+    TransitionGuard
+  };
+}
+
+/**
  * Initialise VERO-BAAMBI in Tauri mode with native audio backend.
  * This bypasses Web Audio API entirely, using ASIO/JACK/CoreAudio via Rust.
  */
@@ -2647,47 +2719,13 @@ async function initTauriMode() {
   // Setup observers
   setupObservers();
 
-  // Initialise measure loop (used for render timing)
-  initMeasureLoop({
-    lufsMeter,
-    truePeakMeter,
-    ppmMeter,
-    samplePeakMeter,
-    radar,
-    getActiveCapture: () => activeCapture,
-    getTrim: () => 0,
-    getTargetLufs: () => LOUDNESS_TARGET,
-    getTpLimit: () => TP_LIMIT
-  });
+  // The measure loop was initialised at module load with the full dependency
+  // set; with activeCapture === 'tauri' it only advances the elapsed-time
+  // display, because the Rust engine supplies LUFS and true peak
 
-  // Initialise render loop
-  initRenderLoop({
-    dom: {
-      dbfs, dbfsScale, dbL, dbR,
-      tp, tpScale, tpL, tpR,
-      nordicCanvas, nordicScale, nordicLVal, nordicRVal,
-      bbcCanvas, bbcScale, bbcLVal, bbcRVal,
-      spCanvas, spScale, spLVal, spRVal,
-      corr, corrVal,
-      widthMeter, rotationCanvas, msFillM, msFillS, msValueM, msValueS,
-      peakLed, r128Crest, r128Time, uptimeEl
-    },
-    uiComponents: {
-      goniometer,
-      spectrumAnalyserUI,
-      widthMeterUI,
-      rotationMeterUI,
-      msMeterUI,
-      balanceMeterUI,
-      loudnessHistoryStrip
-    },
-    meters: { lufsMeter, truePeakMeter, ppmMeter, samplePeakMeter },
-    getActiveCapture: () => activeCapture,
-    getTargetLufs: () => LOUDNESS_TARGET,
-    getTpLimit: () => TP_LIMIT,
-    getDbfsBufs: () => ({ bufL: null, bufR: null }),
-    getKBufs: () => ({ kBufL: null, kBufR: null })
-  });
+  // Initialise render loop with the same dependencies as browser mode; in
+  // Tauri mode it skips the analysers and draws what the Rust engine sends
+  initRenderLoop(renderLoopDependencies());
 
   // Initialise Tauri bridge with metering callback
   const bridgeInitialised = await tauriBridge.initTauriBridge({
@@ -2707,8 +2745,11 @@ async function initTauriMode() {
 
   // Start native audio capture
   try {
-    const backend = await tauriBridge.startCapture({ bufferSize: 128 });
+    const captureInfo = await tauriBridge.startCapture({ bufferSize: 128 });
+    const backend = captureInfo?.backend ?? String(captureInfo);
     activeCapture = 'tauri';
+    // Measurement is running: the R128 reset (TPmax, LUFS) becomes available
+    if (r128Reset) r128Reset.disabled = false;
     console.log(`[Bootstrap] Started native audio capture with ${backend} backend`);
 
     // Update status display
@@ -2751,10 +2792,10 @@ function bindTauriEvents() {
   if (r128Reset) {
     r128Reset.addEventListener('click', () => {
       lufsMeter?.reset();
-      truePeakMeter?.reset();
+      resetTruePeakMeter();
       ppmMeter?.reset();
+      // Also clears the radar history, which lives in meterState
       resetMeterState();
-      radar?.clear();
       console.log('[Bootstrap] R128 measurement reset (Tauri mode)');
     });
   }
@@ -2832,7 +2873,7 @@ function init() {
     truePeakMeter,
     resetMeters: () => {
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       resetMeterState();
     },
     getTrim: () => {
@@ -2889,8 +2930,9 @@ function init() {
 
       // Update meters directly with current buffer data
       // (Bypasses measure-loop which requires activeCapture)
-      // True Peak and PPM use unweighted samples
-      truePeakMeter.update(bufL, bufR);
+      // True Peak and PPM use unweighted samples; True Peak takes the
+      // sample-complete feed when the sampler runs
+      updateTruePeakMeter();
       ppmMeter.update(bufL, bufR);
 
       // LUFS uses K-weighted samples per ITU-R BS.1770-4
@@ -2920,19 +2962,18 @@ function init() {
       // Critical for tests like PPM where previous test (LUFS pink noise)
       // has high peak levels that persist due to slow decay (11.76 dB/s)
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       ppmMeter.reset();
     },
     onStart: () => {
       console.log('[Bootstrap] Meter verification started');
       // Mute all sources to prevent interference with verification signals
       sourceController.muteAllSources();
-      // Switch True Peak to polyphase mode for accurate ISP detection
-      // (Hermite interpolation doesn't detect ISP for Nyquist signals)
+      // Verification runs on the ITU-R BS.1770-4 Annex 2 polyphase FIR
       truePeakMeter.setMode(TRUE_PEAK_MODE.POLYPHASE);
       // Reset all meters before verification
       lufsMeter.reset();
-      truePeakMeter.reset();
+      resetTruePeakMeter();
       ppmMeter.reset();
       resetMeterState();
     },
@@ -3170,36 +3211,7 @@ function init() {
   // See docs/PROJECT-A-DRAG-DROP-REMOVAL.md for rationale
 
   // Initialise render loop with dependencies (MUST be after initUIComponents)
-  initRenderLoop({
-    dom: {
-      lufsM, spatialMeter, nordicCanvas, nordicLVal, nordicRVal,
-      bbcCanvas, bbcLVal, bbcRVal,
-      spCanvas, spLVal, spRVal,
-      dbfs, dbL, dbR, tp, tpL, tpR,
-      uptimeEl, statusSummary
-    },
-    meters: {
-      bufL, bufR, ppmMeter, truePeakMeter, samplePeakMeter
-    },
-    uiComponents: {
-      goniometer, correlationMeter, balanceMeterUI,
-      spectrumAnalyserUI, msMeterUI, widthMeterUI,
-      rotationMeterUI, radar, stereoAnalysis,
-      loudnessHistoryStrip
-    },
-    config: {
-      getSampleRate: () => ac.sampleRate,
-      getRadarMaxSeconds: () => radarMaxSeconds,
-      getTpLimit: () => TP_LIMIT
-    },
-    helpers: {
-      layoutXY, layoutLoudness, sampleAnalysers,
-      drawHBar_DBFS, drawDiodeBar_TP, drawHBar_Nordic_PPM, drawHBar_BBC_PPM, drawSamplePeakBar,
-      updateRadarTooltip
-    },
-    captureState: { getActiveCapture: () => activeCapture },
-    TransitionGuard
-  });
+  initRenderLoop(renderLoopDependencies());
 
   // Start render loop
   startRenderLoop();

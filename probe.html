@@ -485,6 +485,7 @@ david@thast.se  ·  +46 700 30 30 60
 
     import { LUFSMeter } from './src/metering/lufs.js';
     import { TruePeakMeter } from './src/metering/true-peak.js';
+    import * as stereoSampler from './src/audio/stereo-sampler.js';
     import { PPMMeter } from './src/metering/ppm.js';
     import { StereoMeter } from './src/metering/correlation.js';
     import { StereoAnalysisEngine } from './src/ui/stereo-analysis.js';
@@ -512,6 +513,8 @@ david@thast.se  ·  +46 700 30 30 60
     let analyserL = null;
     let analyserR = null;
     let splitter = null;
+    let tapL = null;
+    let tapR = null;
 
     let lufsMeter = null;
     let truePeakMeter = null;
@@ -590,12 +593,26 @@ david@thast.se  ·  +46 700 30 30 60
       analyserL.smoothingTimeConstant = 0;
       analyserR.smoothingTimeConstant = 0;
 
-      // Create splitter
+      // Create splitter and per-channel taps; the analysers and the stereo
+      // sampler read the same signal
       splitter = ac.createChannelSplitter(2);
+      tapL = ac.createGain();
+      tapR = ac.createGain();
+      splitter.connect(tapL, 0);
+      splitter.connect(tapR, 1);
+      tapL.connect(analyserL);
+      tapR.connect(analyserR);
+
+      // Sample-complete true peak: the sampler measures every sample off the
+      // metrics interval's schedule. Without it the meter measures the
+      // analyser window, which leaves gaps between 100 ms transmissions.
+      stereoSampler.initStereoSampler(ac, tapL, tapR).catch((error) => {
+        console.warn('[Probe] Stereo sampler unavailable; True Peak falls back to analyser windows:', error.message);
+      });
 
       // Initialise meters
       lufsMeter = new LUFSMeter({ sampleRate: ac.sampleRate, blockSize: FFT_SIZE });
-      truePeakMeter = new TruePeakMeter();
+      truePeakMeter = new TruePeakMeter({ sampleRate: ac.sampleRate });
       ppmMeter = new PPMMeter({ sampleRate: ac.sampleRate });
       stereoMeter = new StereoMeter();
       stereoAnalysis = new StereoAnalysisEngine();
@@ -612,10 +629,8 @@ david@thast.se  ·  +46 700 30 30 60
 
       sourceNode = node;
 
-      // Route: source → splitter → analysers
+      // Route: source → splitter → taps → analysers and stereo sampler
       sourceNode.connect(splitter);
-      splitter.connect(analyserL, 0);
-      splitter.connect(analyserR, 1);
     }
 
     function sampleBuffers() {
@@ -883,6 +898,7 @@ david@thast.se  ·  +46 700 30 30 60
             case 'resetIntegration':
               // Reset all meters to initial state
               lufsMeter?.reset();
+              stereoSampler.resetTruePeaks();
               truePeakMeter?.reset();
               console.log('[TX] Integration reset by remote command');
               break;
@@ -986,14 +1002,22 @@ david@thast.se  ·  +46 700 30 30 60
           lufsMeter.pushBlock(energy);
           const lufs = lufsMeter.getReadings();
 
+          // True Peak: every sample since the previous transmission when the
+          // stereo sampler runs, otherwise the current analyser window
+          if (stereoSampler.hasTruePeakFeed()) {
+            const { left, right, samples } = stereoSampler.consumeTruePeaks();
+            if (samples > 0) truePeakMeter.updateFromPeaks(left, right);
+          } else {
+            truePeakMeter.update(bufL, bufR);
+          }
+
           // Update other meters (they use update() + getState() API)
-          truePeakMeter.update(bufL, bufR);
           ppmMeter.update(bufL, bufR);
           stereoMeter.update(bufL, bufR);
 
           // Run stereo analysis for width, rotation, M/S levels
           if (stereoAnalysis) {
-            stereoAnalysis.analyze(bufL, bufR);
+            stereoAnalysis.analyse(bufL, bufR);
           }
 
           // Calculate RMS for dBFS meter and balance
@@ -1121,9 +1145,9 @@ david@thast.se  ·  +46 700 30 30 60
         dom.metricLufsM.textContent = '–';
       }
 
-      // True Peak Max
-      const tpMax = Math.max(tp.dbtpLeft, tp.dbtpRight);
-      if (isFinite(tpMax) && tpMax > -60) {
+      // True Peak Max: the maximum since the last reset
+      const tpMax = tp.dbtpMax;
+      if (Number.isFinite(tpMax) && tpMax > -60) {
         dom.metricTpMax.textContent = tpMax.toFixed(1);
       } else {
         dom.metricTpMax.textContent = '–';
@@ -1194,6 +1218,7 @@ david@thast.se  ·  +46 700 30 30 60
 
       // Reset meters
       lufsMeter?.reset();
+      stereoSampler.resetTruePeaks();
       truePeakMeter?.reset();
 
       // Update UI
