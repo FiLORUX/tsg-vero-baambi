@@ -120,3 +120,6 @@ export {
   calculateSamplePeakStereo,
   SamplePeakMeter
 } from './sample-peak.js';
+
+// Sample peak and RMS rebuilt from block summaries (native engine packets)
+export { LevelWindow } from './level-window.js';

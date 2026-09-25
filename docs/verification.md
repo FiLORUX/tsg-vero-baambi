@@ -54,6 +54,12 @@ npm run test:browser
 
 Drives the real Web Audio pipeline in headless Chromium (needs the `playwright-core` dev dependency and `npx playwright-core install chromium`, or `CHROMIUM_PATH`): the stereo-sampler AudioWorklet against `TruePeakDetector` bit for bit at 44.1, 48, 96 and 192 kHz; EBU Tech 3341 cases 15 to 23 in real time with the main thread blocked for one second across the signal; the four Intersample Peak Demo presets through the application's generator, measure loop and TPmax display; the built-in Meter Verification Tool; and the remote chain, from the probe page through a local broker into the application's remote mode, including a scripted probe whose level drops while the received TPmax must hold, and a switch to a second probe that must start a new TPmax.
 
+```bash
+npm run test:browser:tauri
+```
+
+Runs the application in Tauri mode against a mocked native engine: packets in the engine's binary layout whose level fields describe a −18 dBFS sine while their display snapshots carry a spliced −40 dBFS one. Nordic PPM, dBFS (RMS), Sample Peak and True Peak must read the engine's values, a full-scale sample that falls between two snapshots must reach the Sample Peak meter, and the Nordic PPM must clamp to its display range as in local metering. The window that rebuilds sample peak and RMS from the engine's packets is tested in Node (`node tests/level-window-test.js`, part of `npm test`).
+
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 
 Tests Web Audio integration: sine RMS measurement, K-weighting frequency response, stereo correlation.
