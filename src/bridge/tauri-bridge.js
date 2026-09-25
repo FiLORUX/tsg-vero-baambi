@@ -26,7 +26,11 @@ const tauriBridge = {
   sampleRate: null,
   bufferSize: null,
   latencyMs: null,
-  listeners: [],
+  callbacks: {},
+  // Display-frame pull loop: pending animation frame, and whether a read is
+  // on its way (one at a time)
+  frameRequest: null,
+  readPending: false,
   // Reset generation of the readings being shown; adopted from the first
   // packet, then advanced by resetMeters()
   generation: null,
@@ -38,6 +42,12 @@ const tauriBridge = {
 // ─────────────────────────────────────────────────────────────────────────────
 // BINARY IPC PROTOCOL
 // ─────────────────────────────────────────────────────────────────────────────
+// The page pulls one packet per display frame with the read_metering command,
+// which answers with raw bytes (an ArrayBuffer, no JSON). A page that falls
+// behind reads less often instead of queueing readings, and the engine keeps
+// the largest true peak since the previous read, so no peak is lost. An empty
+// answer means no new audio block has been measured since the previous read.
+//
 // Binary format (little-endian, 4148 bytes total):
 //   0-3:    lufs_m (f32)
 //   4-7:    lufs_s (f32)
@@ -62,7 +72,7 @@ const VIS_SAMPLES = 512;
  * Parse binary metering data from Rust backend.
  * Zero-copy for sample arrays (views into the buffer).
  *
- * @param {ArrayBuffer|Uint8Array} data - Binary data from Tauri event
+ * @param {ArrayBuffer|Uint8Array} data - Raw packet from read_metering
  * @returns {Object} Parsed metering data
  */
 function parseBinaryMeteringData(data) {
@@ -119,17 +129,48 @@ export function isTauri() {
 }
 
 /**
- * Get Tauri event API from global
- */
-function getTauriEvent() {
-  return window.__TAURI__?.event;
-}
-
-/**
  * Get Tauri core API from global
  */
 function getTauriCore() {
   return window.__TAURI__?.core;
+}
+
+/**
+ * Pass a packet to the meters, unless it was measured before the latest reset.
+ *
+ * @param {ArrayBuffer} body - Raw packet from read_metering
+ */
+function deliverMetering(body) {
+  const data = parseBinaryMeteringData(body);
+
+  // After a reset, a packet measured before it may still be on its way;
+  // only readings of the current generation reach the meters
+  tauriBridge.generation ??= data.generation;
+  if (data.generation !== tauriBridge.generation) return;
+
+  tauriBridge.callbacks.onMeteringUpdate?.(data);
+
+  // Also expose via global for compatibility
+  window.updateMetersFromTauri?.(data);
+}
+
+/**
+ * Read the newest packet once per display frame, one read at a time.
+ */
+function pumpMetering() {
+  if (!tauriBridge.isActive) return;
+  tauriBridge.frameRequest = requestAnimationFrame(pumpMetering);
+  if (tauriBridge.readPending) return;
+
+  tauriBridge.readPending = true;
+  getTauriCore().invoke('read_metering')
+    .then((body) => {
+      if (body?.byteLength) deliverMetering(body);
+    })
+    .catch((error) => console.error('[TauriBridge] Metering read failed:', error))
+    .finally(() => {
+      tauriBridge.readPending = false;
+    });
 }
 
 /**
@@ -145,41 +186,18 @@ export async function initTauriBridge(callbacks = {}) {
     return false;
   }
 
-  console.log('[TauriBridge] Initialising native audio bridge (binary IPC)');
+  console.log('[TauriBridge] Initialising native audio bridge (binary pull per display frame)');
 
-  const tauriEvent = getTauriEvent();
-  if (!tauriEvent) {
-    console.error('[TauriBridge] Tauri event API not available');
+  if (!getTauriCore()) {
+    console.error('[TauriBridge] Tauri core API not available');
     return false;
   }
 
-  // Listen for BINARY metering updates from Rust backend (ultra-low latency)
-  const unlisten = await tauriEvent.listen('metering-bin', (event) => {
-    // Parse binary data (Tauri sends as array of numbers, convert to Uint8Array)
-    const rawData = event.payload;
-    const uint8 = rawData instanceof Uint8Array ? rawData : new Uint8Array(rawData);
-    const data = parseBinaryMeteringData(uint8);
-
-    // After a reset, packets measured before it may still be on their way;
-    // only readings of the current generation reach the meters
-    tauriBridge.generation ??= data.generation;
-    if (data.generation !== tauriBridge.generation) return;
-
-    // Call the callback with parsed metering data
-    if (callbacks.onMeteringUpdate) {
-      callbacks.onMeteringUpdate(data);
-    }
-
-    // Also expose via global for compatibility
-    if (window.updateMetersFromTauri) {
-      window.updateMetersFromTauri(data);
-    }
-  });
-
+  tauriBridge.callbacks = callbacks;
   tauriBridge.isActive = true;
-  tauriBridge.listeners.push(unlisten);
+  tauriBridge.frameRequest = requestAnimationFrame(pumpMetering);
 
-  console.log('[TauriBridge] Native audio bridge ready (binary IPC enabled)');
+  console.log('[TauriBridge] Native audio bridge ready');
   return true;
 }
 
@@ -307,10 +325,11 @@ export async function getAudioStatus() {
  * Clean up Tauri bridge
  */
 export function cleanup() {
-  for (const unlisten of tauriBridge.listeners) {
-    unlisten();
+  if (tauriBridge.frameRequest !== null) {
+    cancelAnimationFrame(tauriBridge.frameRequest);
+    tauriBridge.frameRequest = null;
   }
-  tauriBridge.listeners = [];
+  tauriBridge.callbacks = {};
   tauriBridge.isActive = false;
 }
 
