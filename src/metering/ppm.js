@@ -229,6 +229,59 @@ export const BBC_MIN_DBFS = -30;
 export const BBC_MAX_DBFS = -6;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DETECTOR BALLISTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} QuasiPeakBallistics
+ * @property {number} windowMs - Integration window in milliseconds
+ * @property {number} attackTimeConstantS - RC attack time constant in seconds
+ * @property {number} decayDbPerSecond - Linear return rate in dB per second
+ */
+
+/**
+ * Ballistics of the Nordic Type I detector, as plain numbers so they can
+ * travel to the stereo-sampler AudioWorklet in processorOptions.
+ * @type {QuasiPeakBallistics}
+ */
+export const NORDIC_PPM_BALLISTICS = Object.freeze({
+  windowMs: NORDIC_PPM_ATTACK_MS,
+  attackTimeConstantS: RC_ATTACK_TIME_CONSTANT_S,
+  decayDbPerSecond: RC_DECAY_DB_PER_SECOND
+});
+
+/**
+ * Ballistics of the BBC Type IIa detector.
+ * @type {QuasiPeakBallistics}
+ */
+export const BBC_PPM_BALLISTICS = Object.freeze({
+  windowMs: BBC_ATTACK_MS,
+  attackTimeConstantS: BBC_ATTACK_TIME_CONSTANT_S,
+  decayDbPerSecond: BBC_DECAY_DB_PER_SECOND
+});
+
+/**
+ * Per-sample coefficients of a quasi-peak detector at a given sample rate.
+ *
+ * Every detector in the application derives its coefficients here, with
+ * the expressions in this order, so that they agree to the last bit. The
+ * stereo-sampler AudioWorklet repeats the three expressions (it cannot
+ * import modules everywhere) and is verified against them.
+ *
+ * @param {QuasiPeakBallistics} ballistics - Detector ballistics
+ * @param {number} sampleRate - Sample rate in Hz
+ * @returns {{windowSamples: number, attackCoeff: number, decayDbPerSample: number}}
+ */
+export function quasiPeakCoefficients(ballistics, sampleRate) {
+  const dt = 1 / sampleRate;
+  return {
+    windowSamples: Math.ceil(sampleRate * ballistics.windowMs / 1000),
+    attackCoeff: 1 - Math.exp(-dt / ballistics.attackTimeConstantS),
+    decayDbPerSample: ballistics.decayDbPerSecond / sampleRate
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // QUASI-PEAK DETECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -330,6 +383,11 @@ export function calculateQuasiPeakStereo(leftBuffer, rightBuffer, sampleRate) {
  *   - Short transients: RC integrates over burst → under-reads per spec
  *   - Decay: only when signal actually drops, not at zero crossings
  *
+ * The state advances one sample per input sample, so the ballistics hold
+ * only if every sample is passed exactly once, in order. A rolling analyser
+ * window handed over each frame replays samples and runs the detector's
+ * clock fast; use QuasiPeakDetector with a sample-complete feed instead.
+ *
  * @param {Float32Array} buffer - Audio samples
  * @param {number} sampleRate - Sample rate in Hz
  * @param {RCDetectorState} state - Persistent state object (modified in place)
@@ -343,13 +401,8 @@ export function calculateQuasiPeakRC(buffer, sampleRate, state) {
     return state?.peakDb ?? -Infinity;
   }
 
-  // Per-sample timing
-  const dt = 1 / sampleRate;
-  const attackCoeff = 1 - Math.exp(-dt / RC_ATTACK_TIME_CONSTANT_S);
-  const decayDbPerSample = RC_DECAY_DB_PER_SECOND / sampleRate;
-
-  // Integration window size (5 ms for Nordic Type I)
-  const windowSamples = Math.ceil(sampleRate * NORDIC_PPM_ATTACK_MS / 1000);
+  // Per-sample timing and the 5 ms integration window of Type I
+  const { windowSamples, attackCoeff, decayDbPerSample } = quasiPeakCoefficients(NORDIC_PPM_BALLISTICS, sampleRate);
 
   // Initialise state
   let envelope = state.envelope || 0;
@@ -443,13 +496,9 @@ export function calculateBBCQuasiPeakRC(buffer, sampleRate, state) {
     return state?.peakDb ?? -Infinity;
   }
 
-  // Per-sample timing — BBC-SPECIFIC CONSTANTS
-  const dt = 1 / sampleRate;
-  const attackCoeff = 1 - Math.exp(-dt / BBC_ATTACK_TIME_CONSTANT_S);
-  const decayDbPerSample = BBC_DECAY_DB_PER_SECOND / sampleRate;
-
-  // Integration window size (10 ms for Type IIa — DIFFERENT FROM TYPE I's 5 ms)
-  const windowSamples = Math.ceil(sampleRate * BBC_ATTACK_MS / 1000);
+  // Per-sample timing and the 10 ms integration window of Type IIa
+  // (BBC-specific: slower attack, 10 ms instead of Type I's 5 ms)
+  const { windowSamples, attackCoeff, decayDbPerSample } = quasiPeakCoefficients(BBC_PPM_BALLISTICS, sampleRate);
 
   // Initialise state
   let envelope = state.envelope || 0;
@@ -518,6 +567,166 @@ export function calculateBBCQuasiPeakRCStereo(leftBuffer, rightBuffer, sampleRat
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STREAMING QUASI-PEAK DETECTOR (TYPE I AND TYPE IIa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Streaming IEC 60268-10 quasi-peak detector for one channel.
+ *
+ * Feed it consecutive blocks of the channel, each sample exactly once: it
+ * then runs on the signal's own clock, against which the standard defines
+ * the integration and return times, however irregularly the blocks arrive.
+ *
+ * The arithmetic is that of calculateQuasiPeakRC() (Type I) and
+ * calculateBBCQuasiPeakRC() (Type IIa), with one change of method: the
+ * maximum of the rolling integration window is kept in a monotonic queue,
+ * O(1) per sample instead of a rescan of the whole window, and the readings
+ * are identical. The stereo-sampler AudioWorklet carries the same arithmetic
+ * and is verified against this class (tests/ppm-feed-test.js).
+ *
+ * @example
+ * const nordic = new QuasiPeakDetector({ sampleRate: 48000 });
+ * const bbc = new QuasiPeakDetector({ sampleRate: 48000, ballistics: BBC_PPM_BALLISTICS });
+ * const reading = nordic.process(block); // largest reading during the block, dBFS
+ */
+export class QuasiPeakDetector {
+  /** @type {number} */
+  #windowSamples;
+
+  /** @type {number} */
+  #attackCoeff;
+
+  /** @type {number} */
+  #decayDbPerSample;
+
+  /** @type {number} Queue capacity: the window plus the sample being added */
+  #capacity;
+
+  /** @type {Float64Array} Rectified samples that can still be the window maximum, decreasing */
+  #values;
+
+  /** @type {Float64Array} Sample position of each queued value */
+  #positions;
+
+  /** @type {number} Ring index of the queue head, the window maximum */
+  #head = 0;
+
+  /** @type {number} Values queued */
+  #size = 0;
+
+  /** @type {number} Samples processed since construction or reset */
+  #position = 0;
+
+  /** @type {number} RC envelope, linear */
+  #envelope = 0;
+
+  /** @type {number} Reading in dBFS */
+  #peakDb = -60;
+
+  /**
+   * @param {Object} options - Configuration options
+   * @param {number} options.sampleRate - Sample rate in Hz
+   * @param {QuasiPeakBallistics} [options.ballistics=NORDIC_PPM_BALLISTICS] - Type I or Type IIa
+   */
+  constructor({ sampleRate, ballistics = NORDIC_PPM_BALLISTICS }) {
+    const { windowSamples, attackCoeff, decayDbPerSample } = quasiPeakCoefficients(ballistics, sampleRate);
+    this.#windowSamples = windowSamples;
+    this.#attackCoeff = attackCoeff;
+    this.#decayDbPerSample = decayDbPerSample;
+    this.#capacity = windowSamples + 1;
+    this.#values = new Float64Array(this.#capacity);
+    this.#positions = new Float64Array(this.#capacity);
+  }
+
+  /**
+   * Current reading in dBFS.
+   * @returns {number}
+   */
+  get reading() {
+    return this.#peakDb;
+  }
+
+  /**
+   * Run the next samples of the channel through the detector.
+   *
+   * @param {Float32Array} block - Samples that follow the previous block
+   * @returns {number} Largest reading during the block in dBFS; the current
+   *   reading for an empty block
+   */
+  process(block) {
+    const n = block?.length ?? 0;
+    if (n === 0) return this.#peakDb;
+
+    const values = this.#values;
+    const positions = this.#positions;
+    const capacity = this.#capacity;
+    const oldestKept = this.#windowSamples;
+    const attackCoeff = this.#attackCoeff;
+    const decayDbPerSample = this.#decayDbPerSample;
+    let head = this.#head;
+    let size = this.#size;
+    let position = this.#position;
+    let envelope = this.#envelope;
+    let peakDb = this.#peakDb;
+    let largest = -Infinity;
+
+    for (let i = 0; i < n; i++) {
+      // Rectified as calculateQuasiPeakRC() stores it (Float32Array); NaN,
+      // which its window scan never selects, counts as silence
+      let rectified = Math.fround(Math.abs(block[i]));
+      if (!(rectified >= 0)) rectified = 0;
+
+      // Queued samples no larger than the new one can never be the maximum
+      while (size > 0 && values[(head + size - 1) % capacity] <= rectified) size--;
+      const tail = (head + size) % capacity;
+      values[tail] = rectified;
+      positions[tail] = position;
+      size++;
+
+      // The oldest sample leaves once the window has moved past it
+      if (positions[head] <= position - oldestKept) {
+        head = (head + 1) % capacity;
+        size--;
+      }
+      position++;
+
+      const windowPeak = values[head];
+      if (windowPeak > envelope) {
+        // Attack: RC charging towards the window peak
+        envelope += attackCoeff * (windowPeak - envelope);
+        peakDb = 20 * Math.log10(envelope + 1e-12);
+      } else if (windowPeak > envelope * 0.5) {
+        // Signal within 6 dB of the envelope: hold, no decay at zero crossings
+      } else {
+        // Signal has dropped: linear return on the dB scale
+        peakDb -= decayDbPerSample;
+        envelope = Math.pow(10, peakDb / 20);
+        if (envelope < 1e-6) envelope = 1e-6;
+      }
+      if (peakDb > largest) largest = peakDb;
+    }
+
+    this.#head = head;
+    this.#size = size;
+    this.#position = position;
+    this.#envelope = envelope;
+    this.#peakDb = peakDb;
+    return largest;
+  }
+
+  /**
+   * Return to the initial state: empty window, −60 dBFS reading.
+   */
+  reset() {
+    this.#head = 0;
+    this.#size = 0;
+    this.#position = 0;
+    this.#envelope = 0;
+    this.#peakDb = -60;
+  }
+}
+
 /**
  * Convert dBFS to BBC PPM scale.
  * BBC PPM: PPM 4 = 0 dBu = −18 dBFS (alignment level)
@@ -561,15 +770,22 @@ export function bbcPpmToDbfs(ppm) {
  * - **'window'**: Simplified window-maximum approach, faster but may
  *   over-read on fast transients.
  *
+ * In 'rc' mode, update() runs the detector sample by sample and expects each
+ * sample once, in consecutive blocks. An analyser window of the latest
+ * samples, fetched every frame, overlaps the previous one and would replay
+ * samples. A sample-complete feed hands its readings to updateFromReadings()
+ * instead; the application takes them from the stereo sampler.
+ *
  * @example
  * const ppm = new PPMMeter({ sampleRate: 48000 });
  *
- * // In animation loop:
- * analyserL.getFloatTimeDomainData(bufferL);
- * analyserR.getFloatTimeDomainData(bufferR);
- * ppm.update(bufferL, bufferR);
+ * // Consecutive blocks, e.g. from a ScriptProcessorNode:
+ * ppm.update(blockL, blockR);
  *
- * const { left, right, ppmLeft, ppmRight } = ppm.getState();
+ * // Or readings from a detector that sees every sample:
+ * ppm.updateFromReadings(readingL, readingR);
+ *
+ * const { dbfsLeft, dbfsRight, ppmScaleLeft, ppmScaleRight } = ppm.getState();
  */
 export class PPMMeter {
   /** @type {number} */
@@ -673,6 +889,35 @@ export class PPMMeter {
       }
     }
 
+    this.#updatePeakHold(now);
+  }
+
+  /**
+   * Update meter with readings of a detector that sees every sample.
+   *
+   * For a sample-complete feed, such as the Type I detectors that the
+   * stereo-sampler AudioWorklet runs on every render quantum: the readings
+   * already carry the IEC 60268-10 ballistics, so they are displayed as they
+   * are, with the clamp and peak hold of update().
+   *
+   * @param {number} readingLeft - Left Type I reading in dBFS
+   * @param {number} readingRight - Right Type I reading in dBFS
+   */
+  updateFromReadings(readingLeft, readingRight) {
+    const now = performance.now();
+    this.lastUpdateTime = now;
+    if (Number.isFinite(readingLeft)) this.holdL = readingLeft;
+    if (Number.isFinite(readingRight)) this.holdR = readingRight;
+    this.#updatePeakHold(now);
+  }
+
+  /**
+   * Clamp the current readings to the display range and advance the 3 s
+   * peak hold.
+   *
+   * @param {number} now - Clock reading in milliseconds
+   */
+  #updatePeakHold(now) {
     // Clamp to display range (Nordic PPM: -58 to 0 dBFS)
     const displayL = Math.max(NORDIC_PPM_MIN_DBFS, Math.min(NORDIC_PPM_MAX_DBFS, this.holdL));
     const displayR = Math.max(NORDIC_PPM_MIN_DBFS, Math.min(NORDIC_PPM_MAX_DBFS, this.holdR));

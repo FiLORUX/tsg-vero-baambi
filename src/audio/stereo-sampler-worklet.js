@@ -35,19 +35,33 @@
  * TruePeakDetector.process() and is verified against it in
  * tests/true-peak-test.js.
  *
+ * It runs the IEC 60268-10 quasi-peak detectors (Nordic Type I, BBC
+ * Type IIa) on every sample in the same way, so their integration and
+ * return times follow the signal's own clock rather than the UI frame rate.
+ * The ballistics arrive through processorOptions from src/metering/ppm.js;
+ * the detector below is the arithmetic of QuasiPeakDetector there and is
+ * verified against it in tests/ppm-feed-test.js.
+ *
  * Messages to the main thread:
  *   { type: 'snapshot', bufL, bufR, timestamp }   rolling display buffers
  *   { type: 'truePeak', left, right, samples, generation }
  *                                                 linear true-peak maxima of
  *                                                 the `samples` samples since
  *                                                 the previous truePeak message
+ *   { type: 'ppm', nordicLeft, nordicRight, bbcLeft, bbcRight, samples, generation }
+ *                                                 largest Type I and Type IIa
+ *                                                 readings (dBFS) during the
+ *                                                 `samples` samples since the
+ *                                                 previous ppm message
  *
- * Message from the main thread:
+ * Messages from the main thread:
  *   { type: 'resetTruePeak', generation }         discard the maxima gathered
  *                                                 so far; later reports carry
  *                                                 the new generation, so the
  *                                                 main thread can drop reports
  *                                                 that were already in flight
+ *   { type: 'resetPpm', generation }              return the PPM detectors to
+ *                                                 their initial state, likewise
  *
  * A quantum without input channels (no active source upstream) is measured
  * as silence: the stream continues, the previous signal's tail is completed
@@ -154,6 +168,100 @@ class TruePeakKernel {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// QUASI-PEAK MEASUREMENT (IEC 60268-10 TYPE I AND TYPE IIa)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Single-channel quasi-peak detector on the audio thread's clock.
+ *
+ * Same arithmetic as QuasiPeakDetector in src/metering/ppm.js: the rolling
+ * integration window's maximum from a monotonic queue, RC attack towards it,
+ * hold while the signal stays within 6 dB, otherwise linear return on the dB
+ * scale. The coefficients follow quasiPeakCoefficients() there, expression
+ * for expression, from the ballistics handed over in processorOptions.
+ */
+class QuasiPeakKernel {
+  /**
+   * @param {{windowMs: number, attackTimeConstantS: number, decayDbPerSecond: number}} ballistics
+   */
+  constructor(ballistics) {
+    const dt = 1 / sampleRate;
+    this.windowSamples = Math.ceil(sampleRate * ballistics.windowMs / 1000);
+    this.attackCoeff = 1 - Math.exp(-dt / ballistics.attackTimeConstantS);
+    this.decayDbPerSample = ballistics.decayDbPerSecond / sampleRate;
+    this.capacity = this.windowSamples + 1;
+    this.values = new Float64Array(this.capacity);
+    this.positions = new Float64Array(this.capacity);
+    this.reset();
+  }
+
+  reset() {
+    this.head = 0;
+    this.size = 0;
+    this.position = 0;
+    this.envelope = 0;
+    this.peakDb = -60;
+  }
+
+  /**
+   * @param {Float32Array} block - Next samples of the channel
+   * @returns {number} Largest reading during the block in dBFS
+   */
+  process(block) {
+    const n = block.length;
+    const values = this.values;
+    const positions = this.positions;
+    const capacity = this.capacity;
+    const oldestKept = this.windowSamples;
+    const attackCoeff = this.attackCoeff;
+    const decayDbPerSample = this.decayDbPerSample;
+    let head = this.head;
+    let size = this.size;
+    let position = this.position;
+    let envelope = this.envelope;
+    let peakDb = this.peakDb;
+    let largest = n === 0 ? peakDb : -Infinity;
+
+    for (let i = 0; i < n; i++) {
+      let rectified = Math.fround(Math.abs(block[i]));
+      if (!(rectified >= 0)) rectified = 0;
+
+      while (size > 0 && values[(head + size - 1) % capacity] <= rectified) size--;
+      const tail = (head + size) % capacity;
+      values[tail] = rectified;
+      positions[tail] = position;
+      size++;
+
+      if (positions[head] <= position - oldestKept) {
+        head = (head + 1) % capacity;
+        size--;
+      }
+      position++;
+
+      const windowPeak = values[head];
+      if (windowPeak > envelope) {
+        envelope += attackCoeff * (windowPeak - envelope);
+        peakDb = 20 * Math.log10(envelope + 1e-12);
+      } else if (windowPeak > envelope * 0.5) {
+        // Hold: signal within 6 dB of the envelope
+      } else {
+        peakDb -= decayDbPerSample;
+        envelope = Math.pow(10, peakDb / 20);
+        if (envelope < 1e-6) envelope = 1e-6;
+      }
+      if (peakDb > largest) largest = peakDb;
+    }
+
+    this.head = head;
+    this.size = size;
+    this.position = position;
+    this.envelope = envelope;
+    this.peakDb = peakDb;
+    return largest;
+  }
+}
+
 class StereoSamplerProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
@@ -195,14 +303,66 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     this._truePeakGeneration = 0;
     this._silence = new Float32Array(128);
 
+    // Quasi-peak detectors on every sample, reported on the true peak's
+    // cadence. Without ballistics from the main thread no PPM is reported.
+    const ppmBallistics = options?.processorOptions?.ppmBallistics;
+    this._ppm = ppmBallistics
+      ? [
+        new QuasiPeakKernel(ppmBallistics.nordic),
+        new QuasiPeakKernel(ppmBallistics.nordic),
+        new QuasiPeakKernel(ppmBallistics.bbc),
+        new QuasiPeakKernel(ppmBallistics.bbc)
+      ]
+      : null;
+    this._ppmMax = new Float64Array(4).fill(-Infinity);
+    this._ppmSamples = 0;
+    this._ppmGeneration = 0;
+
     this.port.onmessage = (event) => {
       if (event.data?.type === 'resetTruePeak') {
         this._truePeakMaxL = 0;
         this._truePeakMaxR = 0;
         this._truePeakSamples = 0;
         this._truePeakGeneration = event.data.generation;
+      } else if (event.data?.type === 'resetPpm') {
+        this._ppm?.forEach((kernel) => kernel.reset());
+        this._ppmMax.fill(-Infinity);
+        this._ppmSamples = 0;
+        this._ppmGeneration = event.data.generation;
       }
     };
+  }
+
+  /**
+   * Run one quantum per channel through the Type I and Type IIa detectors
+   * and post the largest readings when due.
+   *
+   * @param {Float32Array} L - Left channel samples
+   * @param {Float32Array} R - Right channel samples
+   */
+  _measurePpm(L, R) {
+    if (!this._ppm) return;
+    // Kernels 0 and 2 measure the left channel, 1 and 3 the right; no
+    // allocation on the audio thread
+    for (let i = 0; i < 4; i++) {
+      const reading = this._ppm[i].process(i % 2 === 0 ? L : R);
+      if (reading > this._ppmMax[i]) this._ppmMax[i] = reading;
+    }
+    this._ppmSamples += L.length;
+
+    if (this._ppmSamples >= this._truePeakPostInterval) {
+      this.port.postMessage({
+        type: 'ppm',
+        nordicLeft: this._ppmMax[0],
+        nordicRight: this._ppmMax[1],
+        bbcLeft: this._ppmMax[2],
+        bbcRight: this._ppmMax[3],
+        samples: this._ppmSamples,
+        generation: this._ppmGeneration
+      });
+      this._ppmMax.fill(-Infinity);
+      this._ppmSamples = 0;
+    }
   }
 
   /**
@@ -245,6 +405,7 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
     // the true-peak stream stays continuous and carries no stale history
     if (!input || input.length < 2) {
       this._measureTruePeak(this._silence, this._silence);
+      this._measurePpm(this._silence, this._silence);
       return true;
     }
 
@@ -261,8 +422,10 @@ class StereoSamplerProcessor extends AudioWorkletProcessor {
       this._writeIndex = (this._writeIndex + 1) % bufferSize;
     }
 
-    // True peak of every sample, accumulated until the next truePeak message
+    // True peak and quasi-peak readings of every sample, accumulated until
+    // the next truePeak and ppm messages
     this._measureTruePeak(L, R);
+    this._measurePpm(L, R);
 
     this._samplesSincePost += blockSize;
 

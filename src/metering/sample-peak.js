@@ -162,9 +162,34 @@ export class SamplePeakMeter {
    * @param {Float32Array} rightBuffer - Right channel samples
    */
   update(leftBuffer, rightBuffer) {
-    const rawL = calculateSamplePeak(leftBuffer);
-    const rawR = calculateSamplePeak(rightBuffer);
+    this.#applyPeaks(calculateSamplePeak(leftBuffer), calculateSamplePeak(rightBuffer));
+  }
 
+  /**
+   * Update meter with sample peaks measured elsewhere.
+   *
+   * For a source that delivers peaks rather than the samples themselves,
+   * such as the native engine, whose per-packet peaks a LevelWindow gathers
+   * into the same window that update() measures. Smoothing, hold and clip
+   * indication are those of update().
+   *
+   * @param {number} [peakLeft=0] - Largest left sample magnitude, linear
+   * @param {number} [peakRight=0] - Largest right sample magnitude, linear
+   */
+  updateFromPeaks(peakLeft = 0, peakRight = 0) {
+    this.#applyPeaks(
+      20 * Math.log10(peakLeft + LOG_FLOOR),
+      20 * Math.log10(peakRight + LOG_FLOOR)
+    );
+  }
+
+  /**
+   * Apply one reading to the display ballistics, hold and clip indication.
+   *
+   * @param {number} rawL - Left sample peak in dBFS
+   * @param {number} rawR - Right sample peak in dBFS
+   */
+  #applyPeaks(rawL, rawR) {
     // Smooth for stable display
     const a = this.smoothing;
     this.smoothL = this.smoothL + a * (rawL - this.smoothL);

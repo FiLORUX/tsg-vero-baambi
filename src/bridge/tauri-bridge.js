@@ -35,23 +35,35 @@ const tauriBridge = {
 // ─────────────────────────────────────────────────────────────────────────────
 // BINARY IPC PROTOCOL
 // ─────────────────────────────────────────────────────────────────────────────
-// Binary format (little-endian, 4144 bytes total):
+// Binary format (little-endian, 4164 bytes total):
 //   0-3:    lufs_m (f32)
 //   4-7:    lufs_s (f32)
 //   8-11:   lufs_i (f32)
-//   12-15:  tp_left (f32)   largest true peak since the previous packet (dBTP)
-//   16-19:  tp_right (f32)  largest true peak since the previous packet (dBTP)
-//   20-23:  ppm_left (f32)
-//   24-27:  ppm_right (f32)
+//   12-15:  tp_left (f32)       largest true peak since the previous packet (dBTP)
+//   16-19:  tp_right (f32)      largest true peak since the previous packet (dBTP)
+//   20-23:  ppm_left (f32)      Nordic PPM reading (dBFS)
+//   24-27:  ppm_right (f32)     Nordic PPM reading (dBFS)
 //   28-31:  correlation (f32)
 //   32-35:  sample_rate (u32)
 //   36-39:  buffer_size (u32)
 //   40-47:  timestamp_us (u64)
-//   48-2095:   samples_left (512 × f32)
-//   2096-4143: samples_right (512 × f32)
+//   48-51:  sp_left (f32)       largest sample magnitude since the previous packet (dBFS)
+//   52-55:  sp_right (f32)      largest sample magnitude since the previous packet (dBFS)
+//   56-59:  rms_left (f32)      RMS of the samples since the previous packet (dBFS)
+//   60-63:  rms_right (f32)     RMS of the samples since the previous packet (dBFS)
+//   64-67:  level_frames (u32)  stereo frames covered by sp_* and rms_*
+//   68-2115:   samples_left (512 × f32)
+//   2116-4163: samples_right (512 × f32)
+//
+// Consecutive packets' level fields cover consecutive, non-overlapping runs of
+// samples. The sample arrays are the most recent display snapshot, which
+// overlaps the previous packet's or leaves a gap after it: they serve
+// visualisation, not measurement.
+//
+// Layout contract: pack_metering_binary() in tsg-vero-baambi-tauri/src-tauri/src/audio/engine.rs
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BINARY_HEADER_SIZE = 48;
+const BINARY_HEADER_SIZE = 68;
 const VIS_SAMPLES = 512;
 
 /**
@@ -81,6 +93,13 @@ function parseBinaryMeteringData(data) {
   // Timestamp for latency measurement (BigInt for u64)
   const timestampUs = view.getBigUint64(40, true);
 
+  // Sample peak and RMS of every sample since the previous packet
+  const spLeft = view.getFloat32(48, true);
+  const spRight = view.getFloat32(52, true);
+  const rmsLeft = view.getFloat32(56, true);
+  const rmsRight = view.getFloat32(60, true);
+  const levelFrames = view.getUint32(64, true);
+
   // Sample arrays - create views directly into buffer (zero-copy)
   const samplesLeft = new Float32Array(buffer, BINARY_HEADER_SIZE, VIS_SAMPLES);
   const samplesRight = new Float32Array(buffer, BINARY_HEADER_SIZE + VIS_SAMPLES * 4, VIS_SAMPLES);
@@ -97,6 +116,11 @@ function parseBinaryMeteringData(data) {
     sampleRate,
     bufferSize,
     timestampUs,
+    spLeft,
+    spRight,
+    rmsLeft,
+    rmsRight,
+    levelFrames,
     samplesLeft,
     samplesRight,
   };

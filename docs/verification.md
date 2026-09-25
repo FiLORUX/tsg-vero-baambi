@@ -56,6 +56,18 @@ Drives the real Web Audio pipeline in a headless browser (needs the `playwright-
 
 `BROWSER=firefox` or `BROWSER=webkit` runs the same suite in Gecko or in WebKit, the engine behind Safari; Chromium is the default. On a headless Linux host, Firefox and WebKit need a running audio server (for example PulseAudio with a null sink) before an `AudioContext` will start. All true-peak checks pass in all three engines. The one failure, in Firefox only, is the PPM Alignment check of the built-in verification tool, which reads 5.3 to 6.0 there and fails identically before the true-peak work.
 
+```bash
+npm run test:browser:tauri
+```
+
+Runs the application in Tauri mode against a mocked native engine: packets in the engine's binary layout whose level fields describe a −18 dBFS sine while their display snapshots carry a spliced −40 dBFS one. Nordic PPM, dBFS (RMS), Sample Peak and True Peak must read the engine's values, a full-scale sample that falls between two snapshots must reach the Sample Peak meter, and the Nordic PPM must clamp to its display range as in local metering. The window that rebuilds sample peak and RMS from the engine's packets is tested in Node (`node tests/level-window-test.js`, part of `npm test`).
+
+```bash
+npm run test:browser:ppm
+```
+
+Plays a 1 kHz tone at 0 dBFS through the application's generator, stops it, and times the displayed return on every animation frame: the Nordic PPM must fall 20 dB in 1.7 s ±0.3 s and the BBC PPM 24 dB in 2.8 s ±0.3 s, with the stereo-sampler AudioWorklet and again with the sampler blocked, where the application feeds its own detectors from the analyser. The detector arithmetic and the feed are tested in Node (`node tests/ppm-feed-test.js`, part of `npm test`).
+
 Open `tools/verify-audio.html` in a modern browser and click "Run All Tests".
 
 Tests Web Audio integration: sine RMS measurement, K-weighting frequency response, stereo correlation.
@@ -143,6 +155,7 @@ The `truePeakMode` key in application state remains for persisted settings; `pol
 2. **Decay test**: Remove signal after steady-state
    - 20 dB drop should occur in 1.7s ±0.2s
    - Measure time from peak to -20 dB below peak
+   - Automated for the displayed Nordic and BBC readings: `npm run test:browser:ppm`
 
 ### Test Procedure: Stereo Correlation
 
@@ -210,8 +223,8 @@ For rigorous validation against broadcast standards:
 
 ### PPM timing seems off
 
-- Browser requestAnimationFrame has variable timing (16-17ms typical)
-- Exact 5ms attack is not guaranteed in browser environment
+- The detectors run on the audio clock (in the stereo-sampler AudioWorklet), so their attack and return do not depend on the frame rate
+- The display samples them once per animation frame (16-17ms typical) and shows the largest reading since the previous frame
 - Use hardware meter for critical timing verification
 
 ### LUFS readings fluctuate

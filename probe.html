@@ -1011,8 +1011,18 @@ david@thast.se  ·  +46 700 30 30 60
             truePeakMeter.update(bufL, bufR);
           }
 
+          // Nordic PPM: the largest reading since the previous transmission
+          // of the Type I detector that the sampler runs on every sample. The
+          // analyser window (4096 samples every 100 ms) would leave gaps and
+          // run the detector's clock slow; it remains the fallback only
+          if (stereoSampler.hasPpmFeed()) {
+            const { nordicLeft, nordicRight, samples } = stereoSampler.consumePpm();
+            if (samples > 0) ppmMeter.updateFromReadings(nordicLeft, nordicRight);
+          } else {
+            ppmMeter.update(bufL, bufR);
+          }
+
           // Update other meters (they use update() + getState() API)
-          ppmMeter.update(bufL, bufR);
           stereoMeter.update(bufL, bufR);
 
           // Run stereo analysis for width, rotation, M/S levels

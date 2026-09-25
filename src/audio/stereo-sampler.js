@@ -26,12 +26,19 @@
  *
  * Both modes provide guaranteed L/R synchronisation from the same audio block.
  *
+ * Both modes also measure every sample: the ITU-R BS.1770-4 true peak
+ * (consumeTruePeaks) and the IEC 60268-10 quasi-peak readings of the Nordic
+ * Type I and BBC Type IIa detectors (consumePpm). The display buffers are
+ * rolling windows that overlap from one frame to the next; a detector that
+ * advances sample by sample must not be fed from them.
+ *
  * @see docs/STEREO-SAMPLING-ARCHITECTURE.md
  * @module audio/stereo-sampler
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 
 import { TruePeakDetector, interpolationBranches } from '../metering/true-peak.js';
+import { QuasiPeakDetector, NORDIC_PPM_BALLISTICS, BBC_PPM_BALLISTICS } from '../metering/ppm.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
@@ -66,6 +73,21 @@ let totalPeakSamples = 0;
 
 /** @type {number} Reset generation; worklet reports from an earlier generation are dropped */
 let peakGeneration = 0;
+
+/** @type {Float64Array} Largest readings since the last consumePpm(): Type I L, R, Type IIa L, R (dBFS) */
+const pendingPpm = new Float64Array(4).fill(-Infinity);
+
+/** @type {number} Samples measured since the last consumePpm() */
+let pendingPpmSamples = 0;
+
+/** @type {number} Samples run through the PPM detectors since initialisation */
+let totalPpmSamples = 0;
+
+/** @type {number} PPM reset generation; worklet reports from an earlier generation are dropped */
+let ppmGeneration = 0;
+
+/** @type {QuasiPeakDetector[]|null} Main-thread PPM detectors in ScriptProcessor mode */
+let ppmDetectors = null;
 
 /** @type {'worklet'|'scriptprocessor'|null} Current sampling mode */
 let samplingMode = null;
@@ -168,7 +190,9 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
     processorOptions: {
       bufferSize,
       // Annex 2 branches for this context's rate; the worklet measures every sample
-      truePeakBranches: interpolationBranches(audioContext.sampleRate)
+      truePeakBranches: interpolationBranches(audioContext.sampleRate),
+      // IEC 60268-10 ballistics for the worklet's Type I and Type IIa detectors
+      ppmBallistics: { nordic: NORDIC_PPM_BALLISTICS, bbc: BBC_PPM_BALLISTICS }
     }
   });
 
@@ -182,6 +206,10 @@ async function initAudioWorkletSampler(audioContext, sourceL, sourceR, bufferSiz
       // Reports measured before the latest reset were already in flight
       if (data.generation === peakGeneration) {
         accumulateTruePeak(data.left, data.right, data.samples);
+      }
+    } else if (data.type === 'ppm') {
+      if (data.generation === ppmGeneration) {
+        accumulatePpm(data.nordicLeft, data.nordicRight, data.bbcLeft, data.bbcRight, data.samples);
       }
     } else if (data.type === 'snapshot') {
       syncedBufL = data.bufL;
@@ -237,6 +265,17 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
   const halfSample = 0.5 / audioContext.sampleRate;
   let expectedPlaybackTime = null;
 
+  // Quasi-peak readings of every delivered sample. A missed block is not
+  // measured: the detectors carry on from their state, which a max-based
+  // window and an RC envelope do without a false reading.
+  const sampleRate = audioContext.sampleRate;
+  ppmDetectors = [
+    new QuasiPeakDetector({ sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+    new QuasiPeakDetector({ sampleRate, ballistics: NORDIC_PPM_BALLISTICS }),
+    new QuasiPeakDetector({ sampleRate, ballistics: BBC_PPM_BALLISTICS }),
+    new QuasiPeakDetector({ sampleRate, ballistics: BBC_PPM_BALLISTICS })
+  ];
+
   // Process audio - L/R are GUARANTEED from same audio block
   scriptProcessorNode.onaudioprocess = (event) => {
     const inputL = event.inputBuffer.getChannelData(0);
@@ -248,6 +287,13 @@ function initScriptProcessorSampler(audioContext, sourceL, sourceR, bufferSize) 
     }
     expectedPlaybackTime = event.playbackTime + inputL.length / audioContext.sampleRate;
     accumulateTruePeak(detectorL.process(inputL), detectorR.process(inputR), inputL.length);
+    accumulatePpm(
+      ppmDetectors[0].process(inputL),
+      ppmDetectors[1].process(inputR),
+      ppmDetectors[2].process(inputL),
+      ppmDetectors[3].process(inputR),
+      inputL.length
+    );
 
     // Copy to our buffers (they're the same size: 4096)
     syncedBufL.set(inputL);
@@ -270,6 +316,25 @@ function accumulateTruePeak(left, right, samples) {
   if (right > pendingPeakR) pendingPeakR = right;
   pendingPeakSamples += samples;
   totalPeakSamples += samples;
+}
+
+/**
+ * Fold one PPM report into the pending readings.
+ *
+ * @param {number} nordicLeft - Largest left Type I reading, dBFS
+ * @param {number} nordicRight - Largest right Type I reading, dBFS
+ * @param {number} bbcLeft - Largest left Type IIa reading, dBFS
+ * @param {number} bbcRight - Largest right Type IIa reading, dBFS
+ * @param {number} samples - Samples covered by the report
+ * @private
+ */
+function accumulatePpm(nordicLeft, nordicRight, bbcLeft, bbcRight, samples) {
+  if (nordicLeft > pendingPpm[0]) pendingPpm[0] = nordicLeft;
+  if (nordicRight > pendingPpm[1]) pendingPpm[1] = nordicRight;
+  if (bbcLeft > pendingPpm[2]) pendingPpm[2] = bbcLeft;
+  if (bbcRight > pendingPpm[3]) pendingPpm[3] = bbcRight;
+  pendingPpmSamples += samples;
+  totalPpmSamples += samples;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -314,6 +379,57 @@ export function consumeTruePeaks() {
   pendingPeakL = 0;
   pendingPeakR = 0;
   pendingPeakSamples = 0;
+  return result;
+}
+
+/**
+ * Whether the sampler runs the PPM detectors on every sample.
+ *
+ * True in AudioWorklet and ScriptProcessor mode. When false, a caller must
+ * feed its own detectors, and only with samples they have not seen yet.
+ *
+ * @returns {boolean}
+ */
+export function hasPpmFeed() {
+  return samplingMode === 'worklet' || samplingMode === 'scriptprocessor';
+}
+
+/**
+ * Return the PPM detectors to their initial state and discard the readings
+ * gathered so far, including reports already on their way from the
+ * AudioWorklet.
+ */
+export function resetPpm() {
+  ppmGeneration++;
+  pendingPpm.fill(-Infinity);
+  pendingPpmSamples = 0;
+  ppmDetectors?.forEach((detector) => detector.reset());
+  workletNode?.port.postMessage({ type: 'resetPpm', generation: ppmGeneration });
+}
+
+/**
+ * Take the largest PPM readings of all samples measured since the previous
+ * call.
+ *
+ * The readings are those of IEC 60268-10 detectors that see every sample
+ * once, so their ballistics follow the signal whatever the frame rate. The
+ * largest reading of the interval is returned, so a peak that rose and fell
+ * between two calls is not lost; with zero samples the readings are −∞ and
+ * nothing new has been measured.
+ *
+ * @returns {{nordicLeft: number, nordicRight: number, bbcLeft: number, bbcRight: number, samples: number}}
+ *   Type I and Type IIa readings in dBFS, and the samples they cover
+ */
+export function consumePpm() {
+  const result = {
+    nordicLeft: pendingPpm[0],
+    nordicRight: pendingPpm[1],
+    bbcLeft: pendingPpm[2],
+    bbcRight: pendingPpm[3],
+    samples: pendingPpmSamples
+  };
+  pendingPpm.fill(-Infinity);
+  pendingPpmSamples = 0;
   return result;
 }
 
@@ -365,7 +481,8 @@ export function getSamplerStats() {
     workletActive: workletNode !== null,
     scriptProcessorActive: scriptProcessorNode !== null,
     lastTimestamp,
-    truePeakSamples: totalPeakSamples
+    truePeakSamples: totalPeakSamples,
+    ppmSamples: totalPpmSamples
   };
 }
 
@@ -398,4 +515,8 @@ export function disposeStereoSampler() {
   pendingPeakR = 0;
   pendingPeakSamples = 0;
   totalPeakSamples = 0;
+  pendingPpm.fill(-Infinity);
+  pendingPpmSamples = 0;
+  totalPpmSamples = 0;
+  ppmDetectors = null;
 }
